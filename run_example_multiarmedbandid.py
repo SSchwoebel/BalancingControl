@@ -134,7 +134,7 @@ def run_agent(par_list, trials, T, ns, na, nr, nc, deval=False):
     set context prior
     """
 
-    prior_context = np.zeros((nc)) + 0.1/(nb-1)
+    prior_context = np.zeros((nc)) + 0.1/(nc-1)
     prior_context[0] = 0.9
     
     """

@@ -98,6 +98,38 @@ def generate_bandit_timeseries_change(Rho_0, nb, trials, changes):
         
     return means
 
+def generate_randomwalk(trials, nr, ns, nb, sigma, start_vals=None):
+    
+    if nr != 2:
+        raise(NotImplementedError)
+    
+    if start_vals is not None:
+        init = start_vals
+    else:
+        init = np.array([0.5]*nb)
+        
+    sqr_sigma = np.sqrt(sigma)
+    
+    nnr = ns-nb
+        
+    Rho = np.zeros((trials, nr, ns))
+    
+    Rho[:,1,:nnr] = 0.
+    Rho[:,0,:nnr] = 1.
+    
+    Rho[0,1,nnr:] = init
+    Rho[0,0,nnr:] = 1. - init
+    
+    for t in range(1,trials):
+        p = scs.logit(Rho[t-1,1,nnr:])
+        p = p + sqr_sigma * np.random.default_rng().normal(size=nb)        
+        p = scs.expit(p)
+        
+        Rho[t,1,nnr:] = p
+        Rho[t,0,nnr:] = 1. - p
+        
+    return Rho
+
 def generate_bandit_timeseries_slowchange(trials, nr, ns, nb):
     Rho = np.zeros((trials, nr, ns))
     Rho[:,0,0] = 1.
