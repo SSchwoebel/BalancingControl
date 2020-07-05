@@ -6,7 +6,8 @@ Created on Thu May 11 17:56:24 2017
 @author: sarah
 """
 
-import numpy as np
+#import numpy as np
+import torch
 
 from analysis import plot_analyses, plot_analyses_training, plot_analyses_deval
 from misc import *
@@ -31,7 +32,7 @@ import scipy as sc
 import scipy.signal as ss
 import bottleneck as bn
 import gc
-np.set_printoptions(threshold = 100000, precision = 5)
+#np.set_printoptions(threshold = 100000, precision = 5)
 
 
 
@@ -55,11 +56,11 @@ def run_agent(par_list, trials, T, ns, na, nr, nc, deval=False):
     
     
     #generating probability of observations in each state
-    A = np.eye(ns)
+    A = torch.eye(ns)
         
     
     #state transition generative probability (matrix)
-    B = np.zeros((ns, ns, na))
+    B = torch.zeros((ns, ns, na))
     
     for i in range(0,na):
         B[i+1,:,i] += 1
@@ -67,23 +68,22 @@ def run_agent(par_list, trials, T, ns, na, nr, nc, deval=False):
     # agent's beliefs about reward generation
     
     # concentration parameters    
-    C_alphas = np.ones((nr, ns, nc))
+    C_alphas = torch.ones((nr, ns, nc))
     # initialize state in front of levers so that agent knows it yields no reward
     C_alphas[0,0,:] = 100
     for i in range(1,nr):
         C_alphas[i,0,:] = 1
     
     # agent's initial estimate of reward generation probability
-    C_agent = np.zeros((nr, ns, nc))
-    for c in range(nc):
-        C_agent[:,:,c] = np.array([(C_alphas[:,i,c])/(C_alphas[:,i,c]).sum() for i in range(ns)]).T
+    C_agent = torch.zeros((nr, ns, nc))
+    C_agent[:] = C_alphas / C_alphas.sum(dim=0)#[None,:,:]
 
     
     # context transition matrix
     
     p = trans_prob
     q = 1.-p        
-    transition_matrix_context = np.zeros((nc, nc))
+    transition_matrix_context = torch.zeros((nc, nc))
     transition_matrix_context += q/(nc-1)
     for i in range(nc):
         transition_matrix_context[i,i] = p
@@ -99,12 +99,12 @@ def run_agent(par_list, trials, T, ns, na, nr, nc, deval=False):
     create policies
     """
     
-    pol = np.array(list(itertools.product(list(range(na)), repeat=T-1)))
+    pol = torch.tensor(list(itertools.product(list(range(na)), repeat=T-1)))
     
     npi = pol.shape[0]
     
     # concentration parameters
-    alphas = np.zeros((npi, nc)) + learn_pol
+    alphas = torch.zeros((npi, nc)) + learn_pol
 
     prior_pi = alphas / alphas.sum(axis=0)
     
@@ -113,7 +113,7 @@ def run_agent(par_list, trials, T, ns, na, nr, nc, deval=False):
     set state prior (where agent thinks it starts)
     """
     
-    state_prior = np.zeros((ns))
+    state_prior = torch.zeros((ns))
     
     state_prior[0] = 1.
 
@@ -134,7 +134,7 @@ def run_agent(par_list, trials, T, ns, na, nr, nc, deval=False):
     set context prior
     """
 
-    prior_context = np.zeros((nc)) + 0.1/(nc-1)
+    prior_context = torch.zeros((nc)) + 0.1/(nc-1)
     prior_context[0] = 0.9
     
     """
@@ -191,7 +191,7 @@ def run_rew_prob_simulations(repetitions, utility, avg, T, ns, na, nr, nc, folde
     trials =  100+n_test#number of trials
     trials_training = trials - n_test
     
-    Rho = np.zeros((trials, nr, ns))
+    Rho = torch.zeros((trials, nr, ns))
     
     for tendency in [1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
         for trans in [99]:#[100,99,98,97,96,95,94]:
@@ -233,7 +233,7 @@ def run_deval_simulations(repetitions, utility, avg, T, ns, na, nr, nc, folder):
     trials =  100+n_test#number of trials
     trials_training = trials - n_test
     
-    Rho = np.zeros((trials, nr, ns))
+    Rho = torch.zeros((trials, nr, ns))
     
     for tendency in [1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
         for trans in [99]:
@@ -272,12 +272,12 @@ def run_training_duration_simulations(repetitions, utility, avg, T, ns, na, nr, 
     
     # set training durations. the longer ones may simulate for a couple of
     # hours when many repetitions are chosen. Uncomment at your own risk.
-    for trials_training in [56, 100, 177, 316, 562, 1000, 1778, 3162]:#, 5623, 10000, 17782, 31622, 56234, 10000]:
+    for trials_training in [56, 100, 177, 316, 562, 1000, 1778]:#, 3162]:#, 5623, 10000, 17782, 31622, 56234, 10000]:
         
         n_test = 100
         trials = trials_training + n_test
         
-        Rho = np.zeros((trials, nr, ns))
+        Rho = torch.zeros((trials, nr, ns))
     
         for tendency in [1,10,100]:
             for trans in [99]:#[100,99,98,97,96,95,94]:#,93,92,91,90]:
@@ -333,7 +333,7 @@ def main():
     run_args = [T, ns, na, nr, nc]
     
     u = 0.99
-    utility = np.zeros(nr)
+    utility = torch.zeros(nr)
     for i in range(1,nr):
         utility[i] = u/(nr-1)
     utility[0] = (1.-u)
@@ -347,21 +347,21 @@ def main():
     """
     # runs simulations with varying habitual tendency and reward probability
     # results are stored in data folder
-    run_rew_prob_simulations(repetitions, utility, avg, *run_args, folder)
+    #run_rew_prob_simulations(repetitions, utility, avg, *run_args, folder)
     # run habit task and reward probability analyses and plot results. 
     # function analyzes data, plots average runs and habit strength
     # This function requires simulation data files
     # can be run independently from the simulation function
-    plot_analyses(print_regression_results=False)
+    #plot_analyses(print_regression_results=False)
     
     # run simulations with varying training duration
     # results are stored in data folder
-    #run_training_duration_simulations(repetitions, utility, avg, *run_args, folder)
+    run_training_duration_simulations(repetitions, utility, avg, *run_args, folder)
     # run training duration analyses and plot results. 
     # function analyzes data, plots average runs and habit strength
     # This function requires simulation data files
     # can be run independently from the simulation function
-    #plot_analyses_training()
+    plot_analyses_training()
     
     # run devaluation simulations
     # results are stored in data folder

@@ -1,9 +1,10 @@
 """This module contains the class that defines the interaction between
 different modules that govern agent's behavior.
 """
-import numpy as np
+#import numpy as np
+import torch
 from perception import HierarchicalPerception
-from misc import ln, softmax
+from misc import ln, softmax, intersect1d
 import scipy.special as scs
 
         
@@ -32,43 +33,43 @@ class BayesianPlanner(object):
             self.policies = policies
         else:
             #make action sequences for each policy
-            self.policies = np.eye(self.npi, dtype = int)
+            self.policies = torch.eye(self.npi, dtype = int)
             
-        self.possible_polcies = self.policies.copy()
+        self.possible_polcies = self.policies.clone()
         
-        self.actions = np.unique(self.policies)
+        self.actions = torch.unique(self.policies)
         self.na = len(self.actions)
         
         if prior_states is not None:
             self.prior_states = prior_states
         else:
-            self.prior_states = np.ones(self.nh)
+            self.prior_states = torch.ones(self.nh)
             self.prior_states /= self.prior_states.sum()
             
         if prior_context is not None:
             self.prior_context = prior_context
             self.nc = prior_context.shape[0]
         else:
-            self.prior_context = np.ones(1)
+            self.prior_context = torch.ones(1)
             
         if prior_policies is not None:
-            self.prior_policies = np.tile(prior_policies, (1,self.nc)).T
+            self.prior_policies = prior_policies#.repeat(self.nc, 1)
         else:
-            self.prior_policies = np.ones((self.npi,self.nc))/self.npi
+            self.prior_policies = torch.ones((self.npi,self.nc))/self.npi
             
         self.learn_habit = learn_habit
             
         #set various data structures
-        self.actions = np.zeros((trials, T), dtype = int)
-        self.posterior_states = np.zeros((trials, T, self.nh, T, self.npi, self.nc))
-        self.posterior_policies = np.zeros((trials, T, self.npi, self.nc))
-        self.posterior_dirichlet_pol = np.zeros((trials, self.npi, self.nc))
-        self.posterior_dirichlet_rew = np.zeros((trials, T, self.nr, self.nh, self.nc))
-        self.observations = np.zeros((trials, T), dtype = int)
-        self.rewards = np.zeros((trials, T), dtype = int)
-        self.posterior_context = np.ones((trials, T, self.nc))
-        self.posterior_context[:,:,:] = self.prior_context[np.newaxis,np.newaxis,:]
-        self.likelihood = np.zeros((trials, T, self.npi, self.nc))
+        self.actions = torch.zeros((trials, T), dtype = int)
+        self.posterior_states = torch.zeros((trials, T, self.nh, T, self.npi, self.nc))
+        self.posterior_policies = torch.zeros((trials, T, self.npi, self.nc))
+        self.posterior_dirichlet_pol = torch.zeros((trials, self.npi, self.nc))
+        self.posterior_dirichlet_rew = torch.zeros((trials, T, self.nr, self.nh, self.nc))
+        self.observations = torch.zeros((trials, T), dtype = int)
+        self.rewards = torch.zeros((trials, T), dtype = int)
+        self.posterior_context = torch.ones((trials, T, self.nc))
+        self.posterior_context[:,:,:] = self.prior_context[None,None,:]
+        self.likelihood = torch.zeros((trials, T, self.npi, self.nc))
         
 
     def reset_beliefs(self, actions):
@@ -84,12 +85,12 @@ class BayesianPlanner(object):
     def update_beliefs(self, tau, t, observation, reward, response):
         self.observations[tau,t] = observation
         self.rewards[tau,t] = reward
-            
+        
         if t == 0:
-            self.possible_polcies = np.arange(0,self.npi,1).astype(np.int32)
+            self.possible_polcies = torch.arange(0,self.npi,1, dtype=torch.int32)
         else:
-            possible_policies = np.where(self.policies[:,t-1]==response)[0]
-            self.possible_polcies = np.intersect1d(self.possible_polcies, possible_policies)
+            possible_policies = torch.where(self.policies[:,t-1]==response)[0].type(torch.int32)
+            self.possible_polcies = intersect1d(self.possible_polcies, possible_policies)
             
         self.posterior_states[tau, t] = self.perception.update_beliefs_states(
                                          tau, t,
@@ -104,9 +105,9 @@ class BayesianPlanner(object):
         if t == 0 and tau == 0:
             prior_context = self.prior_context
         else: #elif t == 0:
-            prior_context = np.dot(self.perception.transition_matrix_context, self.posterior_context[tau-1, -1]).reshape((self.nc))
+            prior_context = torch.einsum('ck,k->c', self.perception.transition_matrix_context, self.posterior_context[tau-1, -1])#.reshape((self.nc))
 #            else:
-#                prior_context = np.dot(self.perception.transition_matrix_context, self.posterior_context[tau, t-1])
+#                prior_context = torch.dot(self.perception.transition_matrix_context, self.posterior_context[tau, t-1])
         
         if t>=0:
             self.posterior_context[tau, t] = \
@@ -118,7 +119,7 @@ class BayesianPlanner(object):
                                                    self.policies)
         if t == self.T-1 and self.learn_habit:
             self.posterior_dirichlet_pol[tau] = self.perception.update_beliefs_dirichlet_pol_params(tau, t, \
-                                                            self.posterior_policies[tau,t], \
+                                                            possible_policies, \
                                                             self.posterior_context[tau,t])
         #if reward > 0:    
         self.posterior_dirichlet_rew[tau,t] = self.perception.update_beliefs_dirichlet_rew_params(tau, t, \
@@ -131,13 +132,13 @@ class BayesianPlanner(object):
         
         #get response probability
         posterior_states = self.posterior_states[tau, t]
-        posterior_policies = np.dot(self.posterior_policies[tau, t], self.posterior_context[tau, t])
+        posterior_policies = torch.einsum('pc,c->p', self.posterior_policies[tau, t], self.posterior_context[tau, t])
         #print(self.posterior_context[tau, t])
         posterior_policies /= posterior_policies.sum()
         non_zero = posterior_policies > 0
         controls = self.policies[:, t][non_zero]
         posterior_policies = posterior_policies[non_zero]
-        actions = np.unique(controls)
+        actions = torch.unique(controls)
 
         self.actions[tau, t] = self.action_selection.select_desired_action(tau, 
                                         t, posterior_policies, controls)

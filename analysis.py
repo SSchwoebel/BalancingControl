@@ -63,7 +63,7 @@ def analyze_run(fname, save=False):
     
     times = np.arange(0.+1,trials+1,1.)
     
-    best_options = np.amax(np.argmax(Rho, axis=1), axis=1)-1
+    best_options = np.amax(np.argmax(Rho.numpy(), axis=1), axis=1)-1
     
     for i in range(repetitions):
         #print(i)
@@ -1366,7 +1366,7 @@ def plot_analyses_training():
 
     transition_probs = [99]#[100,99,98,97,96,95,94]
     
-    trainings = [56, 100, 177, 316, 562, 1000, 1778]#, 3162, 5623, 10000]
+    trainings = [56, 100, 177, 316, 562, 1000, 1778]#, 3162]#, 5623, 10000]
     training_names = [1.75, 2., 2.25, 2.5, 2.72, 3., 3.25, 3.5, 3.75, 4.0]
     tr_ind_short = [1,5]#,9]
     tr_names_short = [""] * len(trainings)
@@ -1802,7 +1802,6 @@ def plot_environments():
         
         
 def main():
-    pass
     #plot_analyses(print_regression_results=False)
     #plot_analyses_training()
     #plot_checks()

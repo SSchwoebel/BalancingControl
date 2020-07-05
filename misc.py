@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import numpy as np
+#import numpy as np
+import torch
 import scipy.special as scs
 import matplotlib.pylab as plt
 import seaborn as sns
+import numpy as np
 
 def evolve_environment(env):
     trials = env.hidden_states.shape[0]
@@ -24,20 +26,30 @@ def compute_performance(rewards):
     return rewards.mean(), rewards.var()
 
 
+def intersect1d(x, y):
+    combined = torch.cat((x, y))
+    uniques, counts = combined.unique(return_counts=True)
+    intersection = uniques[counts > 1]
+    return intersection
+
 def ln(x):
-    with np.errstate(divide='ignore'):
-        return np.nan_to_num(np.log(x))
+    #with np.errstate(divide='ignore'):
+    ln = torch.log(x)
+    num = torch.zeros_like(x) - 1e20
+    ln = torch.where(x > 0, ln, num)
+    return ln
     
 def logit(x):
-    with np.errstate(divide = 'ignore'):
-        return np.nan_to_num(np.log(x/(1-x)))
+    #with np.errstate(divide = 'ignore'):
+    return torch.nan_to_num(torch.log(x/(1-x)))
     
 def logistic(x):
-    return 1/(1+np.exp(-x))
+    return 1/(1+torch.exp(-x))
 
 def softmax(x):
+    pass
     """Compute softmax values for each sets of scores in x."""
-    e_x = np.exp(x - np.max(x, axis = 0))
+    e_x = torch.exp(x)
     return e_x / e_x.sum(axis = 0)
 
 def sigmoid(x, a=1., b=1., c=0., d=0.):
@@ -49,33 +61,17 @@ def exponential(x, b=1., c=0., d=0.):
     return f
 
 def lognormal(x, mu, sigma):
-    return -.5*(x-mu)*(x-mu)/(2*sigma) - .5*ln(2*np.pi*sigma)
-
-def generate_bandit_timeseries_stable(Rho_0, nb, trials, changes):
-    Rho = np.zeros((trials, Rho_0.shape[0], Rho_0.shape[1]))
-    Rho[0] = Rho_0.copy()
-    
-    #set dummy state
-    Rho[:,0,0] = 1
-
-    for tau in range(1,trials):
-        change = np.random.choice(changes, size=nb)
-        Rho[tau,0,1:] = Rho[tau-1,0,1:] + change
-        Rho[tau,1,1:] = Rho[tau-1,1,1:] - change
-        Rho[tau][Rho[tau] > 1.] = 1.
-        Rho[tau][Rho[tau] < 0.] = 0.
-        
-    return Rho
+    return -.5*(x-mu)*(x-mu)/(2*sigma) - .5*ln(2*torch.pi*sigma)
 
 
 def generate_bandit_timeseries_change(Rho_0, nb, trials, changes):
-    Rho = np.zeros((trials, Rho_0.shape[0], Rho_0.shape[1]))
+    Rho = torch.zeros((trials, Rho_0.shape[0], Rho_0.shape[1]))
     Rho[0] = Rho_0.copy()
     
     #set dummy state
     Rho[:,0,0] = 1
     
-    means = np.zeros((trials,2, nb+1))
+    means = torch.zeros((trials,2, nb+1))
     means[:,1,1:] = 0.05
     means[0,1,1] = 0.95
     means[:,0,1:] = 0.95
@@ -88,13 +84,6 @@ def generate_bandit_timeseries_change(Rho_0, nb, trials, changes):
             
             means[tau*(trials//nb)+i,0,tau+1] =  1 - means[tau*(trials//nb)+i,1,tau+1]
             means[tau*(trials//nb)+i,0,tau+2] =  1 - means[tau*(trials//nb)+i,1,tau+2]
-
-#    for tau in range(1,trials):
-#        change = np.random.choice(changes, size=nb)
-#        Rho[tau,0,1:] = Rho[tau-1,0,1:] + change
-#        Rho[tau,1,1:] = Rho[tau-1,1,1:] - change
-#        Rho[tau][Rho[tau] > 1.] = 1.
-#        Rho[tau][Rho[tau] < 0.] = 0.
         
     return means
 
@@ -106,13 +95,13 @@ def generate_randomwalk(trials, nr, ns, nb, sigma, start_vals=None):
     if start_vals is not None:
         init = start_vals
     else:
-        init = np.array([0.5]*nb)
+        init = torch.tensor([0.5]*nb)
         
-    sqr_sigma = np.sqrt(sigma)
+    sqr_sigma = torch.sqrt(sigma)
     
     nnr = ns-nb
         
-    Rho = np.zeros((trials, nr, ns))
+    Rho = torch.zeros((trials, nr, ns))
     
     Rho[:,1,:nnr] = 0.
     Rho[:,0,:nnr] = 1.
@@ -120,9 +109,11 @@ def generate_randomwalk(trials, nr, ns, nb, sigma, start_vals=None):
     Rho[0,1,nnr:] = init
     Rho[0,0,nnr:] = 1. - init
     
+    N = torch.distributions.normal.Normal(torch.tensor([0.0]), torch.tensor([1.0]))
+    
     for t in range(1,trials):
         p = scs.logit(Rho[t-1,1,nnr:])
-        p = p + sqr_sigma * np.random.default_rng().normal(size=nb)        
+        p = p + sqr_sigma * N.sample()
         p = scs.expit(p)
         
         Rho[t,1,nnr:] = p
@@ -131,7 +122,7 @@ def generate_randomwalk(trials, nr, ns, nb, sigma, start_vals=None):
     return Rho
 
 def generate_bandit_timeseries_slowchange(trials, nr, ns, nb):
-    Rho = np.zeros((trials, nr, ns))
+    Rho = torch.zeros((trials, nr, ns))
     Rho[:,0,0] = 1.
     Rho[:,0,1:] = 0.9
     for j in range(1,nb+1):
@@ -151,7 +142,7 @@ def generate_bandit_timeseries_slowchange(trials, nr, ns, nb):
 
 
 def generate_bandit_timeseries_training(trials, nr, ns, nb, n_training, p=0.9, offset = 0):
-    Rho = np.zeros((trials, nr, ns))
+    Rho = torch.zeros((trials, nr, ns))
     Rho[:,0,0] = 1.
     Rho[:,0,1:] = p
     for j in range(1,nb+1):
@@ -174,7 +165,7 @@ def generate_bandit_timeseries_training(trials, nr, ns, nb, n_training, p=0.9, o
 
 
 def generate_bandit_timeseries_habit(trials_train, nr, ns, n_test=100, p=0.9, offset = 0):
-    Rho = np.zeros((trials_train+n_test, nr, ns))
+    Rho = torch.zeros((trials_train+n_test, nr, ns))
     Rho[:,0,0] = 1.
     Rho[:,0,1:] = p
     for j in range(1,nr):
@@ -190,7 +181,7 @@ def generate_bandit_timeseries_habit(trials_train, nr, ns, n_test=100, p=0.9, of
 
 
 def generate_bandit_timeseries_asymmetric(trials_train, nr, ns, n_test=100, p=0.9, q=0.1):
-    Rho = np.zeros((trials_train+n_test, nr, ns))
+    Rho = torch.zeros((trials_train+n_test, nr, ns))
     Rho[:,0,0] = 1.
     Rho[:,0,1:] = 1.-q
     for j in range(1,nr):
@@ -211,7 +202,7 @@ def D_KL_nd_dirichlet(alpha, beta):
     for j in range(alpha.shape[1]):
         D_KL += -scs.gammaln(alpha[:,j]).sum(axis=0) + scs.gammaln(alpha[:,j].sum(axis=0)) \
          +scs.gammaln(beta[:,j]).sum(axis=0) - scs.gammaln(beta[:,j].sum(axis=0)) \
-         + ((alpha[:,j]-beta[:,j]) * (scs.digamma(alpha[:,j]) - scs.digamma(alpha[:,j].sum(axis=0))[np.newaxis,:])).sum(axis=0)
+         + ((alpha[:,j]-beta[:,j]) * (scs.digamma(alpha[:,j]) - scs.digamma(alpha[:,j].sum(axis=0))[None,:])).sum(axis=0)
      
     return D_KL
 
@@ -221,10 +212,10 @@ def D_KL_dirichlet_categorical(alpha, beta):
      +scs.gammaln(beta).sum(axis=0) - scs.gammaln(beta.sum(axis=0)) \
     
     for k in range(alpha.shape[1]):
-        helper = np.zeros(alpha.shape[1])
+        helper = torch.zeros(alpha.shape[1])
         helper[k] = 1
         D_KL += alpha[k]/alpha.sum(axis=0)*((alpha-beta) * (scs.digamma(alpha) -\
-                     scs.digamma((alpha+helper).sum(axis=0))[np.newaxis,:])).sum(axis=0)
+                     scs.digamma((alpha+helper).sum(axis=0))[None,:])).sum(axis=0)
      
     return D_KL
 
