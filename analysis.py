@@ -1802,6 +1802,7 @@ def plot_environments():
         
         
 def main():
+    pass
     #plot_analyses(print_regression_results=False)
     #plot_analyses_training()
     #plot_checks()
