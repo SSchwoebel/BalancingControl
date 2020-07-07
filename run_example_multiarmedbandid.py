@@ -338,7 +338,7 @@ def main():
         utility[i] = u/(nr-1)
     utility[0] = (1.-u)
     
-    repetitions = 20
+    repetitions = 10
     
     avg = True
     
@@ -356,21 +356,21 @@ def main():
     
     # run simulations with varying training duration
     # results are stored in data folder
-    run_training_duration_simulations(repetitions, utility, avg, *run_args, folder)
+    #run_training_duration_simulations(repetitions, utility, avg, *run_args, folder)
     # run training duration analyses and plot results. 
     # function analyzes data, plots average runs and habit strength
     # This function requires simulation data files
     # can be run independently from the simulation function
-    plot_analyses_training()
+    #plot_analyses_training()
     
     # run devaluation simulations
     # results are stored in data folder
-    #run_deval_simulations(repetitions, utility, avg, *run_args, folder)
+    run_deval_simulations(repetitions, utility, avg, *run_args, folder)
     # run devaluation analyses and plot results. 
     # function analyzes data, plots average runs and habit strength
     # This function requires simulation data files
     # can be run independently from the simulation function
-    #plot_analyses_deval()
+    plot_analyses_deval()
 
 
 if __name__ == "__main__":

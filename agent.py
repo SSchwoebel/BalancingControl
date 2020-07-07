@@ -6,6 +6,7 @@ import torch
 from perception import HierarchicalPerception
 from misc import ln, softmax, intersect1d
 import scipy.special as scs
+import gc
 
         
 class BayesianPlanner(object):
@@ -28,14 +29,17 @@ class BayesianPlanner(object):
         self.nr = number_of_rewards
         
         self.T = T
+        self.trials = trials
         
         if policies is not None:
             self.policies = policies
         else:
             #make action sequences for each policy
             self.policies = torch.eye(self.npi, dtype = int)
+        
+        self.na = len(torch.unique(policies))
             
-        self.possible_polcies = self.policies.clone()
+        self.possible_polcies = self.policies.clone().detach()
         
         self.actions = torch.unique(self.policies)
         self.na = len(self.actions)
@@ -70,16 +74,31 @@ class BayesianPlanner(object):
         self.posterior_context = torch.ones((trials, T, self.nc))
         self.posterior_context[:,:,:] = self.prior_context[None,None,:]
         self.likelihood = torch.zeros((trials, T, self.npi, self.nc))
+        #self.posterior_rewards = torch.zeros((trials, T, self.nr))
+        self.posterior_actions = torch.zeros((trials, T-1, self.na))
         
+    def reset(self, parameters):
+        
+        self.reset_beliefs()
+        self.reset_parameters(parameters)
 
-    def reset_beliefs(self, actions):
-        self.actions[:,:] = actions 
-        self.posterior_states[:,:,:] = 0.
-        self.posterior_policies[:,:,:] = 0.
+    def reset_beliefs(self):
         
-        self.perception.reset_beliefs()
-        self.planning.reset_beliefs()
-        self.action_selection.reset_beliefs()
+        self.actions[:] = torch.zeros((self.trials, self.T), dtype = int)
+        self.posterior_states[:] = torch.zeros((self.trials, self.T, self.nh, self.T, self.npi, self.nc))
+        self.posterior_policies[:] = torch.zeros((self.trials, self.T, self.npi, self.nc))
+        self.posterior_dirichlet_pol[:] = torch.zeros((self.trials, self.npi, self.nc))
+        self.posterior_dirichlet_rew[:] = torch.zeros((self.trials, self.T, self.nr, self.nh, self.nc))
+        self.observations[:] = torch.zeros((self.trials, self.T), dtype = int)
+        self.rewards[:] = torch.zeros((self.trials, self.T), dtype = int)
+        self.posterior_context[:] = torch.ones((self.trials, self.T, self.nc))
+        self.posterior_context[:,:,:] = self.prior_context[None,None,:]
+        self.likelihood[:] = torch.zeros((self.trials, self.T, self.npi, self.nc))
+        #self.posterior_rewards = torch.zeros((self.trials, self.T, self.nr))
+        self.posterior_actions[:] = torch.zeros((self.trials, self.T-1, self.na))
+        
+    def reset_parameters(self, parameters):
+        self.perception.reset_parameters(parameters)
         
         
     def update_beliefs(self, tau, t, observation, reward, response):
@@ -117,6 +136,12 @@ class BayesianPlanner(object):
                                                    self.posterior_policies[tau, t], \
                                                    prior_context, \
                                                    self.policies)
+            
+        
+        if t < self.T-1:
+            post_pol = torch.einsum('pc,c->p', self.posterior_policies[tau, t], self.posterior_context[tau, t])
+            self.posterior_actions[tau, t] = torch.tensor([post_pol[self.policies[:,t]==a] for a in range(self.na)])
+            
         if t == self.T-1 and self.learn_habit:
             self.posterior_dirichlet_pol[tau] = self.perception.update_beliefs_dirichlet_pol_params(tau, t, \
                                                             possible_policies, \
@@ -127,6 +152,14 @@ class BayesianPlanner(object):
                                                    self.posterior_states[tau, t], \
                                                    self.posterior_policies[tau, t], \
                                                    self.posterior_context[tau,t])
+        
+        #gc.collect()
+        
+#        self.posterior_rewards =  self.perception.update_beliefs_rewards(tau, t, \
+#                                                                         self.posterior_states[tau, t], \
+#                                                                         self.posterior_policies[tau, t], \
+#                                                                         self.posterior_context[tau, t])
+        
     
     def generate_response(self, tau, t):
         

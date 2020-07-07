@@ -911,7 +911,7 @@ def plot_analyses(print_regression_results=False):
     
     reward_probs = [100,95,90,85,80,75,70,65,60]
     
-    calculate_analyses(tendencies, transition_probs, reward_probs=reward_probs, recalc=False)
+    calculate_analyses(tendencies, transition_probs, reward_probs=reward_probs, recalc=True)
     
     results_c, results_p, entropy_c, entropy_p, entropy_l, results_chosen = load_analyses(tendencies, transition_probs, reward_probs)
     
