@@ -48,7 +48,7 @@ class Inferrer(object):
         
         alpha = sample('loc', dist.Normal(m, s).to_event(1))
         
-        self.parameters['alpha'] = alpha
+        self.parameters['alpha'] = torch.zeros((self.agent.npi, self.agent.nc), requires_grad=True) + alpha
 
         self.agent.reset(self.parameters)
         
@@ -72,7 +72,7 @@ class Inferrer(object):
                 
                 if t>0:
                 
-                    probs = self.agent.posterior_actions[tau, t-1]
+                    probs = self.agent.posterior_actions
                         
                     with plate('responses_{}_{}'.format(tau, t), 1):
                         sample('obs_{}_{}'.format(tau, t), dist.Categorical(probs=probs), obs=response)
@@ -85,11 +85,11 @@ class Inferrer(object):
         npar = 1 #number of parameters
         
         m_locs = param('m_locs', torch.ones(npar))#, constraint=constraints.interval(1.,100.))
-        st_locs = param('scale_tril_locs', torch.eye(npar), 
-                   constraint=constraints.lower_cholesky)
+        st_locs = param('scale_tril_locs', torch.ones(npar), 
+                   constraint=constraints.positive)
 
 
-        locs = sample("locs", dist.MultivariateNormal(m_locs, scale_tril=st_locs))
+        locs = sample("locs", dist.Normal(m_locs, st_locs))
         
         return {'locs': locs}
 

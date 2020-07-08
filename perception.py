@@ -25,7 +25,7 @@ class HierarchicalPerception(object):
         self.transition_matrix_context = transition_matrix_context.clone().detach()
         self.prior_rewards = prior_rewards.clone().detach()
         self.prior_states = prior_states.clone().detach()
-        self.prior_policies = prior_policies.clone().detach()
+        self.prior_policies = prior_policies.clone().requires_grad_(True)
         self.T = T
         self.nh = prior_states.shape[0]
         self.npi = prior_policies.shape[0]
@@ -36,7 +36,7 @@ class HierarchicalPerception(object):
             self.nc = 1
             self.generative_model_rewards = self.generative_model_rewards[:,:,None]
         if dirichlet_pol_params is not None:
-            self.dirichlet_pol_params = dirichlet_pol_params.clone().detach()
+            self.dirichlet_pol_params = dirichlet_pol_params.clone().requires_grad_(True)
         if dirichlet_rew_params is not None:
             self.dirichlet_rew_params = dirichlet_rew_params.clone().detach()
             
@@ -61,8 +61,8 @@ class HierarchicalPerception(object):
         
         self.dirichlet_rew_params[:] = parameters['dir_rew'].clone().detach()
         self.generative_model_rewards[:] = parameters['rew_gen_mod'].clone().detach()
-        self.prior_policies[:] = parameters['prior_pol'].clone().detach()
-        self.dirichlet_pol_params[:] = parameters['alpha'].clone().detach()
+        self.prior_policies = parameters['prior_pol'].clone().requires_grad_(True)
+        self.dirichlet_pol_params = parameters['alpha'].clone().requires_grad_(True)
             
         
     def instantiate_messages(self, policies):
@@ -179,8 +179,8 @@ class HierarchicalPerception(object):
         post_policies = (prior_context[None,:] * posterior_policies).sum(axis=1)
         beta = self.dirichlet_rew_params.clone().detach()
         states = (posterior_states[:,t,:] * post_policies[None,:,None]).sum(axis=1)
-        beta_prime = self.dirichlet_rew_params.clone().detach()
-        beta_prime[reward] = beta[reward] + states
+        #beta_prime = self.dirichlet_rew_params.clone()
+        #beta_prime[reward] = beta[reward] + states
         
 #        for c in range(self.nc):
 #            for state in range(self.nh):
@@ -198,12 +198,11 @@ class HierarchicalPerception(object):
 #                else:
 #                    self.fwd_messages[:,:,pi,c] = 1./self.nh #0
         
-        alpha = self.dirichlet_pol_params.clone().detach()
+        alpha = self.dirichlet_pol_params.clone()
         if t == self.T-1:
             chosen_pol = torch.argmax(post_policies)
             inf_context = torch.argmax(prior_context)
-            alpha_prime = self.dirichlet_pol_params.clone().detach()
-            alpha_prime[chosen_pol,:] += prior_context
+            alpha_prime = self.dirichlet_pol_params + torch.eye(self.npi)[chosen_pol]*prior_context
             #alpha_prime[chosen_pol,inf_context] = self.dirichlet_pol_params[chosen_pol,inf_context] + 1
         else:
             alpha_prime = alpha
@@ -237,9 +236,9 @@ class HierarchicalPerception(object):
         #chosen_pol = torch.argmax(posterior_policies, axis=0)
         #print("chosen", chosen_pol)
 #        self.dirichlet_pol_params[chosen_pol,:] += posterior_context.sum(axis=0)/posterior_context.sum()
-        self.dirichlet_pol_params[possible_policies[0],:] += posterior_context
-        self.prior_policies[:] = torch.exp(torch.digamma(self.dirichlet_pol_params) - torch.digamma(self.dirichlet_pol_params.sum(axis=0))[None,:])
-        self.prior_policies /= self.prior_policies.sum(axis=0)
+        self.dirichlet_pol_params= self.dirichlet_pol_params + torch.eye(self.npi)[possible_policies[0]] * posterior_context
+        prior_policies = torch.exp(torch.digamma(self.dirichlet_pol_params) - torch.digamma(self.dirichlet_pol_params.sum(axis=0))[None,:])
+        self.prior_policies = prior_policies/prior_policies.sum(axis=0)
         
         return self.dirichlet_pol_params
     

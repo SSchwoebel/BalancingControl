@@ -56,15 +56,15 @@ def run_agent(w_old):
     T = w_old.T
     trials = w_old.trials
     utility = torch.tensor(w_old.agent.perception.prior_rewards)
-    observations = torch.tensor(w_old.observations).clone().detach()
-    rewards = torch.tensor(w_old.rewards).clone().detach()
-    responses = torch.tensor(w_old.actions).clone().detach()
+    observations = torch.tensor(w_old.observations).clone()
+    rewards = torch.tensor(w_old.rewards).clone()
+    responses = torch.tensor(w_old.actions).clone()
     
     #generating probability of observations in each state
 
-    A = torch.tensor(w_old.agent.perception.generative_model_observations).clone().detach()
-    B = torch.tensor(w_old.agent.perception.generative_model_states).clone().detach()
-    transition_matrix_context = torch.tensor(w_old.agent.perception.transition_matrix_context).clone().detach()
+    A = torch.tensor(w_old.agent.perception.generative_model_observations).clone()
+    B = torch.tensor(w_old.agent.perception.generative_model_states).clone()
+    transition_matrix_context = torch.tensor(w_old.agent.perception.transition_matrix_context).clone()
     
     pol = w_old.agent.policies
     
@@ -152,7 +152,7 @@ def run_agent(w_old):
 
 def run_inference(repetitions, folder):
     
-    for tendency in [100]:#,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
+    for tendency in [1]:#,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
         for trans in [99]:
             print(tendency, trans)
             inference = []

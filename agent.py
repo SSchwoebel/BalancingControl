@@ -66,16 +66,16 @@ class BayesianPlanner(object):
         #set various data structures
         self.actions = torch.zeros((trials, T), dtype = int)
         self.posterior_states = torch.zeros((trials, T, self.nh, T, self.npi, self.nc))
-        self.posterior_policies = torch.zeros((trials, T, self.npi, self.nc))
-        self.posterior_dirichlet_pol = torch.zeros((trials, self.npi, self.nc))
+        self.posterior_policies = torch.zeros((trials, T, self.npi, self.nc), requires_grad=True)
+        self.posterior_dirichlet_pol = torch.zeros((trials, self.npi, self.nc), requires_grad=True)
         self.posterior_dirichlet_rew = torch.zeros((trials, T, self.nr, self.nh, self.nc))
         self.observations = torch.zeros((trials, T), dtype = int)
         self.rewards = torch.zeros((trials, T), dtype = int)
-        self.posterior_context = torch.ones((trials, T, self.nc))
+        self.posterior_context = torch.ones((trials, T, self.nc), requires_grad=True)
         self.posterior_context[:,:,:] = self.prior_context[None,None,:]
         self.likelihood = torch.zeros((trials, T, self.npi, self.nc))
         #self.posterior_rewards = torch.zeros((trials, T, self.nr))
-        self.posterior_actions = torch.zeros((trials, T-1, self.na))
+        self.posterior_actions = torch.zeros(self.na, requires_grad=True)
         
     def reset(self, parameters):
         
@@ -84,18 +84,17 @@ class BayesianPlanner(object):
 
     def reset_beliefs(self):
         
-        self.actions[:] = torch.zeros((self.trials, self.T), dtype = int)
-        self.posterior_states[:] = torch.zeros((self.trials, self.T, self.nh, self.T, self.npi, self.nc))
-        self.posterior_policies[:] = torch.zeros((self.trials, self.T, self.npi, self.nc))
-        self.posterior_dirichlet_pol[:] = torch.zeros((self.trials, self.npi, self.nc))
-        self.posterior_dirichlet_rew[:] = torch.zeros((self.trials, self.T, self.nr, self.nh, self.nc))
-        self.observations[:] = torch.zeros((self.trials, self.T), dtype = int)
-        self.rewards[:] = torch.zeros((self.trials, self.T), dtype = int)
-        self.posterior_context[:] = torch.ones((self.trials, self.T, self.nc))
-        self.posterior_context[:,:,:] = self.prior_context[None,None,:]
-        self.likelihood[:] = torch.zeros((self.trials, self.T, self.npi, self.nc))
+        self.actions = torch.zeros((self.trials, self.T), dtype = int)
+        self.posterior_states = torch.zeros((self.trials, self.T, self.nh, self.T, self.npi, self.nc))
+        self.posterior_policies = torch.zeros((self.npi, self.nc), requires_grad=True)
+        self.posterior_dirichlet_pol = torch.zeros((self.trials, self.npi, self.nc), requires_grad=True)
+        self.posterior_dirichlet_rew = torch.zeros((self.trials, self.T, self.nr, self.nh, self.nc))
+        self.observations = torch.zeros((self.trials, self.T), dtype = int)
+        self.rewards = torch.zeros((self.trials, self.T), dtype = int)
+        self.posterior_context = torch.ones(self.nc, requires_grad=True) * self.prior_context
+        self.likelihood = torch.zeros((self.trials, self.T, self.npi, self.nc))
         #self.posterior_rewards = torch.zeros((self.trials, self.T, self.nr))
-        self.posterior_actions[:] = torch.zeros((self.trials, self.T-1, self.na))
+        self.posterior_actions = torch.zeros((self.trials, self.T-1, self.na), requires_grad=True)
         
     def reset_parameters(self, parameters):
         self.perception.reset_parameters(parameters)
@@ -119,39 +118,39 @@ class BayesianPlanner(object):
                                          self.possible_polcies)
         
         #update beliefs about policies
-        self.posterior_policies[tau, t], self.likelihood[tau,t] = self.perception.update_beliefs_policies(tau, t)
+        self.posterior_policies = self.perception.update_beliefs_policies(tau, t)[0]
         
         if t == 0 and tau == 0:
             prior_context = self.prior_context
         else: #elif t == 0:
-            prior_context = torch.einsum('ck,k->c', self.perception.transition_matrix_context, self.posterior_context[tau-1, -1])#.reshape((self.nc))
+            prior_context = torch.matmul(self.perception.transition_matrix_context, self.posterior_context)#.reshape((self.nc))
 #            else:
 #                prior_context = torch.dot(self.perception.transition_matrix_context, self.posterior_context[tau, t-1])
         
         if t>=0:
-            self.posterior_context[tau, t] = \
+            self.posterior_context = \
             self.perception.update_beliefs_context(tau, t, \
                                                    reward, \
                                                    self.posterior_states[tau, t], \
-                                                   self.posterior_policies[tau, t], \
+                                                   self.posterior_policies, \
                                                    prior_context, \
                                                    self.policies)
             
         
         if t < self.T-1:
-            post_pol = torch.einsum('pc,c->p', self.posterior_policies[tau, t], self.posterior_context[tau, t])
-            self.posterior_actions[tau, t] = torch.tensor([post_pol[self.policies[:,t]==a] for a in range(self.na)])
+            post_pol = torch.matmul(self.posterior_policies, self.posterior_context)
+            self.posterior_actions = torch.tensor([post_pol[self.policies[:,t]==a] for a in range(self.na)], requires_grad=True)
             
         if t == self.T-1 and self.learn_habit:
             self.posterior_dirichlet_pol[tau] = self.perception.update_beliefs_dirichlet_pol_params(tau, t, \
                                                             possible_policies, \
-                                                            self.posterior_context[tau,t])
+                                                            self.posterior_context)
         #if reward > 0:    
         self.posterior_dirichlet_rew[tau,t] = self.perception.update_beliefs_dirichlet_rew_params(tau, t, \
                                                             reward, \
                                                    self.posterior_states[tau, t], \
-                                                   self.posterior_policies[tau, t], \
-                                                   self.posterior_context[tau,t])
+                                                   self.posterior_policies, \
+                                                   self.posterior_context)
         
         #gc.collect()
         
@@ -165,7 +164,7 @@ class BayesianPlanner(object):
         
         #get response probability
         posterior_states = self.posterior_states[tau, t]
-        posterior_policies = torch.einsum('pc,c->p', self.posterior_policies[tau, t], self.posterior_context[tau, t])
+        posterior_policies = torch.matmul(self.posterior_policies, self.posterior_context)
         #print(self.posterior_context[tau, t])
         posterior_policies /= posterior_policies.sum()
         non_zero = posterior_policies > 0
