@@ -4,8 +4,9 @@ actions generated during a single experiment. To initiate it one needs to
 provide the environment class and the agent class that will be used for the 
 experiment.
 """
-import numpy as np
+
 from misc import ln
+import torch
 
 class World(object):
     
@@ -20,13 +21,13 @@ class World(object):
         self.free_parameters = {}
         
         #container for observations
-        self.observations = np.zeros((self.trials, self.T), dtype = int)
+        self.observations = torch.zeros((self.trials, self.T), dtype = int)
                 
         #container for agents actions
-        self.actions = np.zeros((self.trials, self.T), dtype = int)
+        self.actions = torch.zeros((self.trials, self.T), dtype = int)
         
         #container for rewards
-        self.rewards = np.zeros((self.trials, self.T), dtype = int)
+        self.rewards = torch.zeros((self.trials, self.T), dtype = int)
         
     def simulate_experiment(self, curr_trials=None):
         """This methods evolves all the states of the world by iterating 
@@ -44,7 +45,7 @@ class World(object):
     def estimate_par_evidence(self, params, method='MLE'):
 
         
-        val = np.zeros(params.shape[0])
+        val = torch.zeros(params.shape[0])
         for i, par in enumerate(params):
             if method == 'MLE':
                 val[i] = self.__get_log_likelihood(par)
@@ -74,8 +75,8 @@ class World(object):
         self.agent.reset_beliefs(self.actions)
         self.__update_model()
         
-        p1 = np.tile(np.arange(self.trials), (self.T, 1)).T
-        p2 = np.tile(np.arange(self.T), (self.trials, 1))
+        p1 = torch.tile(torch.arange(self.trials), (self.T, 1)).T
+        p2 = torch.tile(torch.arange(self.T), (self.trials, 1))
         p3 = self.actions.astype(int)
         
         return ln(self.agent.asl.control_probability[p1, p2, p3]).sum()
@@ -85,8 +86,8 @@ class World(object):
         self.agent.reset_beliefs(self.actions)
         self.__update_model()
         
-        p1 = np.tile(np.arange(self.trials), (self.T, 1)).T
-        p2 = np.tile(np.arange(self.T), (self.trials, 1))
+        p1 = torch.tile(torch.arange(self.trials), (self.T, 1)).T
+        p2 = torch.tile(torch.arange(self.T), (self.trials, 1))
         p3 = self.actions.astype(int)
         
         ll = ln(self.agent.asl.control_probability[p1, p2, p3]).sum()
@@ -160,12 +161,12 @@ class FakeWorld(object):
         self.free_parameters = {}
         
         #container for observations
-        self.observations = np.zeros((self.trials, self.T), dtype = int)
-        self.observations[:] = np.array([observations for i in range(self.trials)])
+        self.observations = torch.zeros((self.trials, self.T), dtype = int)
+        self.observations[:] = torch.array([observations for i in range(self.trials)])
                 
         #container for agents actions
-        self.actions = np.zeros((self.trials, self.T), dtype = int)
-        self.actions[:] = np.array([actions for i in range(self.trials)])
+        self.actions = torch.zeros((self.trials, self.T), dtype = int)
+        self.actions[:] = torch.array([actions for i in range(self.trials)])
         
     def simulate_experiment(self):
         """This methods evolves all the states of the world by iterating 
@@ -180,7 +181,7 @@ class FakeWorld(object):
     def estimate_par_evidence(self, params, method='MLE'):
 
         
-        val = np.zeros(params.shape[0])
+        val = torch.zeros(params.shape[0])
         for i, par in enumerate(params):
             if method == 'MLE':
                 val[i] = self.__get_log_likelihood(par)
@@ -210,8 +211,8 @@ class FakeWorld(object):
         self.agent.reset_beliefs(self.actions)
         self.__update_model()
         
-        p1 = np.tile(np.arange(self.trials), (self.T, 1)).T
-        p2 = np.tile(np.arange(self.T), (self.trials, 1))
+        p1 = torch.tile(torch.arange(self.trials), (self.T, 1)).T
+        p2 = torch.tile(torch.arange(self.T), (self.trials, 1))
         p3 = self.actions.astype(int)
         
         return ln(self.agent.asl.control_probability[p1, p2, p3]).sum()
@@ -221,8 +222,8 @@ class FakeWorld(object):
         self.agent.reset_beliefs(self.actions)
         self.__update_model()
         
-        p1 = np.tile(np.arange(self.trials), (self.T, 1)).T
-        p2 = np.tile(np.arange(self.T), (self.trials, 1))
+        p1 = torch.tile(torch.arange(self.trials), (self.T, 1)).T
+        p2 = torch.tile(torch.arange(self.T), (self.trials, 1))
         p3 = self.actions.astype(int)
         
         ll = ln(self.agent.asl.control_probability[p1, p2, p3]).sum()
