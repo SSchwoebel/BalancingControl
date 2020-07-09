@@ -347,21 +347,21 @@ def main():
     """
     # runs simulations with varying habitual tendency and reward probability
     # results are stored in data folder
-    run_rew_prob_simulations(repetitions, utility, avg, *run_args, folder)
+    #run_rew_prob_simulations(repetitions, utility, avg, *run_args, folder)
     # run habit task and reward probability analyses and plot results. 
     # function analyzes data, plots average runs and habit strength
     # This function requires simulation data files
     # can be run independently from the simulation function
-    plot_analyses(print_regression_results=False)
+    #plot_analyses(print_regression_results=False)
     
     # run simulations with varying training duration
     # results are stored in data folder
-    #run_training_duration_simulations(repetitions, utility, avg, *run_args, folder)
+    run_training_duration_simulations(repetitions, utility, avg, *run_args, folder)
     # run training duration analyses and plot results. 
     # function analyzes data, plots average runs and habit strength
     # This function requires simulation data files
     # can be run independently from the simulation function
-    #plot_analyses_training()
+    plot_analyses_training()
     
     # run devaluation simulations
     # results are stored in data folder

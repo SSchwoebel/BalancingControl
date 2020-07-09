@@ -69,16 +69,24 @@ class BayesianPlanner(object):
         self.posterior_context = np.ones((trials, T, self.nc))
         self.posterior_context[:,:,:] = self.prior_context[np.newaxis,np.newaxis,:]
         self.likelihood = np.zeros((trials, T, self.npi, self.nc))
+        self.posterior_actions = np.zeros((trials, T-1, self.na))
+        self.log_probability = 0
         
 
-    def reset_beliefs(self, actions):
-        self.actions[:,:] = actions 
-        self.posterior_states[:,:,:] = 0.
-        self.posterior_policies[:,:,:] = 0.
+    def reset(self, params, fixed):
         
-        self.perception.reset_beliefs()
-        self.planning.reset_beliefs()
-        self.action_selection.reset_beliefs()
+        self.actions[:] = 0
+        self.posterior_states[:] = 0
+        self.posterior_policies[:] = 0
+        self.posterior_dirichlet_pol[:] = 0
+        self.posterior_dirichlet_rew[:] =0
+        self.observations[:] = 0
+        self.rewards[:] = 0
+        self.posterior_context[:,:,:] = self.prior_context[np.newaxis,np.newaxis,:]
+        self.likelihood[:] = 0
+        self.log_probability = 0
+        
+        self.perception.reset(params, fixed)
         
         
     def update_beliefs(self, tau, t, observation, reward, response):
@@ -90,6 +98,7 @@ class BayesianPlanner(object):
         else:
             possible_policies = np.where(self.policies[:,t-1]==response)[0]
             self.possible_polcies = np.intersect1d(self.possible_polcies, possible_policies)
+            self.log_probability += ln(self.posterior_actions[tau,t-1,response])
             
         self.posterior_states[tau, t] = self.perception.update_beliefs_states(
                                          tau, t,
@@ -116,6 +125,11 @@ class BayesianPlanner(object):
                                                    self.posterior_policies[tau, t], \
                                                    prior_context, \
                                                    self.policies)
+            
+        if t < self.T-1:
+            post_pol = np.dot(self.posterior_policies[tau, t], self.posterior_context[tau, t])
+            self.posterior_actions[tau, t] = self.estimate_action_probability(tau, t, post_pol)
+            
         if t == self.T-1 and self.learn_habit:
             self.posterior_dirichlet_pol[tau] = self.perception.update_beliefs_dirichlet_pol_params(tau, t, \
                                                             self.posterior_policies[tau,t], \
@@ -144,5 +158,16 @@ class BayesianPlanner(object):
             
         
         return self.actions[tau, t]
+    
+    
+    def estimate_action_probability(self, tau, t, posterior_policies):
+        
+        #estimate action probability
+        control_prob = np.zeros(self.na)
+        for a in range(self.na):
+            control_prob[a] = posterior_policies[self.policies[:,t] == a].sum()
+
+            
+        return control_prob
     
 
