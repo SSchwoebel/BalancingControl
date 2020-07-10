@@ -50,7 +50,6 @@ class HierarchicalPerception(object):
     def reset(self, params, fixed):
         
         alphas = np.zeros((self.npi, self.nc)) + np.power(10,params)
-        
         self.generative_model_rewards[:] = fixed['rew_mod'].copy()
         self.dirichlet_rew_params[:] = fixed['beta_rew'].copy()
         self.prior_policies[:] = alphas / alphas.sum(axis=0)[None,:]
