@@ -28,7 +28,43 @@ import gc
     
 
 
-def run_fitting(repetitions, utility, avg, T, ns, na, nr, nc, folder):
+def run_fitting(folder):
+    
+    for tendency in [10]:
+        for trans in [99]:
+            print(tendency, trans)
+            traces = []
+                
+            run_name ="h"+str(tendency)+"_t"+str(trans)+"_p90_train100.json"
+            fname = os.path.join(folder, run_name)
+            
+            jsonpickle_numpy.register_handlers()
+            
+            with open(fname, 'r') as infile:
+                data = json.load(infile)
+                
+            worlds_old = pickle.decode(data)
+            
+            inferrer = infer.Inferrer(worlds_old)
+            
+            #traces = inferrer.run_single_inference(1)
+            
+            traces = inferrer.run_group_inference()
+                
+            fname = os.path.join(folder, run_name[:-5]+"_traces.json")
+                    
+            jsonpickle_numpy.register_handlers()
+            pickled = pickle.encode(traces)
+            with open(fname, 'w') as outfile:
+                json.dump(pickled, outfile)
+            
+            pickled = 0
+            traces = 0
+            
+            gc.collect()
+            
+            
+def load_fitting(folder):
     
     for tendency in [10]:
         for trans in [99]:
@@ -48,17 +84,17 @@ def run_fitting(repetitions, utility, avg, T, ns, na, nr, nc, folder):
             repetitions = len(worlds_old)
             
             inferrer = infer.Inferrer(worlds_old)
-            
-            traces = inferrer.run_single_inference(1)
-            
-            #traces = inferrer.run_group_inference()
                 
+            run_name ="h"+str(tendency)+"_t"+str(trans)+"_p90_train100.json"
+            
             fname = os.path.join(folder, run_name[:-5]+"_traces.json")
-                    
-            jsonpickle_numpy.register_handlers()
-            pickled = pickle.encode(traces)
-            with open(fname, 'w') as outfile:
-                json.dump(pickled, outfile)
+            
+            with open(fname, 'r') as infile:
+                data = json.load(infile)
+                
+            trace_name = pickle.decode(data)
+            
+            inferrer.plot_inference(trace_name, model='group')#, idx=1)
             
             pickled = 0
             traces = 0
@@ -99,7 +135,9 @@ def main():
     
     avg = True
     
-    run_fitting(repetitions, utility, avg, *run_args, folder)
+    #run_fitting(folder)
+    
+    load_fitting(folder)
     
     
 if __name__ == "__main__":
@@ -135,5 +173,7 @@ if __name__ == "__main__":
     
     avg = True
     
-    worlds = run_fitting(repetitions, utility, avg, *run_args, folder)
+    run_fitting(folder)
+    
+    load_fitting(folder)
     

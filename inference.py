@@ -138,7 +138,55 @@ class Inferrer:
         
     def run_single_inference(self, idx, ndraws=300, nburn=100, cores=4):
         
-        with pm.Model() as opmodel:
+        self.idx = idx
+        
+        curr_model = self.single_model(idx)
+        
+        with curr_model:
+            
+            step = pm.Metropolis()#S=np.ones(1)*0.01)
+        
+            trace = pm.sample(ndraws, tune=nburn, discard_tuned_samples=True, step=step, cores=cores)
+        
+            # plot the traces
+#            plt.figure()
+#            _ = pm.traceplot(trace)#, lines=('h', 1./alpha_true))
+#            plt.show()
+#            plt.figure()
+#            _ = pm.plot_posterior(trace, var_names=['h'], ref_val=(1./alpha_true))
+#            plt.show()
+            
+            # save the traces
+            fname = pm.save_trace(trace)
+            
+        return fname
+        
+    def run_group_inference(self, ndraws=300, nburn=100, cores=5):
+        
+        curr_model = self.group_model()
+        
+        with curr_model:
+            
+            step = pm.Metropolis()#S=np.ones(1)*0.01)
+        
+            trace = pm.sample(ndraws, tune=nburn, discard_tuned_samples=True, step=step, cores=cores)
+        
+            # plot the traces
+#            plt.figure()
+#            _ = pm.traceplot(trace)#, lines=('h', 1./alpha_true))
+#            plt.show()
+#            plt.figure()
+#            _ = pm.plot_posterior(trace, var_names=['h'], ref_val=(1./alpha_true))
+#            plt.show()
+            
+            # save the traces
+            fname = pm.save_trace(trace)
+            
+        return fname
+    
+    def single_model(self, idx):
+        
+        with pm.Model() as smodel:
             # uniform priors on h
             hab_ten = pm.Uniform('h', -0.25, 2.25)
         
@@ -148,28 +196,13 @@ class Inferrer:
         
             # use a DensityDist
             pm.Categorical('actions', probs_a, observed=self.actions[idx])
-            pm.Categorical('rewards', probs_r, observed=self.rewards[idx])
+            #pm.Categorical('rewards', probs_r, observed=self.rewards[idx])
             
-            step = pm.Metropolis()#S=np.ones(1)*0.01)
+        return smodel
+    
+    def group_model(self):
         
-            trace = pm.sample(ndraws, tune=nburn, discard_tuned_samples=True, step=step, cores=cores)
-        
-            # plot the traces
-            plt.figure()
-            _ = pm.traceplot(trace)#, lines=('h', 1./alpha_true))
-            plt.show()
-    #        plt.figure()
-    #        _ = pm.plot_posterior(trace, var_names=['h'], ref_val=(1./alpha_true))
-    #        plt.show()
-            
-            # save the traces
-            fname = pm.save_trace(trace)
-            
-        return fname
-        
-    def run_group_inference(self, ndraws=300, nburn=100, cores=4):
-        
-        with pm.Model() as opmodel:
+        with pm.Model() as gmodel:
             # uniform priors on h
             m = pm.Uniform('m', -0.25, 2.25)        
             std = pm.InverseGamma('s', 3., 0.5)
@@ -182,10 +215,21 @@ class Inferrer:
                 # use a DensityDist
                 pm.Categorical('actions_{}'.format(i), probs_a, observed=self.actions[i])
                 pm.Categorical('rewards_{}'.format(i), probs_r, observed=self.rewards[i])
-            
-            step = pm.Metropolis()#S=np.ones(1)*0.01)
+                
+        return gmodel        
+    
+    
+    def plot_inference(self, trace_name, model='single', idx=None):
         
-            trace = pm.sample(ndraws, tune=nburn, discard_tuned_samples=True, step=step, cores=cores)
+        if model=='single':
+            curr_model = self.single_model(idx)
+        elif model=='group':
+            curr_model = self.group_model()
+        
+        with curr_model:
+            
+            # save the traces
+            trace = pm.load_trace(trace_name)
         
             # plot the traces
             plt.figure()
@@ -194,8 +238,5 @@ class Inferrer:
     #        plt.figure()
     #        _ = pm.plot_posterior(trace, var_names=['h'], ref_val=(1./alpha_true))
     #        plt.show()
-            
-            # save the traces
-            fname = pm.save_trace(trace)
-            
-        return fname
+        
+        
