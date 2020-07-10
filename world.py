@@ -186,13 +186,17 @@ class FakeWorld(object):
         
         return val
     
-    def fit_model(self, bounds, n_pars, method='MLE'):
+    def fit_model(self, params, fixed):
         """This method uses the existing observation and response data to 
         determine the set of parameter values that are most likely to cause 
         the meassured behavior. 
         """
         
-        raise NotImplementedError
+        self.agent.reset(params, fixed)
+        
+        self.__simulate_agent()
+        
+        return self.agent.posterior_actions.squeeze(), self.agent.posterior_rewards[:,1]
     
     def __get_log_jointprobability(self, params, fixed):
         

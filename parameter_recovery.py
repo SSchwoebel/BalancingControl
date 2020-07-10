@@ -8,35 +8,23 @@ Created on Wed Jul  8 17:44:57 2020
 
 import numpy as np
 
-from analysis import plot_renewal
-from misc import *
-
 import world 
-import environment as env
 import agent as agt
 import perception as prc
-import action_selection as asl
 import inference as infer
-import itertools
 import matplotlib.pylab as plt
-from matplotlib.animation import FuncAnimation
-from multiprocessing import Pool
-from matplotlib.colors import LinearSegmentedColormap
 import jsonpickle as pickle
 import jsonpickle.ext.numpy as jsonpickle_numpy
 import json
-import seaborn as sns
+#import seaborn as sns
 import pandas as pd
 import os
-import scipy as sc
-import scipy.signal as ss
-import bottleneck as bn
-import scipy.special as scs
 np.set_printoptions(threshold = 100000, precision = 5)
 
 import pymc3 as pm
 import theano
 import theano.tensor as tt
+import gc
 
 """
 set parameters
@@ -63,7 +51,7 @@ proni = "/home/sarah/proni/sarah"
 """
 run function
 """
-def run_agent(w_old, alpha_true):
+def run_agent(w_old, alpha_true, run_name):
     
     #set parameters:
     #obs_unc: observation uncertainty condition
@@ -164,29 +152,42 @@ def run_agent(w_old, alpha_true):
     """
     fixed = {'rew_mod': C_agent, 'beta_rew': C_alphas}
     
-    inferrer = infer.LogLike(w.estimate_par_evidence, fixed)
+    inferrer = infer.LogLike(w.fit_model, fixed)
     
-    ndraws = 200
-    nburn = 100
+    ndraws = 3000
+    nburn = 1000
+    
+    obs_actions = actions[:,0]
+    obs_rewards = rewards[:,1]
     
     # use PyMC3 to sampler from log-likelihood
     with pm.Model() as opmodel:
         # uniform priors on m and c
-        log_alpha = pm.Normal('a', mu=1, sigma=0.1)
+        hab_ten = pm.Uniform('h', 0., 2.)
     
         # convert m and c to a tensor vector
-        theta = tt.as_tensor_variable([log_alpha])
+        alpha = tt.as_tensor_variable([hab_ten])
+        probs_a, probs_r = inferrer(alpha)
     
         # use a DensityDist
-        pm.DensityDist('likelihood', lambda v: inferrer(v), observed={'v': theta})
+        pm.Categorical('actions', probs_a, observed=obs_actions)
+        pm.Categorical('rewards', probs_r, observed=obs_rewards)
         
         step = pm.Metropolis()#S=np.ones(1)*0.01)
     
-        trace = pm.sample(ndraws, tune=nburn, discard_tuned_samples=True, step=step, start={'a': 1.})
+        trace = pm.sample(ndraws, tune=nburn, discard_tuned_samples=True, step=step, cores=5)
     
-    # plot the traces
-    _ = pm.traceplot(trace, lines={'a': np.log10(alpha_true)})
-    plt.plot()
+        # plot the traces
+        plt.figure()
+        _ = pm.traceplot(trace)#, lines=('h', 1./alpha_true))
+        plt.show()
+#        plt.figure()
+#        _ = pm.plot_posterior(trace, var_names=['h'], ref_val=(1./alpha_true))
+#        plt.show()
+        
+        # save the traces
+        fname = pm.save_trace(trace)
+        fname_dict = {run_name[:-5]: fname}
     
 #    for i in range(3):
 #        alpha = 10**i
@@ -218,7 +219,7 @@ def run_agent(w_old, alpha_true):
 #    
 #    print("stayed:", int(stayed.sum()/trials*100), "%")
     
-    return w
+    return fname_dict
     
 
 
@@ -227,7 +228,7 @@ def run_fitting(repetitions, utility, avg, T, ns, na, nr, nc, folder):
     for tendency in [1]:
         for trans in [99]:
             print(tendency, trans)
-            worlds = []
+            traces = []
                 
             run_name ="h"+str(tendency)+"_t"+str(trans)+"_p90_train100.json"
             fname = os.path.join(folder, run_name)
@@ -244,9 +245,19 @@ def run_fitting(repetitions, utility, avg, T, ns, na, nr, nc, folder):
             for i in [1]:
                 
                 w_old = worlds_old[i]
-                worlds.append(run_agent(w_old, tendency))
+                traces.append(run_agent(w_old, tendency, run_name))
                 
-    return worlds
+            fname = os.path.join(folder, run_name[:-5]+"_traces.json")
+                    
+            jsonpickle_numpy.register_handlers()
+            pickled = pickle.encode(traces)
+            with open(fname, 'w') as outfile:
+                json.dump(pickled, outfile)
+            
+            pickled = 0
+            traces = 0
+            
+            gc.collect()
                         
 
 
@@ -282,7 +293,7 @@ def main():
     
     avg = True
     
-    worlds = run_fitting(repetitions, utility, avg, *run_args, folder)
+    run_fitting(repetitions, utility, avg, *run_args, folder)
     
     
 if __name__ == "__main__":

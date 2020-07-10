@@ -28,7 +28,7 @@ class LogLike(tt.Op):
     log-likelihood)
     """
     itypes = [tt.dvector] # expects a vector of parameter values when called
-    otypes = [tt.dscalar] # outputs a single scalar value (the log likelihood)
+    otypes = [tt.dmatrix, tt.dmatrix] # outputs a single scalar value (the log likelihood)
 
     def __init__(self, loglike, fixed):
         """
@@ -57,6 +57,7 @@ class LogLike(tt.Op):
         parameters, = inputs  # this will contain my variables
 
         # call the log-likelihood function
-        logl = self.likelihood(parameters,self.fixed)
+        probs_a, probs_r = self.likelihood(parameters,self.fixed)
 
-        outputs[0][0] = np.array(logl) # output the log-likelihood
+        outputs[0][0] = np.array(probs_a) # output the log-likelihood
+        outputs[1][0] = np.array(probs_r) # output the log-likelihood

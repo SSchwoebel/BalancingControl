@@ -70,6 +70,7 @@ class BayesianPlanner(object):
         self.posterior_context[:,:,:] = self.prior_context[np.newaxis,np.newaxis,:]
         self.likelihood = np.zeros((trials, T, self.npi, self.nc))
         self.posterior_actions = np.zeros((trials, T-1, self.na))
+        self.posterior_rewards = np.zeros((trials, T, self.nr))
         self.log_probability = 0
         
 
@@ -84,6 +85,8 @@ class BayesianPlanner(object):
         self.rewards[:] = 0
         self.posterior_context[:,:,:] = self.prior_context[np.newaxis,np.newaxis,:]
         self.likelihood[:] = 0
+        self.posterior_actions[:] = 0
+        self.posterior_rewards[:] = 0
         self.log_probability = 0
         
         self.perception.reset(params, fixed)
@@ -140,6 +143,12 @@ class BayesianPlanner(object):
                                                    self.posterior_states[tau, t], \
                                                    self.posterior_policies[tau, t], \
                                                    self.posterior_context[tau,t])
+        
+        self.posterior_rewards[tau, t] = np.einsum('rsc,spc,pc,c->r',
+                                                  self.perception.generative_model_rewards,
+                                                  self.posterior_states[tau,t,:,t],
+                                                  self.posterior_policies[tau,t],
+                                                  self.posterior_context[tau,t])
     
     def generate_response(self, tau, t):
         
