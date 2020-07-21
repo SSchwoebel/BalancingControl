@@ -31,7 +31,7 @@ class LogLike(tt.Op):
     that define our model) and returning a single "scalar" value (the
     log-likelihood)
     """
-    itypes = [tt.dvector] # expects a vector of parameter values when called
+    itypes = [tt.lvector] # expects a vector of parameter values when called
     otypes = [tt.dmatrix, tt.dmatrix] # outputs a single scalar value (the log likelihood)
 
     def __init__(self, loglike, fixed):
@@ -188,15 +188,15 @@ class Inferrer:
         
         with pm.Model() as smodel:
             # uniform priors on h
-            hab_ten = pm.Uniform('h', -0.25, 2.25)
+            hab_ten = pm.DiscreteUniform('h', 1., 100.)
         
-            # convert m and c to a tensor vector
+            # convert to a tensor
             alpha = tt.as_tensor_variable([hab_ten])
             probs_a, probs_r = self.inferrer(alpha)
         
             # use a DensityDist
             pm.Categorical('actions', probs_a, observed=self.actions[idx])
-            #pm.Categorical('rewards', probs_r, observed=self.rewards[idx])
+            pm.Categorical('rewards', probs_r, observed=self.rewards[idx])
             
         return smodel
     
@@ -204,11 +204,16 @@ class Inferrer:
         
         with pm.Model() as gmodel:
             # uniform priors on h
-            m = pm.Uniform('m', -0.25, 2.25)        
+            m = pm.DiscreteUniform('h', 1., 100.)
             std = pm.InverseGamma('s', 3., 0.5)
             
+            alphas = np.arange(1., 101., 1.)
+            p = self.discreteNormal(alphas, m, std)
+            
             for i in range(self.nruns):
-                hab_ten = pm.Normal('h_{}'.format(i), m, std)
+                idx = pm.Categorical('h_{}'.format(i), p)
+                
+                hab_ten = alphas[idx]
                 alpha = tt.as_tensor_variable([hab_ten])
                 probs_a, probs_r = self.inferrer(alpha)
             
@@ -216,8 +221,13 @@ class Inferrer:
                 pm.Categorical('actions_{}'.format(i), probs_a, observed=self.actions[i])
                 pm.Categorical('rewards_{}'.format(i), probs_r, observed=self.rewards[i])
                 
-        return gmodel        
-    
+        return gmodel
+
+    def discreteNormal(self, x, mean, std):
+        
+        p = np.exp(-(x - mean)/(2*std**2))
+        p /= p.sum()
+        return p
     
     def plot_inference(self, trace_name, model='single', idx=None):
         
