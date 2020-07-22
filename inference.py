@@ -211,9 +211,8 @@ class Inferrer:
             p = self.discreteNormal(alphas, m, std)
             
             for i in range(self.nruns):
-                idx = pm.Categorical('h_{}'.format(i), p)
+                hab_ten = pm.Categorical('h_{}'.format(i), p)
                 
-                hab_ten = alphas[idx]
                 alpha = tt.as_tensor_variable([hab_ten])
                 probs_a, probs_r = self.inferrer(alpha)
             
@@ -225,7 +224,7 @@ class Inferrer:
 
     def discreteNormal(self, x, mean, std):
         
-        p = np.exp(-(x - mean)/(2*std**2))
+        p = np.exp(-(x - mean)**2/(2*std**2))
         p /= p.sum()
         return p
     
