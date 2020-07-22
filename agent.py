@@ -104,7 +104,8 @@ class BayesianPlanner(object):
         if t == 0 and tau == 0:
             prior_context = self.prior_context
         else: #elif t == 0:
-            prior_context = np.dot(self.perception.transition_matrix_context, self.posterior_context[tau-1, -1]).reshape((self.nc))
+            prior_context = np.dot(self.perception.transition_matrix_context, self.posterior_context[tau-1, -1]).reshape((self.nc)) \
+            + np.random.rand(self.nc)/100
 #            else:
 #                prior_context = np.dot(self.perception.transition_matrix_context, self.posterior_context[tau, t-1])
         

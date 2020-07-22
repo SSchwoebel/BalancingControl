@@ -265,7 +265,7 @@ def plot_beliefs(fname, plot_context=True, plot_policies=True, plot_actions=True
     
     times = np.arange(0.+1,trials+1,1.)
     
-    arm_cols = ['#007ecdff','#0000b7ff']
+    arm_cols = ['#007ecdff','#0000b7ff', 'g']
     
     for i in range(repetitions):
         print(i)
@@ -598,24 +598,30 @@ def save_run_plots(fnames, save_nums, tendencies, prefix="", check=False, plot_c
                 plt.show()
             
             
-def plot_run(check=False, naive=False):
+def plot_run(check=False, naive=False, deval=False, context=False):
     
-    h = 1
-    p = 99
-    rew_p = 1
-    prefix = "deval"#'sudden'
+    h = 100
+    p = 98
+    r = 100
+    t = 100
     
     if naive:
-        test = "test_"
+        test = ""
         post = "_check"
     elif check:
         test = "check_"
         post = "_check"
+    elif deval:
+        test = "deval_"
+        post = ""
+    elif context:
+        test = "context_"
+        post = ""
     else:
-        test = "test_"
+        test = ""
         post = ""
     
-    run_name = test+prefix+"_h"+str(h)+"_t"+str(p)+"_r"+str(rew_p)+"_p90.json"
+    run_name = test+"h"+str(h)+"_t"+str(p)+"_p"+str(r)+"_train"+str(t)+".json"
     
     analysis_name = run_name[:-5] + "_ananlysis"+post+".json"
                 
@@ -1802,12 +1808,12 @@ def plot_environments():
         
         
 def main():
-    pass
+    #pass
     #plot_analyses(print_regression_results=False)
     #plot_analyses_training()
     #plot_checks()
     #plot_analyses_deval()
-    #plot_run(check=False, naive=False)
+    plot_run(check=False, naive=False, context=True)
     #plot_environments()
     #plot_environments_prob()
     

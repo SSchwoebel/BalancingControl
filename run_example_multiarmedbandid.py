@@ -225,6 +225,50 @@ def run_rew_prob_simulations(repetitions, utility, avg, T, ns, na, nr, nc, folde
                 
                 gc.collect()
                 
+def run_3context_simulations(repetitions, utility, avg, T, ns, na, nr, nc, folder):
+    
+    n_training = 5
+    trials =  300
+    trials_training = 100
+    
+    nb = nc
+    nc+=1
+    
+    Rho = np.zeros((trials, nr, ns))
+    
+    for tendency in [100]:#[1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
+        for trans in [98]:#[100,99,98,97,96,95,94]:
+            for prob in [100]:#[100,95,90,85,80,75,70,65,60]:
+                print(tendency, trans, prob)
+                
+                #Rho[:] = generate_bandit_timeseries_training(trials, nr, ns, nb, n_training, p=prob/100, offset = 0)
+                Rho[:] = generate_bandit_timeseries_intermediate_context(trials, trials_training, nr, ns, p=prob/100, offset = 0)
+                
+                plt.figure()
+                for i in range(1,nr):
+                    plt.plot(Rho[:,i,i])
+                plt.show()
+            
+                worlds = []
+                learn_pol = tendency
+                parameters = [learn_pol, trans/100., avg, Rho, utility]
+                
+                for i in range(repetitions):
+                    worlds.append(run_agent(parameters, trials, T, ns, na, nr, nc))
+                    
+                run_name = "context_h"+str(int(learn_pol))+"_t"+str(trans)+"_p"+str(prob)+"_train"+str(trials_training)+".json"
+                fname = os.path.join(folder, run_name)
+                
+                jsonpickle_numpy.register_handlers()
+                pickled = pickle.encode(worlds)
+                with open(fname, 'w') as outfile:
+                    json.dump(pickled, outfile)
+                
+                pickled = 0
+                worlds = 0
+                
+                gc.collect()
+                
                 
 def run_deval_simulations(repetitions, utility, avg, T, ns, na, nr, nc, folder):
     
@@ -338,7 +382,7 @@ def main():
         utility[i] = u/(nr-1)
     utility[0] = (1.-u)
     
-    repetitions = 20
+    repetitions = 2
     
     avg = True
     
@@ -347,12 +391,12 @@ def main():
     """
     # runs simulations with varying habitual tendency and reward probability
     # results are stored in data folder
-    run_rew_prob_simulations(repetitions, utility, avg, *run_args, folder)
+    #run_rew_prob_simulations(repetitions, utility, avg, *run_args, folder)
     # run habit task and reward probability analyses and plot results. 
     # function analyzes data, plots average runs and habit strength
     # This function requires simulation data files
     # can be run independently from the simulation function
-    plot_analyses(print_regression_results=False)
+    #plot_analyses(print_regression_results=False)
     
     # run simulations with varying training duration
     # results are stored in data folder
@@ -371,6 +415,15 @@ def main():
     # This function requires simulation data files
     # can be run independently from the simulation function
     #plot_analyses_deval()
+    
+    # runs simulations with varying habitual tendency and reward probability
+    # results are stored in data folder
+    run_3context_simulations(repetitions, utility, avg, *run_args, folder)
+    # run habit task and reward probability analyses and plot results. 
+    # function analyzes data, plots average runs and habit strength
+    # This function requires simulation data files
+    # can be run independently from the simulation function
+    #plot_analyses(print_regression_results=False)
 
 
 if __name__ == "__main__":

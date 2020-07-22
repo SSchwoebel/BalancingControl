@@ -188,6 +188,24 @@ def generate_bandit_timeseries_habit(trials_train, nr, ns, n_test=100, p=0.9, of
     
     return Rho
 
+def generate_bandit_timeseries_intermediate_context(trials, trials_train, nr, ns, p=0.9, offset = 0):
+    Rho = np.zeros((trials, nr, ns))
+    Rho[:,0,0] = 1.
+    Rho[:,0,1:] = p
+    for j in range(1,nr):
+        Rho[:,j,j] = 1.-p
+        
+    Rho[:trials_train,1,1] = p
+    Rho[:trials_train,0,1] = 1. - p
+    
+    Rho[trials_train:2*trials_train,2,2] = p
+    Rho[trials_train:2*trials_train,0,2] = 1. - p    
+    
+    Rho[2*trials_train:,(0,2),2] = 0.5
+    Rho[2*trials_train:,(0,1),1] = 0.5
+    
+    return Rho
+
 
 def generate_bandit_timeseries_asymmetric(trials_train, nr, ns, n_test=100, p=0.9, q=0.1):
     Rho = np.zeros((trials_train+n_test, nr, ns))
