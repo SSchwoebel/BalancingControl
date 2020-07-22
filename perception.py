@@ -38,12 +38,12 @@ class HierarchicalPerception(object):
             self.dirichlet_rew_params = dirichlet_rew_params.copy()
             
         
-        for c in range(self.nc):
-            for state in range(self.nh):
-                self.generative_model_rewards[:,state,c] =\
-                np.exp(scs.digamma(self.dirichlet_rew_params[:,state,c])\
-                       -scs.digamma(self.dirichlet_rew_params[:,state,c].sum()))
-                self.generative_model_rewards[:,state,c] /= self.generative_model_rewards[:,state,c].sum()
+        # for c in range(self.nc):
+        #     for state in range(self.nh):
+        #         self.generative_model_rewards[:,state,c] =\
+        #         np.exp(scs.digamma(self.dirichlet_rew_params[:,state,c])\
+        #                -scs.digamma(self.dirichlet_rew_params[:,state,c].sum()))
+        #         self.generative_model_rewards[:,state,c] /= self.generative_model_rewards[:,state,c].sum()
             
         
     def instantiate_messages(self, policies):
@@ -218,7 +218,7 @@ class HierarchicalPerception(object):
         self.prior_policies[:] = np.exp(scs.digamma(self.dirichlet_pol_params) - scs.digamma(self.dirichlet_pol_params.sum(axis=0))[np.newaxis,:])
         self.prior_policies /= self.prior_policies.sum(axis=0)
         
-        return self.dirichlet_pol_params
+        return self.dirichlet_pol_params, self.prior_policies
     
     def update_beliefs_dirichlet_rew_params(self, tau, t, reward, posterior_states, posterior_policies, posterior_context = [1]):
         states = (posterior_states[:,t,:,:] * posterior_policies[np.newaxis,:,:]).sum(axis=1)
@@ -459,7 +459,7 @@ class TwoStepPerception(object):
         self.prior_policies[:] = np.exp(scs.digamma(self.dirichlet_pol_params) - scs.digamma(self.dirichlet_pol_params.sum(axis=0))[np.newaxis,:])
         self.prior_policies /= self.prior_policies.sum(axis=0)
         
-        return self.dirichlet_pol_params
+        return self.dirichlet_pol_params, self.prior_policies
     
     def update_beliefs_dirichlet_rew_params(self, tau, t, reward, posterior_states, posterior_policies, posterior_context = [1]):
         states = (posterior_states[:,t,:,:] * posterior_policies[np.newaxis,:,:]).sum(axis=1)

@@ -27,6 +27,7 @@ class BayesianPlanner(object):
         self.nr = number_of_rewards
         
         self.T = T
+        self.trials = trials
         
         if policies is not None:
             self.policies = policies
@@ -50,6 +51,7 @@ class BayesianPlanner(object):
             self.nc = prior_context.shape[0]
         else:
             self.prior_context = np.ones(1)
+            self.nc = 1
             
         if prior_policies is not None:
             self.prior_policies = np.tile(prior_policies, (1,self.nc)).T
@@ -69,6 +71,8 @@ class BayesianPlanner(object):
         self.posterior_context = np.ones((trials, T, self.nc))
         self.posterior_context[:,:,:] = self.prior_context[np.newaxis,np.newaxis,:]
         self.likelihood = np.zeros((trials, T, self.npi, self.nc))
+        self.prior_policies_all = np.zeros((trials, self.npi, self.nc))
+        self.prior_policies_all[0] = prior_policies
         
 
     def reset_beliefs(self, actions):
@@ -101,31 +105,37 @@ class BayesianPlanner(object):
         #update beliefs about policies
         self.posterior_policies[tau, t], self.likelihood[tau,t] = self.perception.update_beliefs_policies(tau, t)
         
-        if t == 0 and tau == 0:
-            prior_context = self.prior_context
-        else: #elif t == 0:
-            prior_context = np.dot(self.perception.transition_matrix_context, self.posterior_context[tau-1, -1]).reshape((self.nc))
-#            else:
-#                prior_context = np.dot(self.perception.transition_matrix_context, self.posterior_context[tau, t-1])
+#         if t == 0 and tau == 0:
+#             prior_context = self.prior_context
+#         else: #elif t == 0:
+#             prior_context = np.dot(self.perception.transition_matrix_context, self.posterior_context[tau-1, -1]).reshape((self.nc))
+# #            else:
+# #                prior_context = np.dot(self.perception.transition_matrix_context, self.posterior_context[tau, t-1])
         
-        if t>=0:
-            self.posterior_context[tau, t] = \
-            self.perception.update_beliefs_context(tau, t, \
-                                                   reward, \
-                                                   self.posterior_states[tau, t], \
-                                                   self.posterior_policies[tau, t], \
-                                                   prior_context, \
-                                                   self.policies)
+#         if t>=0:
+#             self.posterior_context[tau, t] = \
+#             self.perception.update_beliefs_context(tau, t, \
+#                                                    reward, \
+#                                                    self.posterior_states[tau, t], \
+#                                                    self.posterior_policies[tau, t], \
+#                                                    prior_context, \
+#                                                    self.policies)
         if t == self.T-1 and self.learn_habit:
-            self.posterior_dirichlet_pol[tau] = self.perception.update_beliefs_dirichlet_pol_params(tau, t, \
-                                                            self.posterior_policies[tau,t], \
-                                                            self.posterior_context[tau,t])
+            if tau < self.trials - 1:
+                self.posterior_dirichlet_pol[tau], self.prior_policies_all[tau+1] = self.perception.update_beliefs_dirichlet_pol_params(tau, t, \
+                                                                                         self.posterior_policies[tau,t], \
+                                                                                         self.posterior_context[tau,t])
+            else:
+                self.posterior_dirichlet_pol[tau] = self.perception.update_beliefs_dirichlet_pol_params(tau, t, \
+                                                         self.posterior_policies[tau,t], \
+                                                         self.posterior_context[tau,t])[0]
+                        
         #if reward > 0:    
-        self.posterior_dirichlet_rew[tau,t] = self.perception.update_beliefs_dirichlet_rew_params(tau, t, \
-                                                            reward, \
-                                                   self.posterior_states[tau, t], \
-                                                   self.posterior_policies[tau, t], \
-                                                   self.posterior_context[tau,t])
+#        self.posterior_dirichlet_rew[tau,t] = self.perception.update_beliefs_dirichlet_rew_params(tau, t, \
+#                                                            reward, \
+#                                                   self.posterior_states[tau, t], \
+#                                                   self.posterior_policies[tau, t], \
+#                                                   self.posterior_context[tau,t])
     
     def generate_response(self, tau, t):
         
