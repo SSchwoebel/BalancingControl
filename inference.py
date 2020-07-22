@@ -188,10 +188,10 @@ class Inferrer:
         
         with pm.Model() as smodel:
             # uniform priors on h
-            hab_ten = pm.DiscreteUniform('h', 1., 100.)
-        
+            hab_ten = pm.DiscreteUniform('h', 0., 20.)
+            
             # convert to a tensor
-            alpha = tt.as_tensor_variable([hab_ten])
+            alpha = tt.as_tensor_variable([hab_ten*5+1])
             probs_a, probs_r = self.inferrer(alpha)
         
             # use a DensityDist
@@ -204,11 +204,11 @@ class Inferrer:
         
         with pm.Model() as gmodel:
             # uniform priors on h
-            m = pm.DiscreteUniform('h', 1., 100.)
+            m = pm.DiscreteUniform('h', 0., 20.)
             std = pm.InverseGamma('s', 3., 0.5)
-            
-            alphas = np.arange(1., 101., 1.)
-            p = self.discreteNormal(alphas, m, std)
+            mean = 2*m+1
+            alphas = np.arange(1., 101., 5.)
+            p = self.discreteNormal(alphas, mean, std)
             
             for i in range(self.nruns):
                 idx = pm.Categorical('h_{}'.format(i), p)

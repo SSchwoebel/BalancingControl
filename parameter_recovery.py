@@ -47,7 +47,7 @@ def run_fitting(folder):
             
             inferrer = infer.Inferrer(worlds_old)
             
-            traces = inferrer.run_single_inference(3, ndraws=300, nburn=100, cores=4)
+            traces = inferrer.run_single_inference(5, ndraws=3000, nburn=1000, cores=4)
             
             #traces = inferrer.run_group_inference(ndraws=3000, nburn=1000, cores=4)
                 
@@ -94,7 +94,7 @@ def load_fitting(folder):
                 
             trace_name = pickle.decode(data)
             
-            inferrer.plot_inference(trace_name, model='single', idx=3)
+            inferrer.plot_inference(trace_name, model='single', idx=5)
             
             pickled = 0
             traces = 0
