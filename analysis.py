@@ -311,11 +311,11 @@ def plot_beliefs(fname, plot_context=True, plot_policies=True, plot_actions=True
             plt.yticks(fontsize=18)
             plt.xticks(fontsize=18)
             plt.xlabel("trial", fontsize=20)
-            plt.ylabel("probability", fontsize=20)
+            plt.ylabel("posterior over $a_{2}$", fontsize=20)
             ax = plt.gca().twinx()
             ax.set_ylim([-0.01,1.01])
             ax.set_yticks([0,1])
-            ax.set_yticklabels(["$a_{1}$","$a_{2}$"],fontsize=18)
+            ax.set_yticklabels(["$a_{1/3}$","$a_{2}$"],fontsize=18)
             ax.yaxis.set_ticks_position('right')
             ax.set_ylabel("action", fontsize=22, rotation=270)
             plt.title("posterior over action "+str(1+1), fontsize=22)
@@ -332,6 +332,7 @@ def plot_beliefs(fname, plot_context=True, plot_policies=True, plot_actions=True
                 param = results_c_param[i,results_c_param_type[i]:]
                 plt.plot(fct(times, *param))
             plt.ylim([0.9,3.1])
+            plt.xlim([0,times[-1]])
             lgd = plt.legend(fontsize=16, bbox_to_anchor=(1.04,1), loc="upper left", ncol=1) #bbox_to_anchor=(0, 1.02, 1, 0.2), mode="expand"
             plt.yticks(fontsize=18)
             plt.xticks(fontsize=18)
@@ -396,15 +397,17 @@ def plot_beliefs(fname, plot_context=True, plot_policies=True, plot_actions=True
                 param = results_c_param[i,results_c_param_type[i]:]
                 plt.plot(fct(times, *param))
             plt.ylim([-0.01,1.01])
+            plt.yticks([0.0,0.5,1.0])
+            plt.xlim([0,times[-1]])
             lgd = plt.legend(fontsize=16, bbox_to_anchor=(1.04,1), loc="upper left", ncol=1) #bbox_to_anchor=(0, 1.02, 1, 0.2), mode="expand"
             plt.yticks(fontsize=18)
             plt.xticks(fontsize=18)
             plt.xlabel("trial", fontsize=20)
-            plt.ylabel("reward probabilities", fontsize=20)
+            plt.ylabel("posterior over $c_{2}$", fontsize=20)
             ax = plt.gca().twinx()
             ax.set_ylim([-0.01,1.01])
             ax.set_yticks([0,1])
-            ax.set_yticklabels(["$c_{1}$","$c_{2}$"],fontsize=18)
+            ax.set_yticklabels(["$c_{1/2}$","$c_{2}$"],fontsize=18)
             ax.yaxis.set_ticks_position('right')
             #if save_num == i:
             plt.savefig(os.path.join(fname[:-5]+"_run"+str(i)+"_posterior_context.svg"), bbox_extra_artists=(lgd,), bbox_inches='tight')
@@ -420,6 +423,7 @@ def plot_beliefs(fname, plot_context=True, plot_policies=True, plot_actions=True
                 param = results_c_param[i,results_c_param_type[i]:]
                 plt.plot(fct(times, *param))
             plt.ylim([0.9,3.1])
+            plt.xlim([0,times[-1]])
             lgd = plt.legend(fontsize=16, bbox_to_anchor=(1.04,1), loc="upper left", ncol=1) #bbox_to_anchor=(0, 1.02, 1, 0.2), mode="expand"
             plt.yticks(fontsize=18)
             plt.xticks(fontsize=18)
