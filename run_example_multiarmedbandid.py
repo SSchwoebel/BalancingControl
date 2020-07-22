@@ -227,7 +227,7 @@ def run_rew_prob_simulations(repetitions, utility, avg, T, ns, na, nr, nc, folde
 
 def run_3context_simulations(repetitions, utility, avg, T, ns, na, nr, nc, folder):
 
-    n_training = 3
+    n_training = 1
     trials =  300
     trials_training = 100
 
