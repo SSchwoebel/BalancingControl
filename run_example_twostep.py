@@ -11,7 +11,7 @@ import numpy as np
 #from plotting import *
 from misc import *
 
-import world 
+import world
 import environment as env
 import agent as agt
 import perception as prc
@@ -59,7 +59,7 @@ proni = "/home/sarah/proni/sarah/"
 run function
 """
 def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
-    
+
     #set parameters:
     #obs_unc: observation uncertainty condition
     #state_unc: state transition uncertainty condition
@@ -67,53 +67,53 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
     #utility: goal prior, preference p(o)
     learn_pol, avg, Rho, learn_habit, utility = par_list
     learn_rew = 1
-    
+
     """
     create matrices
     """
-    
-    
+
+
     #generating probability of observations in each state
     A = np.eye(no)
-        
-    
+
+
     #state transition generative probability (matrix)
     B = np.zeros((ns, ns, na))
     b1 = 0.7
     nb1 = 1.-b1
     b2 = 0.7
     nb2 = 1.-b2
-    
+
     B[:,:,0] = np.array([[  0,  0,  0,  0,  0,  0,  0,],
                          [ b1,  0,  0,  0,  0,  0,  0,],
                          [nb1,  0,  0,  0,  0,  0,  0,],
                          [  0,  1,  0,  1,  0,  0,  0,],
-                         [  0,  0,  0,  0,  1,  0,  0,],
-                         [  0,  0,  1,  0,  0,  1,  0,],
+                         [  0,  0,  1,  0,  1,  0,  0,],
+                         [  0,  0,  0,  0,  0,  1,  0,],
                          [  0,  0,  0,  0,  0,  0,  1,],])
-    
+
     B[:,:,1] = np.array([[  0,  0,  0,  0,  0,  0,  0,],
                          [nb2,  0,  0,  0,  0,  0,  0,],
                          [ b2,  0,  0,  0,  0,  0,  0,],
                          [  0,  0,  0,  1,  0,  0,  0,],
-                         [  0,  1,  0,  0,  1,  0,  0,],
-                         [  0,  0,  0,  0,  0,  1,  0,],
+                         [  0,  0,  0,  0,  1,  0,  0,],
+                         [  0,  1,  0,  0,  0,  1,  0,],
                          [  0,  0,  1,  0,  0,  0,  1,],])
-    
+
     # create reward generation
-#            
+#
 #    C = np.zeros((utility.shape[0], ns))
-#    
+#
 #    vals = np.array([0., 1./5., 0.95, 1./5., 1/5., 1./5.])
-#    
+#
 #    for i in range(ns):
 #        C[:,i] = [1-vals[i],vals[i]]
-#    
+#
 #    changes = np.array([0.01, -0.01])
 #    Rho = generate_bandit_timeseries(C, nb, trials, changes)
-            
+
     # agent's beliefs about reward generation
-    
+
     C_alphas = np.zeros((nr, ns, nc)) + learn_rew
     C_alphas[0,:3,:] = 100
     for i in range(1,nr):
@@ -123,34 +123,34 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
 #        C_alphas[1,c+1,c] = 100
 #        C_alphas[0,c+1,c] = 1
     #C_alphas[:,13] = [100, 1]
-    
+
     C_agent = np.zeros((nr, ns, nc))
     for c in range(nc):
         C_agent[:,:,c] = np.array([(C_alphas[:,i,c])/(C_alphas[:,i,c]).sum() for i in range(ns)]).T
     #np.array([np.random.dirichlet(C_alphas[:,i]) for i in range(ns)]).T
-    
+
     # context transition matrix
-    
+
     transition_matrix_context = np.ones(1)
-                            
+
     """
     create environment (grid world)
     """
-    
+
     environment = env.MultiArmedBandid(A, B, Rho, trials = trials, T = T)
-    
-    
+
+
     """
     create policies
     """
-    
+
     pol = np.array(list(itertools.product(list(range(na)), repeat=T-1)))
-    
+
     #pol = pol[-2:]
     npi = pol.shape[0]
-    
+
     # prior over policies
-    
+
     prior_pi = np.ones(npi)/npi #np.zeros(npi) + 1e-3/(npi-1)
     #prior_pi[170] = 1. - 1e-3
     alphas = np.zeros((npi, nc)) + learn_pol
@@ -158,14 +158,14 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
 #        alphas[i+1,i] = 100
     #alphas[170] = 100
     prior_pi = alphas / alphas.sum(axis=0)
-    
-    
+
+
     """
     set state prior (where agent thinks it starts)
     """
-    
+
     state_prior = np.zeros((ns))
-    
+
     state_prior[0] = 1.
 
     """
@@ -173,126 +173,126 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
     """
 
     if avg:
-        
+
         sel = 'avg'
-    
-        ac_sel = asl.AveragedSelector(trials = trials, T = T, 
+
+        ac_sel = asl.AveragedSelector(trials = trials, T = T,
                                       number_of_actions = na)
     else:
-        
+
         sel = 'max'
-        
-        ac_sel = asl.MaxSelector(trials = trials, T = T, 
+
+        ac_sel = asl.MaxSelector(trials = trials, T = T,
                                       number_of_actions = na)
-    
-#    ac_sel = asl.AveragedPolicySelector(trials = trials, T = T, 
+
+#    ac_sel = asl.AveragedPolicySelector(trials = trials, T = T,
 #                                        number_of_policies = npi,
 #                                        number_of_actions = na)
 
     prior_context = np.array([1.])
-        
+
 #    prior_context[0] = 1.
-    
+
     """
     set up agent
     """
     #bethe agent
     if agent == 'bethe':
-        
+
         agnt = 'bethe'
-        
+
         pol_par = alphas
 
         # perception
         bayes_prc = prc.TwoStepPerception(A, B, C_agent, transition_matrix_context, state_prior, utility, prior_pi, pol_par, C_alphas, T=T)
-        
+
         bayes_pln = agt.BayesianPlanner(bayes_prc, ac_sel, pol,
                           trials = trials, T = T,
                           prior_states = state_prior,
                           prior_policies = prior_pi,
-                          number_of_states = ns, 
+                          number_of_states = ns,
                           prior_context = prior_context,
                           learn_habit = learn_habit,
                           #save_everything = True,
                           number_of_policies = npi,
                           number_of_rewards = nr)
-    #MF agent 
+    #MF agent
     else:
-        
-        agnt = 'mf'
-        
-        bayes_prc = prc.MFPerception(A, B, utility, state_prior, T = T)
-        
 
-        
-        bayes_pln = agt.BayesianMFPlanner(bayes_prc, [], ac_sel, 
+        agnt = 'mf'
+
+        bayes_prc = prc.MFPerception(A, B, utility, state_prior, T = T)
+
+
+
+        bayes_pln = agt.BayesianMFPlanner(bayes_prc, [], ac_sel,
                                   trials = trials, T = T,
                                   prior_states = state_prior,
-                                  policies = pol, 
-                                  number_of_states = ns, 
+                                  policies = pol,
+                                  number_of_states = ns,
                                   number_of_policies = npi)
-    
+
 
     """
     create world
     """
-    
+
     w = world.World(environment, bayes_pln, trials = trials, T = T)
-    
+
     """
     simulate experiment
     """
-    
+
 #    w.simulate_experiment(range(trials-100))
 #    new_ut = utility.copy()
 #    new_ut[1] = utility[0]
 #    new_ut /= new_ut.sum()
 #    w.agent.perception.reset_preferences(0,new_ut, pol)
 #    w.simulate_experiment(range(trials-100, trials))
-    
+
     w.simulate_experiment(range(trials))
-    
-    
+
+
     """
     plot and evaluate results
     """
 #    plt.figure()
-#    
+#
 #    for i in range(3,ns):
 #        plt.plot(w.environment.Rho[:,1,i], label=str(i))
-#        
+#
 #    plt.ylim([0,1])
 #    plt.legend()
 #    plt.show()
-#    
-#    
+#
+#
 #    rewarded = np.where(w.rewards[:trials-1,-1] == 1)[0]
 #    unrewarded = np.where(w.rewards[:trials-1,-1] == 0)[0]
-#    
-#    rare = np.append(np.where(w.environment.hidden_states[np.where(w.actions[:,0] == 0)[0]] == 2)[0], 
+#
+#    rare = np.append(np.where(w.environment.hidden_states[np.where(w.actions[:,0] == 0)[0]] == 2)[0],
 #                     np.where(w.environment.hidden_states[np.where(w.actions[:,0] == 1)[0]] == 1)[0])
-#    
-#    common = np.append(np.where(w.environment.hidden_states[np.where(w.actions[:,0] == 0)[0]] == 1)[0], 
+#
+#    common = np.append(np.where(w.environment.hidden_states[np.where(w.actions[:,0] == 0)[0]] == 1)[0],
 #                     np.where(w.environment.hidden_states[np.where(w.actions[:,0] == 1)[0]] == 2)[0])
-#    
+#
 #    names = ["rewarded common", "rewarded rare", "unrewarded common", "unrewarded rare"]
-#    
+#
 #    index_list = [np.intersect1d(rewarded, common), np.intersect1d(rewarded, rare),
 #                 np.intersect1d(unrewarded, common), np.intersect1d(unrewarded, rare)]
-#    
+#
 #    stayed_list = [((w.actions[index_list[i],0] - w.actions[index_list[i]+1,0])==0).sum()/len(index_list[i]) for i in range(4)]
-#    
+#
 ##    stayed_rew = ((w.actions[rewarded,0] - w.actions[rewarded+1,0]) == 0).sum()/len(rewarded)
-##    
+##
 ##    stayed_unrew = ((w.actions[unrewarded,0] - w.actions[unrewarded+1,0]) == 0).sum()/len(unrewarded)
-#    
+#
 #    plt.figure()
 #    plt.bar(x=names,height=stayed_list)
 #    plt.show()
-    
-    
+
+
     return w
-    
+
 """
 set condition dependent up parameters
 """
@@ -301,7 +301,7 @@ utility = []
 #ut = [0.5, 0.6, 0.7, 0.8, 0.9, 1. - 1e-5]
 #ut = [0.95, 0.96, 0.98, 0.99]
 #ut = [0.985]
-ut = [0.99]
+ut = [1.]
 for u in ut:
     utility.append(np.zeros(nr))
     for i in range(1,nr):
@@ -348,103 +348,129 @@ n_training = 1
 
 sigma = 0.001
 
-folder = os.path.join(proni,"habit_paper_data")
+folder = 'data'
 
 stayed = []
 indices = []
 
+recalc_rho = False
+
 for tendency in [1000]:#[1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
     print(tendency)
-    
-    init = np.array([0.6, 0.6, 0.4, 0.4])
-    
-    Rho[:] = generate_randomwalk(trials, nr, ns, nb, sigma, init)
-    
-    plt.figure()
-    plt.plot(Rho[:,1])
+
+    init = np.array([0.6, 0.4, 0.6, 0.4])
+
+    Rho_fname = 'twostep_rho.json'
+
+    jsonpickle_numpy.register_handlers()
+
+    fname = os.path.join(folder, Rho_fname)
+
+    if Rho_fname not in os.listdir(folder) or recalc_rho==True:
+        Rho[:] = generate_randomwalk(trials, nr, ns, nb, sigma, init)
+        pickled = pickle.encode(Rho)
+        with open(fname, 'w') as outfile:
+            json.dump(pickled, outfile)
+    else:
+        with open(fname, 'r') as infile:
+            data = json.load(infile)
+        Rho[:] = pickle.decode(data)
+
+    plt.figure(figsize=(10,5))
+    for i in range(4):
+        plt.plot(Rho[:,1,3+i], label="$p_{}$".format(i+1), linewidth=4)
     plt.ylim([0,1])
+    plt.yticks(np.arange(0,1.1,0.2),fontsize=18)
+    plt.ylabel("reward probability", fontsize=20)
+    plt.xlim([-0.1, trials+0.1])
+    plt.xticks(range(0,trials+1,50),fontsize=18)
+    plt.xlabel("trials", fontsize=20)
+    plt.legend(fontsize=18, bbox_to_anchor=(1.04,1))
+    plt.savefig("twostep_prob.svg",dpi=300)
     plt.show()
 
     worlds = []
     l = []
     learn_pol = tendency
-    learn_habit = True
+    learn_habit = False
     l.append([learn_pol, avg, Rho, learn_habit])
-    
+
     par_list = []
-    
+
     for p in itertools.product(l, utility):
         par_list.append(p[0]+[p[1]])
-        
+
     par_list = par_list*repetitions
-    
+
     for i, pars in enumerate(par_list):
         worlds.append(run_agent(pars))
-        
+
         w = worlds[-1]
-            
+
         rewarded = np.where(w.rewards[:trials-1,-1] == 1)[0]
-        
+
         unrewarded = np.where(w.rewards[:trials-1,-1] == 0)[0]
-        
-        rare = np.append(np.where(np.logical_and(w.environment.hidden_states[:,1]==2, w.actions[:,0] == 0) == True)[0], 
+
+        rare = np.append(np.where(np.logical_and(w.environment.hidden_states[:,1]==2, w.actions[:,0] == 0) == True)[0],
                          np.where(np.logical_and(w.environment.hidden_states[:,1]==1, w.actions[:,0] == 1) == True)[0])
         rare.sort()
-        
-        common = np.append(np.where(np.logical_and(w.environment.hidden_states[:,1]==2, w.actions[:,0] == 1) == True)[0], 
+
+        common = np.append(np.where(np.logical_and(w.environment.hidden_states[:,1]==2, w.actions[:,0] == 1) == True)[0],
                            np.where(np.logical_and(w.environment.hidden_states[:,1]==1, w.actions[:,0] == 0) == True)[0])
         common.sort()
-        
+
         names = ["rewarded common", "rewarded rare", "unrewarded common", "unrewarded rare"]
-        
+
         index_list = [np.intersect1d(rewarded, common), np.intersect1d(rewarded, rare),
                      np.intersect1d(unrewarded, common), np.intersect1d(unrewarded, rare)]
         indices.append(index_list)
-        
+
         stayed_list = [((w.actions[index_list[i],0] - w.actions[index_list[i]+1,0])==0).sum()/len(index_list[i]) for i in range(4)]
-        
+
         stayed.append(stayed_list)
-        
+
     stayed = np.array(stayed)
-    
+
 #    stayed_rew = ((w.actions[rewarded,0] - w.actions[rewarded+1,0]) == 0).sum()/len(rewarded)
-#    
+#
 #    stayed_unrew = ((w.actions[unrewarded,0] - w.actions[unrewarded+1,0]) == 0).sum()/len(unrewarded)
-        
-        
+
+
     #run_name = prefix+"_h"+str(int(learn_pol))+"_t"+"opt"+"_r"+str(learn_rew)+"_p"+str(prob)+"_train"+str(trials_training)+".json"
     #run_name = prefix+"_h"+str(int(learn_pol))+"_t"+str(trans)+"_r"+str(learn_rew)+"_p"+str(prob)+"_train"+str(trials_training)+".json"
-        
+
     #run_name = "test_"+prefix+"_h"+str(int(learn_pol))+"_t"+str(trans)+"_r"+str(learn_rew)+"_p"+str(prob)+".json"
     #run_name = prefix+"_h"+str(int(learn_pol))+"_t"+str(trans)+"_r"+str(learn_rew)+".json"
     #fname = os.path.join(folder, run_name)
-    
+
 #                jsonpickle_numpy.register_handlers()
 #                pickled = pickle.encode(worlds)
 #                with open(fname, 'w') as outfile:
 #                    json.dump(pickled, outfile)
-    
+
     print(gc.get_count())
-    
+
     pickled = 0
     #worlds = 0
-    
+
     print(gc.get_count())
-    
+
     gc.collect()
-    
+
     print(gc.get_count())
-    
-    
+
+
 plt.figure()
 g = sns.barplot(data=stayed)
-g.set_xticklabels(names, rotation=45, horizontalalignment='right')
+g.set_xticklabels(names, rotation=45, horizontalalignment='right', fontsize=16)
 plt.ylim([0,1])
+plt.yticks(np.arange(0,1.1,0.2),fontsize=16)
+plt.ylabel("reward probability", fontsize=18)
 if learn_habit:
-    plt.title("habit and goal-directed")
+    plt.title("habit and goal-directed", fontsize=18)
     plt.savefig("habit_and_goal.svg",dpi=300)
 else:
-    plt.title("purely goal-drected")
+    plt.title("purely goal-drected", fontsize=18)
     plt.savefig("pure_goal.svg",dpi=300)
 plt.ylabel("stay probability")
 plt.show()
@@ -470,7 +496,7 @@ def calc_measures(indices):
     next_post = post_actions[(indices+1,w.actions[indices,0])]
     posterior_diff = post_chosen - next_post
     print("post", posterior_diff.mean())
-    
+
     avg_next_post = next_post.sum() / len(next_post)
     prior_actions = np.array([prior_policies[:,j*2] + prior_policies[:,j*2+1] for j in range(2)]).T
     prior_chosen = prior_actions[(indices,w.actions[indices,0])]
@@ -479,7 +505,7 @@ def calc_measures(indices):
     avg_next_prior = next_prior.sum() / len(next_prior)
     prior_diff = prior_chosen - next_prior
     print("prior", prior_diff.mean())
-    
+
     norm_like = w.agent.likelihood[:,0,:,0] / w.agent.likelihood[:,0,:,0].sum(axis=1)[:,np.newaxis]
     like_actions = np.array([norm_like[:,j*2] + norm_like[:,j*2+1] for j in range(2)]).T
     like_chosen = like_actions[(indices,w.actions[indices,0])]
@@ -488,15 +514,15 @@ def calc_measures(indices):
     avg_next_like = next_like_chosen.sum() / len(next_like_chosen)
     like_diff = like_chosen - next_like_chosen
     print("like", like_diff.mean())
-    
-    
+
+
 
 """
 reload data
 """
 #with open(fname, 'r') as infile:
 #    data = json.load(infile)
-#    
+#
 #w_new = pickle.decode(data)
 
 """
@@ -506,7 +532,7 @@ parallelized calls for multiple runs
 #    num_threads = len(par_list)
 #else:
 #    num_threads = 7
-#    
+#
 #pool = Pool(num_threads)
 #
 #pool.map(run_agent, par_list)
