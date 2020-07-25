@@ -175,7 +175,9 @@ class Inferrer:
 
     def analyze_samples(self, samples, sample_space):
 
-        dist = np.array([(samples == i).sum() for i in range(len(sample_space))])
+        dist = np.array([len(np.where(samples==i)[0]) for i in range(len(sample_space))], dtype=np.float64)
+
+        dist /= dist.sum()
 
         return dist
 
@@ -216,7 +218,7 @@ class Inferrer:
 
         minimum = 0.
         maximum = 8.
-        sample_space = np.arange(minimum, maximum, 1)
+        sample_space = np.arange(minimum, maximum+1, 1)
         sample_space = 1./10**(sample_space/4.)
 
         with pm.Model() as smodel:

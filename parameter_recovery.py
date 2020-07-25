@@ -49,7 +49,7 @@ def run_fitting(folder):
 
             likelihood = 1
 
-            for i in range(4,len(worlds_old)):
+            for i in range(0,len(worlds_old)):
                 print("agent ", i)
                 samples, sample_space = inferrer.run_single_inference(i, ndraws=3000, nburn=1000, cores=4)
                 dist = inferrer.analyze_samples(samples, sample_space)
@@ -58,7 +58,7 @@ def run_fitting(folder):
                 fname = os.path.join(folder, run_name[:-5]+"_samples_"+str(i)+".json")
 
                 jsonpickle_numpy.register_handlers()
-                pickled = pickle.encode(traces)
+                pickled = pickle.encode(samples)
                 with open(fname, 'w') as outfile:
                     json.dump(pickled, outfile)
 
@@ -81,7 +81,7 @@ def run_fitting(folder):
 
 def load_fitting(folder):
 
-    for tendency in [1]:
+    for tendency in [10]:
         for trans in [99]:
             print(tendency, trans)
             traces = []
@@ -100,21 +100,38 @@ def load_fitting(folder):
 
             inferrer = infer.Inferrer(worlds_old)
 
-            run_name ="h"+str(tendency)+"_t"+str(trans)+"_p90_train100.json"
+            likelihood = 1
 
-            fname = os.path.join(folder, run_name[:-5]+"_samples.json")
+            for i in range(0,3):#len(worlds_old)):
+                print("agent ", i)
 
-            with open(fname, 'r') as infile:
-                data = json.load(infile)
+                fname = os.path.join(folder, run_name[:-5]+"_samples_"+str(i)+".json")
 
-            trace_name = pickle.decode(data)
+                with open(fname, 'r') as infile:
+                    data = json.load(infile)
 
-            inferrer.plot_inference(trace_name, model='single', idx=5)
+                samples = pickle.decode(data)
+                print(samples)
+                sample_space = np.arange(0,8+1,1)
+                sample_space = 1./10**(sample_space/4.)
+                dist = inferrer.analyze_samples(samples, sample_space)
+                print(dist)
+                likelihood *= dist
 
-            pickled = 0
-            traces = 0
+                pickled = 0
+
+            likelihood /= likelihood.sum()
+
+            mode, mean, variance = inferrer.analyze_dist(likelihood, sample_space)
+            print(mode, mean, variance)
+
+            #traces = inferrer.run_group_inference(ndraws=300, nburn=100, cores=4)
 
             gc.collect()
+
+            plt.figure()
+            plt.plot(likelihood)
+            plt.show()
 
 
 
@@ -188,7 +205,7 @@ if __name__ == "__main__":
 
     avg = True
 
-    samples = run_fitting(folder)
+    #samples = run_fitting(folder)
 
-    #load_fitting(folder)
+    load_fitting(folder)
 
