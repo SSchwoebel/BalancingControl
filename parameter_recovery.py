@@ -31,12 +31,13 @@ import gc
 def run_fitting(folder):
 
     samples = []
-    for tendency in [1, 10, 100]:
+    tendencies = [1, 5, 10, 50, 100]
+    for tendency in tendencies:
         for trans in [99]:
             print(tendency, trans)
             traces = []
 
-            run_name ="h"+str(tendency)+"_t"+str(trans)+"_p80_train100.json"
+            run_name ="h"+str(tendency)+"_t"+str(trans)+"_p75_train100.json"
             fname = os.path.join(folder, run_name)
 
             jsonpickle_numpy.register_handlers()
@@ -46,9 +47,9 @@ def run_fitting(folder):
 
             worlds_old = pickle.decode(data)
 
-            test_trials = list(range(0,130)) #+ list(range(100,150))
+            test_trials = list(range(0,50)) + list(range(100,130))
 
-            inferrer = infer.Inferrer(worlds_old[:10], 0.01, 1., test_trials=None)
+            inferrer = infer.Inferrer(worlds_old[:5], 0.01, 1., test_trials=test_trials)
 
             inferrer.run_single_inference(ndraws=15000, nburn=3000, cores=4)
             samples.append(inferrer.samples)
@@ -71,22 +72,22 @@ def run_fitting(folder):
             plt.show()
 
 
-    labels = np.tile(10.**(-np.arange(3.)), (samples[-1].shape[0], 1)).reshape(-1, order='f')
-    data = -np.array(samples).flatten()
-    pd_h_samples = pd.DataFrame(data={'inferred tendencies': data, 'true tendencies': labels})
+    # labels = np.tile(1./np.array(tendencies), (samples[-1].shape[0], 1)).reshape(-1, order='f')
+    # data = -np.array(samples).flatten()
+    # pd_h_samples = pd.DataFrame(data={'inferred tendencies': data, 'true tendencies': labels})
 
-    plt.figure()
-    ax = plt.gca()
-    ax.set_ylim([-12,0])
-    yticklabels = [""]*len(inferrer.sample_space)
-    yticklabels[0] = 0.01
-    yticklabels[-1] = 1.
-    yticklabels[len(inferrer.sample_space)//2] = 0.1
-    ax.set_yticklabels(yticklabels)
-    sns.boxenplot(data=pd_h_samples, x='true tendencies', y='inferred tendencies', ax=ax)
-    #sns.stripplot(data=pd_h_samples, x='tendencies', y='samples', size=4, color='grey')
-    #plt.ylim([0,1])
-    plt.show()
+    # plt.figure()
+    # ax = plt.gca()
+    # ax.set_ylim([-12,0])
+    # yticklabels = [""]*len(inferrer.sample_space)
+    # yticklabels[0] = 0.01
+    # yticklabels[-1] = 1.
+    # yticklabels[len(inferrer.sample_space)//2] = 0.1
+    # ax.set_yticklabels(yticklabels)
+    # sns.boxenplot(data=pd_h_samples, x='true tendencies', y='inferred tendencies', ax=ax)
+    # #sns.stripplot(data=pd_h_samples, x='tendencies', y='samples', size=4, color='grey')
+    # #plt.ylim([0,1])
+    # plt.show()
 
     #return samples, inferrer
 
@@ -94,12 +95,13 @@ def run_fitting(folder):
 def load_fitting(folder):
 
     samples = []
-    for tendency in [1, 10, 100]:
+    tendencies = [1, 5, 10, 50, 100]
+    for tendency in tendencies:
         for trans in [99]:
             print(tendency, trans)
             traces = []
 
-            run_name ="h"+str(tendency)+"_t"+str(trans)+"_p80_train100.json"
+            run_name ="h"+str(tendency)+"_t"+str(trans)+"_p75_train100.json"
             fname = os.path.join(folder, run_name)
 
             fname = os.path.join(folder, run_name[:-5]+"_samples.json")
@@ -112,9 +114,9 @@ def load_fitting(folder):
 
             samples.append(curr_samples)
 
-    labels = np.tile(10.**(-np.arange(3.)), (samples[-1].shape[0], 1)).reshape(-1, order='f')
+    labels = np.tile(1./np.array(tendencies), (samples[-1].shape[0], 1)).reshape(-1, order='f')
     data = -np.array(samples).flatten()
-    pd_h_samples = pd.DataFrame(data={'inferred alphas': data, 'true alphas': labels})
+    pd_h_samples = pd.DataFrame(data={'inferred tendencies': data, 'true tendencies': labels})
 
     plt.figure()
     ax = plt.gca()
@@ -125,7 +127,7 @@ def load_fitting(folder):
     yticklabels[-1] = 1.
     yticklabels[len(sample_space)//2] = 0.1
     ax.set_yticklabels(yticklabels)
-    sns.boxenplot(data=pd_h_samples, x='true alphas', y='inferred alphas', ax=ax)
+    sns.boxenplot(data=pd_h_samples, x='true tendencies', y='inferred tendencies', ax=ax)
     #sns.stripplot(data=pd_h_samples, x='tendencies', y='samples', size=4, color='grey')
     #plt.ylim([0,1])
     plt.show()
@@ -139,7 +141,7 @@ def load_fitting(folder):
     yticklabels[-1] = 1.
     yticklabels[len(sample_space)//2] = 0.1
     ax.set_yticklabels(yticklabels)
-    sns.violinplot(data=pd_h_samples, x='true alphas', y='inferred alphas', ax=ax)
+    sns.violinplot(data=pd_h_samples, x='true tendencies', y='inferred tendencies', ax=ax)
     #sns.stripplot(data=pd_h_samples, x='tendencies', y='samples', size=4, color='grey')
     #plt.ylim([0,1])
     plt.show()
@@ -216,7 +218,7 @@ if __name__ == "__main__":
 
     avg = True
 
-    #run_fitting(folder)
+    run_fitting(folder)
 
     load_fitting(folder)
 
