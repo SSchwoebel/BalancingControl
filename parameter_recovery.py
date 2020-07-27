@@ -30,12 +30,13 @@ import gc
 
 def run_fitting(folder):
 
-    for tendency in [1]:
+    samples = []
+    for tendency in [1, 10, 100]:
         for trans in [99]:
             print(tendency, trans)
             traces = []
 
-            run_name ="h"+str(tendency)+"_t"+str(trans)+"_p90_train100.json"
+            run_name ="h"+str(tendency)+"_t"+str(trans)+"_p80_train100.json"
             fname = os.path.join(folder, run_name)
 
             jsonpickle_numpy.register_handlers()
@@ -45,93 +46,103 @@ def run_fitting(folder):
 
             worlds_old = pickle.decode(data)
 
-            inferrer = infer.Inferrer(worlds_old)
+            test_trials = list(range(0,130)) #+ list(range(100,150))
 
-            likelihood = 1
+            inferrer = infer.Inferrer(worlds_old[:10], 0.01, 1., test_trials=None)
 
-            for i in range(0,len(worlds_old)):
-                print("agent ", i)
-                samples, sample_space = inferrer.run_single_inference(i, ndraws=3000, nburn=1000, cores=4)
-                dist = inferrer.analyze_samples(samples, sample_space)
-                likelihood *= dist
+            inferrer.run_single_inference(ndraws=15000, nburn=3000, cores=4)
+            samples.append(inferrer.samples)
 
-                fname = os.path.join(folder, run_name[:-5]+"_samples_"+str(i)+".json")
+            fname = os.path.join(folder, run_name[:-5]+"_samples.json")
 
-                jsonpickle_numpy.register_handlers()
-                pickled = pickle.encode(samples)
-                with open(fname, 'w') as outfile:
-                    json.dump(pickled, outfile)
+            jsonpickle_numpy.register_handlers()
+            pickled = pickle.encode([samples[-1], inferrer.sample_space])
+            with open(fname, 'w') as outfile:
+                json.dump(pickled, outfile)
 
-                pickled = 0
-
-            likelihood /= likelihood.sum()
-            mode, mean, variance = inferrer.analyze_dist(likelihood, sample_space)
-            print(mode, mean, variance)
+            pickled = 0
 
             #traces = inferrer.run_group_inference(ndraws=300, nburn=100, cores=4)
 
             gc.collect()
 
             plt.figure()
-            sns.distplot(dist)
+            plt.hist(samples[-1])
             plt.show()
 
-            return samples, sample_space
+
+    labels = np.tile(10.**(-np.arange(3.)), (samples[-1].shape[0], 1)).reshape(-1, order='f')
+    data = -np.array(samples).flatten()
+    pd_h_samples = pd.DataFrame(data={'inferred tendencies': data, 'true tendencies': labels})
+
+    plt.figure()
+    ax = plt.gca()
+    ax.set_ylim([-12,0])
+    yticklabels = [""]*len(inferrer.sample_space)
+    yticklabels[0] = 0.01
+    yticklabels[-1] = 1.
+    yticklabels[len(inferrer.sample_space)//2] = 0.1
+    ax.set_yticklabels(yticklabels)
+    sns.boxenplot(data=pd_h_samples, x='true tendencies', y='inferred tendencies', ax=ax)
+    #sns.stripplot(data=pd_h_samples, x='tendencies', y='samples', size=4, color='grey')
+    #plt.ylim([0,1])
+    plt.show()
+
+    #return samples, inferrer
 
 
 def load_fitting(folder):
 
-    for tendency in [10]:
+    samples = []
+    for tendency in [1, 10, 100]:
         for trans in [99]:
             print(tendency, trans)
             traces = []
 
-            run_name ="h"+str(tendency)+"_t"+str(trans)+"_p90_train100.json"
+            run_name ="h"+str(tendency)+"_t"+str(trans)+"_p80_train100.json"
             fname = os.path.join(folder, run_name)
 
-            jsonpickle_numpy.register_handlers()
+            fname = os.path.join(folder, run_name[:-5]+"_samples.json")
 
+            jsonpickle_numpy.register_handlers()
             with open(fname, 'r') as infile:
                 data = json.load(infile)
 
-            worlds_old = pickle.decode(data)
+            curr_samples, sample_space = pickle.decode(data)
 
-            repetitions = len(worlds_old)
+            samples.append(curr_samples)
 
-            inferrer = infer.Inferrer(worlds_old)
+    labels = np.tile(10.**(-np.arange(3.)), (samples[-1].shape[0], 1)).reshape(-1, order='f')
+    data = -np.array(samples).flatten()
+    pd_h_samples = pd.DataFrame(data={'inferred alphas': data, 'true alphas': labels})
 
-            likelihood = 1
+    plt.figure()
+    ax = plt.gca()
+    ax.set_ylim([-13,1])
+    ax.set_yticks(range(-12,0+1,1))
+    yticklabels = [""]*len(sample_space)
+    yticklabels[0] = 0.01
+    yticklabels[-1] = 1.
+    yticklabels[len(sample_space)//2] = 0.1
+    ax.set_yticklabels(yticklabels)
+    sns.boxenplot(data=pd_h_samples, x='true alphas', y='inferred alphas', ax=ax)
+    #sns.stripplot(data=pd_h_samples, x='tendencies', y='samples', size=4, color='grey')
+    #plt.ylim([0,1])
+    plt.show()
 
-            for i in range(0,3):#len(worlds_old)):
-                print("agent ", i)
-
-                fname = os.path.join(folder, run_name[:-5]+"_samples_"+str(i)+".json")
-
-                with open(fname, 'r') as infile:
-                    data = json.load(infile)
-
-                samples = pickle.decode(data)
-                print(samples)
-                sample_space = np.arange(0,8+1,1)
-                sample_space = 1./10**(sample_space/4.)
-                dist = inferrer.analyze_samples(samples, sample_space)
-                print(dist)
-                likelihood *= dist
-
-                pickled = 0
-
-            likelihood /= likelihood.sum()
-
-            mode, mean, variance = inferrer.analyze_dist(likelihood, sample_space)
-            print(mode, mean, variance)
-
-            #traces = inferrer.run_group_inference(ndraws=300, nburn=100, cores=4)
-
-            gc.collect()
-
-            plt.figure()
-            plt.plot(likelihood)
-            plt.show()
+    plt.figure()
+    ax = plt.gca()
+    ax.set_ylim([-13,1])
+    ax.set_yticks(range(-12,0+1,1))
+    yticklabels = [""]*len(sample_space)
+    yticklabels[0] = 0.01
+    yticklabels[-1] = 1.
+    yticklabels[len(sample_space)//2] = 0.1
+    ax.set_yticklabels(yticklabels)
+    sns.violinplot(data=pd_h_samples, x='true alphas', y='inferred alphas', ax=ax)
+    #sns.stripplot(data=pd_h_samples, x='tendencies', y='samples', size=4, color='grey')
+    #plt.ylim([0,1])
+    plt.show()
 
 
 
@@ -205,7 +216,7 @@ if __name__ == "__main__":
 
     avg = True
 
-    #samples = run_fitting(folder)
+    #run_fitting(folder)
 
     load_fitting(folder)
 

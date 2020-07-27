@@ -52,13 +52,16 @@ class LogLike(tt.Op):
 
 
 class Inferrer:
-    def __init__(self, worlds):
+    def __init__(self, worlds, min_h, max_h, nvals=13, test_trials=None):
 
         self.nruns = len(worlds)
+        self.nvals = nvals
 
         w = worlds[0]
 
-        self.setup_agent(w)
+        self.create_sample_space(min_h, max_h)
+
+        self.setup_agent(w, test_trials=test_trials)
 
         self.actions = np.array([w.actions[:,0] for w in worlds])
 
@@ -66,7 +69,7 @@ class Inferrer:
 
         self.inferrer = LogLike(self.agent.fit_model, self.fixed)
 
-    def setup_agent(self, w):
+    def setup_agent(self, w, first_trial=0, test_trials=None):
 
         ns = w.environment.Theta.shape[0]
         nr = w.environment.Rho.shape[1]
@@ -80,6 +83,9 @@ class Inferrer:
         utility = w.agent.perception.prior_rewards.copy()
         A = w.agent.perception.generative_model_observations.copy()
         B = w.agent.perception.generative_model_states.copy()
+
+        if test_trials is None:
+            test_trials = np.arange(0, trials, 1, dtype=int)
 
         transition_matrix_context = w.agent.perception.transition_matrix_context.copy()
 
@@ -136,60 +142,123 @@ class Inferrer:
 
         self.fixed = {'rew_mod': C_agent, 'beta_rew': C_alphas}
 
-    def run_single_inference(self, idx, ndraws=300, nburn=100, cores=4):
+        self.likelihood = np.zeros((self.nruns, len(self.sample_space)), dtype=np.float64)
+
+        for i in range(self.nruns):
+            print("precalculating likelihood run ", i)
+            for j,h in enumerate(self.sample_space):
+                alpha = 1./h
+                self.likelihood[i,j] \
+                    = self.agent.fit_model(alpha, self.fixed, test_trials)
+            self.likelihood[i] /= self.likelihood[i].sum()
+            #print(self.likelihood[i])
+
+    def group_likelihood(self, p):
+
+        def func(likelihood):
+            #p_D_p = tt.log(tt.dot(likelihood, p).prod())
+            logps = tt.log(p) + likelihood
+            ps = tt.exp(logps).sum(axis=1)
+            p_D_p = tt.log(ps).sum()
+            return p_D_p
+
+        return func
+
+
+    def run_single_inference(self, idx=None, ndraws=300, nburn=100, cores=4):
 
         minimum = 0.
-        maximum = 8.
-        sample_space = np.arange(minimum, maximum+1, 1)
-        sample_space = 1./10**(sample_space/4.)
+        maximum = len(self.sample_space) - 1
+
+        # if idx is not None:
+        #     runs = [idx]
+        # else:
+        #     runs = range(self.nruns)
+
+        # with pm.Model() as smodel:
+
+        #     a = pm.Gamma('a', alpha=1., beta=1., shape=self.nvals)
+        #     for i in runs:
+        #         p_i = pm.Dirichlet('p_{}'.format(i), a=a, shape=self.nvals, observed=self.likelihood[i])
+
+        #     p = pm.Dirichlet('p', a=a, shape=self.nvals)
+        #     h = pm.Categorical('h', p)
+
+        if idx is not None:
+            runs = [idx]
+        else:
+            runs = range(self.nruns)
 
         with pm.Model() as smodel:
+
+            a = [1]*self.nvals #pm.Gamma('a', alpha=1., beta=1., shape=self.nvals)
+
+            p = pm.Dirichlet('p', a=a, shape=self.nvals)
+
+            group_p = pm.DensityDist('gp', self.group_likelihood(p), observed=tt.log(self.likelihood))
+
+            h = pm.Categorical('h', p)
+
             # uniform priors on h
-            hab_ten = pm.DiscreteUniform('h', minimum, maximum)
+            #hab_ten = pm.Categorical('h')
 
-            # convert to a tensor
-            alpha = tt.as_tensor_variable([10**(hab_ten/4.)])
-            probs_a, probs_r = self.inferrer(alpha)
+            # # convert to a tensor
+            # alpha = tt.as_tensor_variable([10**(hab_ten/4.)])
+            # probs_a, probs_r = self.inferrer(alpha)
 
-            # use a DensityDist
-            pm.Categorical('actions', probs_a, observed=self.actions[idx])
-            pm.Categorical('rewards', probs_r, observed=self.rewards[idx])
+            # # use a DensityDist
+            # pm.Categorical('actions', probs_a, observed=self.actions[idx])
+            # pm.Categorical('rewards', probs_r, observed=self.rewards[idx])
 
-            step = pm.Metropolis()#S=np.ones(1)*0.01)
+            # step = pm.Metropolis()#S=np.ones(1)*0.01)
 
-            trace = pm.sample(ndraws, tune=nburn, discard_tuned_samples=True, step=step, cores=cores)
+            trace = pm.sample(ndraws, tune=nburn, discard_tuned_samples=True, cores=cores)#, step=step
 
             # plot the traces
-#            plt.figure()
-#            _ = pm.traceplot(trace)#, lines=('h', 1./alpha_true))
-#            plt.show()
-#            plt.figure()
-#            _ = pm.plot_posterior(trace, var_names=['h'], ref_val=(1./alpha_true))
-#            plt.show()
+            plt.figure()
+            _ = pm.traceplot(trace)#, lines=('h', 1./alpha_true))
+            plt.show()
+            # plt.figure()
+            # _ = pm.plot_posterior(trace, var_names=['h'], ref_val=(1./alpha_true))
+            # plt.show()
 
             # save the traces
-            #fname = pm.save_trace(trace)
-            samples = trace['h', nburn:]
+            self.samples = trace['h', nburn:]
 
-        return samples, sample_space
+    def analyze_samples(self, samples):
 
-    def analyze_samples(self, samples, sample_space):
-
-        dist = np.array([len(np.where(samples==i)[0]) for i in range(len(sample_space))], dtype=np.float64)
+        dist = np.array([len(np.where(samples==i)[0]) for i in range(len(self.sample_space))], dtype=np.float64)
 
         dist /= dist.sum()
 
         return dist
 
-    def analyze_dist(self, dist, sample_space):
+    def analyze_dist(self, dist):
 
-        mean = (dist * sample_space).sum()
+        mean = (dist * self.sample_space).sum()
 
-        variance = (dist * np.abs((sample_space - mean)**2)).sum()
+        variance = (dist * np.abs((self.sample_space - mean)**2)).sum()
 
-        mode = sample_space[np.argmax(dist)]
+        mode = self.sample_space[np.argmax(dist)]
 
         return mode, mean, variance
+
+    def create_alpha_val(self, sample):
+
+        return 10**(sample / self.factor)
+
+    def create_sample_space(self, min_h, max_h):
+
+        min_exponent = -np.log10(max_h)
+        max_exponent = -np.log10(min_h)
+
+        delta = max_exponent - min_exponent
+
+        step = delta / (self.nvals - 1)
+
+        self.sample_space = 10**(-np.arange(min_exponent, max_exponent+step, step))
+
+        self.factor = (self.nvals - 1.) / delta
 
     def run_group_inference(self, ndraws=300, nburn=100, cores=5):
 
