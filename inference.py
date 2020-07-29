@@ -158,8 +158,9 @@ class Inferrer:
         def func(likelihood):
             #p_D_p = tt.log(tt.dot(likelihood, p).prod())
             logps = tt.log(p) + likelihood
-            ps = tt.exp(logps).sum(axis=1)
-            p_D_p = tt.log(ps).sum()
+#            ps = tt.exp(logps).sum(axis=1)
+#            p_D_p = tt.log(ps).sum()
+            p_D_p = pm.logsumexp(logps, axis=1).sum()
             return p_D_p
 
         return func

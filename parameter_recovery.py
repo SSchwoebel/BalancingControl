@@ -37,7 +37,7 @@ def run_fitting(folder):
             print(tendency, trans)
             traces = []
 
-            run_name ="h"+str(tendency)+"_t"+str(trans)+"_p75_train100.json"
+            run_name ="h"+str(tendency)+"_t"+str(trans)+"_p80_train100.json"
             fname = os.path.join(folder, run_name)
 
             jsonpickle_numpy.register_handlers()
@@ -47,9 +47,9 @@ def run_fitting(folder):
 
             worlds_old = pickle.decode(data)
 
-            test_trials = list(range(0,50)) + list(range(100,130))
+            test_trials = list(range(0,50)) + list(range(100,150))
 
-            inferrer = infer.Inferrer(worlds_old[:5], 0.01, 1., test_trials=test_trials)
+            inferrer = infer.Inferrer(worlds_old[:10], 0.01, 1., test_trials=test_trials)
 
             inferrer.run_single_inference(ndraws=15000, nburn=3000, cores=4)
             samples.append(inferrer.samples)
@@ -101,7 +101,7 @@ def load_fitting(folder):
             print(tendency, trans)
             traces = []
 
-            run_name ="h"+str(tendency)+"_t"+str(trans)+"_p75_train100.json"
+            run_name ="h"+str(tendency)+"_t"+str(trans)+"_p80_train100.json"
             fname = os.path.join(folder, run_name)
 
             fname = os.path.join(folder, run_name[:-5]+"_samples.json")
