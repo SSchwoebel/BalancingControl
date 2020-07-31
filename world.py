@@ -203,7 +203,7 @@ class FakeWorld(object):
         #print(self.like_actions)
         #print(self.like_rewards)
 
-        like = self.like_actions[test_trials].prod() #* self.like_rewards[test_trials].prod()
+        like = self.like_actions[test_trials].prod() * self.like_rewards[test_trials].prod()
 
         return like #self.agent.posterior_actions.squeeze(), self.agent.posterior_rewards[:,1]
 
@@ -238,7 +238,7 @@ class FakeWorld(object):
 
         reward = self.rewards[tau, t]
 
+        self.agent.update_beliefs(tau, t, observation, reward, response)
+
         if t==1:
             self.like_rewards[tau,t-1] = self.agent.posterior_rewards[tau, t-1, reward]
-
-        self.agent.update_beliefs(tau, t, observation, reward, response)

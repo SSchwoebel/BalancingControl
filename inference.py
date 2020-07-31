@@ -52,7 +52,7 @@ class LogLike(tt.Op):
 
 
 class Inferrer:
-    def __init__(self, worlds, min_h, max_h, nvals=13, test_trials=None):
+    def __init__(self, worlds, min_h, max_h, nvals=9, test_trials=None):
 
         self.nruns = len(worlds)
         self.nvals = nvals
@@ -155,14 +155,15 @@ class Inferrer:
 
     def group_likelihood(self, p):
 
-        def func(likelihood):
+        def logp(likelihood):
             #p_D_p = tt.log(tt.dot(likelihood, p).prod())
             logps = tt.log(p) + likelihood
-            ps = tt.exp(logps).sum(axis=1)
-            p_D_p = tt.log(ps).sum()
+            # ps = tt.exp(logps).sum(axis=1)
+            # p_D_p = tt.log(ps).sum()
+            p_D_p = pm.logsumexp(logps, axis=1).sum()
             return p_D_p
 
-        return func
+        return logp
 
 
     def run_single_inference(self, idx=None, ndraws=300, nburn=100, cores=4):
@@ -191,13 +192,15 @@ class Inferrer:
 
         with pm.Model() as smodel:
 
-            a = [1]*self.nvals #pm.Gamma('a', alpha=1., beta=1., shape=self.nvals)
+            a = pm.Gamma('a', alpha=1., beta=.5, shape=self.nvals) #[1]*self.nvals #
 
             p = pm.Dirichlet('p', a=a, shape=self.nvals)
 
             group_p = pm.DensityDist('gp', self.group_likelihood(p), observed=tt.log(self.likelihood))
 
-            h = pm.Categorical('h', p)
+            mean_category = (np.arange(0,self.nvals,1) * p).sum() / self.factor
+            h = pm.Deterministic('h', mean_category)#1./self.create_alpha_val(mean_category))#pm.Categorical('h', p)
+            #h1 = pm.Categorical('h1', p)
 
             # uniform priors on h
             #hab_ten = pm.Categorical('h')

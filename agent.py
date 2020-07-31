@@ -138,10 +138,10 @@ class BayesianPlanner(object):
                                                             self.posterior_policies[tau,t], \
                                                             self.posterior_context[tau,t])
 
-        if t == 0:
-            self.posterior_rewards[tau, t] = np.einsum('rsc,spc,pc,c->r',
+        if t == 1:
+            self.posterior_rewards[tau, t-1] = np.einsum('rsc,spc,pc,c->r',
                                                   self.perception.generative_model_rewards,
-                                                  self.posterior_states[tau,t,:,t+1],
+                                                  self.posterior_states[tau,t,:,t],
                                                   self.posterior_policies[tau,t],
                                                   self.posterior_context[tau,t])
         #if reward > 0:

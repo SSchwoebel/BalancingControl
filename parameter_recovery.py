@@ -34,42 +34,46 @@ def run_fitting(folder):
     tendencies = [1, 5, 10, 50, 100]
     for tendency in tendencies:
         for trans in [99]:
-            print(tendency, trans)
-            traces = []
+            for prob in [80]:
+                for train in [100]:
+                    print(tendency, trans)
 
-            run_name ="h"+str(tendency)+"_t"+str(trans)+"_p75_train100.json"
-            fname = os.path.join(folder, run_name)
+                    run_name ="h"+str(tendency)+"_t"+str(trans)+"_p"+str(prob)+"_train"+str(train)+".json"
+                    fname = os.path.join(folder, run_name)
 
-            jsonpickle_numpy.register_handlers()
+                    jsonpickle_numpy.register_handlers()
 
-            with open(fname, 'r') as infile:
-                data = json.load(infile)
+                    with open(fname, 'r') as infile:
+                        data = json.load(infile)
 
-            worlds_old = pickle.decode(data)
+                    worlds_old = pickle.decode(data)
 
-            test_trials = list(range(0,50)) + list(range(100,130))
+                    test_trials = list(range(0,50)) + list(range(100,150))
 
-            inferrer = infer.Inferrer(worlds_old[:5], 0.01, 1., test_trials=test_trials)
+                    inferrer = infer.Inferrer(worlds_old[:20], 0.01, 1., test_trials=test_trials)
+                    # print(1./inferrer.sample_space)
+                    # print(inferrer.likelihood.mean(axis=0))
+                    # plt.figure()
+                    # plt.plot(inferrer.likelihood.mean(axis=0), '.')
+                    # plt.show()
 
-            inferrer.run_single_inference(ndraws=15000, nburn=3000, cores=4)
-            samples.append(inferrer.samples)
+                    inferrer.run_single_inference(ndraws=15000, nburn=5000, cores=4)
+                    samples.append(inferrer.samples)
 
-            fname = os.path.join(folder, run_name[:-5]+"_samples.json")
+                    fname = os.path.join(folder, run_name[:-5]+"_samples.json")
 
-            jsonpickle_numpy.register_handlers()
-            pickled = pickle.encode([samples[-1], inferrer.sample_space])
-            with open(fname, 'w') as outfile:
-                json.dump(pickled, outfile)
+                    jsonpickle_numpy.register_handlers()
+                    pickled = pickle.encode([samples[-1], inferrer.sample_space])
+                    with open(fname, 'w') as outfile:
+                        json.dump(pickled, outfile)
 
-            pickled = 0
+                    pickled = 0
 
-            #traces = inferrer.run_group_inference(ndraws=300, nburn=100, cores=4)
+                    gc.collect()
 
-            gc.collect()
-
-            plt.figure()
-            plt.hist(samples[-1])
-            plt.show()
+                    # plt.figure()
+                    # plt.hist(samples[-1])
+                    # plt.show()
 
 
     # labels = np.tile(1./np.array(tendencies), (samples[-1].shape[0], 1)).reshape(-1, order='f')
@@ -98,21 +102,23 @@ def load_fitting(folder):
     tendencies = [1, 5, 10, 50, 100]
     for tendency in tendencies:
         for trans in [99]:
-            print(tendency, trans)
-            traces = []
+            for prob in [80]:
+                for train in [100]:
+                    print(tendency, trans)
+                    traces = []
 
-            run_name ="h"+str(tendency)+"_t"+str(trans)+"_p75_train100.json"
-            fname = os.path.join(folder, run_name)
+                    run_name ="h"+str(tendency)+"_t"+str(trans)+"_p"+str(prob)+"_train"+str(train)+".json"
+                    fname = os.path.join(folder, run_name)
 
-            fname = os.path.join(folder, run_name[:-5]+"_samples.json")
+                    fname = os.path.join(folder, run_name[:-5]+"_samples.json")
 
-            jsonpickle_numpy.register_handlers()
-            with open(fname, 'r') as infile:
-                data = json.load(infile)
+                    jsonpickle_numpy.register_handlers()
+                    with open(fname, 'r') as infile:
+                        data = json.load(infile)
 
-            curr_samples, sample_space = pickle.decode(data)
+                    curr_samples, sample_space = pickle.decode(data)
 
-            samples.append(curr_samples)
+                    samples.append(curr_samples)
 
     labels = np.tile(1./np.array(tendencies), (samples[-1].shape[0], 1)).reshape(-1, order='f')
     data = -np.array(samples).flatten()
@@ -120,13 +126,13 @@ def load_fitting(folder):
 
     plt.figure()
     ax = plt.gca()
-    ax.set_ylim([-13,1])
-    ax.set_yticks(range(-12,0+1,1))
-    yticklabels = [""]*len(sample_space)
-    yticklabels[0] = 0.01
-    yticklabels[-1] = 1.
-    yticklabels[len(sample_space)//2] = 0.1
-    ax.set_yticklabels(yticklabels)
+    # ax.set_ylim([-13,1])
+    # ax.set_yticks(range(-12,0+1,1))
+    # yticklabels = [""]*len(sample_space)
+    # yticklabels[0] = 0.01
+    # yticklabels[-1] = 1.
+    # yticklabels[len(sample_space)//2] = 0.1
+    # ax.set_yticklabels(yticklabels)
     sns.boxenplot(data=pd_h_samples, x='true tendencies', y='inferred tendencies', ax=ax)
     #sns.stripplot(data=pd_h_samples, x='tendencies', y='samples', size=4, color='grey')
     #plt.ylim([0,1])
@@ -134,13 +140,13 @@ def load_fitting(folder):
 
     plt.figure()
     ax = plt.gca()
-    ax.set_ylim([-13,1])
-    ax.set_yticks(range(-12,0+1,1))
-    yticklabels = [""]*len(sample_space)
-    yticklabels[0] = 0.01
-    yticklabels[-1] = 1.
-    yticklabels[len(sample_space)//2] = 0.1
-    ax.set_yticklabels(yticklabels)
+    # ax.set_ylim([-13,1])
+    # ax.set_yticks(range(-12,0+1,1))
+    # yticklabels = [""]*len(sample_space)
+    # yticklabels[0] = 0.01
+    # yticklabels[-1] = 1.
+    # yticklabels[len(sample_space)//2] = 0.1
+    # ax.set_yticklabels(yticklabels)
     sns.violinplot(data=pd_h_samples, x='true tendencies', y='inferred tendencies', ax=ax)
     #sns.stripplot(data=pd_h_samples, x='tendencies', y='samples', size=4, color='grey')
     #plt.ylim([0,1])
