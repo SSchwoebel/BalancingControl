@@ -193,7 +193,7 @@ def run_rew_prob_simulations(repetitions, utility, avg, T, ns, na, nr, nc, folde
 
     Rho = np.zeros((trials, nr, ns))
 
-    for tendency in [1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
+    for tendency in [1,3,5,10,30,50,100]: #1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
         for trans in [99]:#[100,99,98,97,96,95,94]:
             for prob in [100,95,90,85,80,75,70,65,60]:
                 print(tendency, trans, prob)
@@ -338,7 +338,7 @@ def main():
         utility[i] = u/(nr-1)
     utility[0] = (1.-u)
 
-    repetitions = 200
+    repetitions = 50
 
     avg = True
 

@@ -31,11 +31,11 @@ import gc
 def run_fitting(folder):
 
     samples = []
-    tendencies = [1, 5, 10, 50, 100]
+    tendencies = [1, 3, 5, 10, 30, 50, 100]
     for tendency in tendencies:
         for trans in [99]:
-            for prob in [80]:
-                for train in [100]:
+            for prob in [90]:
+                for train in [562]:
                     print(tendency, trans)
 
                     run_name ="h"+str(tendency)+"_t"+str(trans)+"_p"+str(prob)+"_train"+str(train)+".json"
@@ -48,7 +48,7 @@ def run_fitting(folder):
 
                     worlds_old = pickle.decode(data)
 
-                    test_trials = list(range(0,50)) + list(range(100,150))
+                    test_trials = list(range(0,50)) + list(range(train,150))
 
                     inferrer = infer.Inferrer(worlds_old[:20], 0.01, 1., test_trials=test_trials)
                     # print(1./inferrer.sample_space)
@@ -99,11 +99,11 @@ def run_fitting(folder):
 def load_fitting(folder):
 
     samples = []
-    tendencies = [1, 5, 10, 50, 100]
+    tendencies = [1, 3, 5, 10, 30, 50, 100]
     for tendency in tendencies:
         for trans in [99]:
-            for prob in [80]:
-                for train in [100]:
+            for prob in [90]:
+                for train in [562]:
                     print(tendency, trans)
                     traces = []
 
@@ -127,21 +127,22 @@ def load_fitting(folder):
     plt.figure()
     ax = plt.gca()
     # ax.set_ylim([-13,1])
-    # ax.set_yticks(range(-12,0+1,1))
-    # yticklabels = [""]*len(sample_space)
-    # yticklabels[0] = 0.01
-    # yticklabels[-1] = 1.
-    # yticklabels[len(sample_space)//2] = 0.1
-    # ax.set_yticklabels(yticklabels)
+    ax.set_yticks(np.arange(-2.,0.5,0.25))
+    yticklabels = [""]*len(sample_space)
+    yticklabels[0] = 0.01
+    yticklabels[-1] = 1.
+    yticklabels[len(sample_space)//2] = 0.1
+    ax.set_yticklabels(yticklabels)
     sns.boxenplot(data=pd_h_samples, x='true tendencies', y='inferred tendencies', ax=ax)
     #sns.stripplot(data=pd_h_samples, x='tendencies', y='samples', size=4, color='grey')
     #plt.ylim([0,1])
+    plt.savefig('train_inference.svg')
     plt.show()
 
     plt.figure()
     ax = plt.gca()
-    # ax.set_ylim([-13,1])
-    # ax.set_yticks(range(-12,0+1,1))
+    # ax.set_ylim([-len(sample_space)-1,1])
+    # ax.set_yticks(range(-len(sample_space),0+1,1))
     # yticklabels = [""]*len(sample_space)
     # yticklabels[0] = 0.01
     # yticklabels[-1] = 1.

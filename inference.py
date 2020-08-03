@@ -150,7 +150,7 @@ class Inferrer:
                 alpha = 1./h
                 self.likelihood[i,j] \
                     = self.agent.fit_model(alpha, self.fixed, test_trials)
-            self.likelihood[i] /= self.likelihood[i].sum()
+            #self.likelihood[i] /= self.likelihood[i].sum()
             #print(self.likelihood[i])
 
     def group_likelihood(self, p):
