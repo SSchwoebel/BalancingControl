@@ -31,11 +31,11 @@ import gc
 def run_fitting(folder):
 
     samples = []
-    tendencies = [1, 3, 5, 10, 30, 50, 100]
+    tendencies = [5]#1, 3, 5, 10, 30, 50, 100
     for tendency in tendencies:
         for trans in [99]:
-            for prob in [90]:
-                for train in [562]:
+            for prob in [75]:
+                for train in [100]:
                     print(tendency, trans)
 
                     run_name ="h"+str(tendency)+"_t"+str(trans)+"_p"+str(prob)+"_train"+str(train)+".json"
@@ -99,11 +99,11 @@ def run_fitting(folder):
 def load_fitting(folder):
 
     samples = []
-    tendencies = [1, 3, 5, 10, 30, 50, 100]
+    tendencies = [1, 3, 10, 30, 100]
     for tendency in tendencies:
         for trans in [99]:
-            for prob in [90]:
-                for train in [562]:
+            for prob in [75]:
+                for train in [100]:
                     print(tendency, trans)
                     traces = []
 
@@ -123,7 +123,7 @@ def load_fitting(folder):
     labels = np.tile(1./np.array(tendencies), (samples[-1].shape[0], 1)).reshape(-1, order='f')
     data = -np.array(samples).flatten()
     pd_h_samples = pd.DataFrame(data={'inferred tendencies': data, 'true tendencies': labels})
-
+    print(np.log10(sample_space))
     plt.figure()
     ax = plt.gca()
     # ax.set_ylim([-13,1])
@@ -134,9 +134,10 @@ def load_fitting(folder):
     yticklabels[len(sample_space)//2] = 0.1
     ax.set_yticklabels(yticklabels)
     sns.boxenplot(data=pd_h_samples, x='true tendencies', y='inferred tendencies', ax=ax)
+    plt.plot(np.arange(len(sample_space))/2, np.flip(np.log10(sample_space)), '--', color='black', alpha=0.5)
     #sns.stripplot(data=pd_h_samples, x='tendencies', y='samples', size=4, color='grey')
     #plt.ylim([0,1])
-    plt.savefig('train_inference.svg')
+    plt.savefig('rho_inference.svg')
     plt.show()
 
     plt.figure()
@@ -225,7 +226,7 @@ if __name__ == "__main__":
 
     avg = True
 
-    run_fitting(folder)
+    #run_fitting(folder)
 
     load_fitting(folder)
 
