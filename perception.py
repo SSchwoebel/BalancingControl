@@ -24,6 +24,7 @@ class HierarchicalPerception(object):
         self.prior_rewards = prior_rewards.copy()
         self.prior_states = prior_states.copy()
         self.prior_policies = prior_policies.copy()
+        self.npi = prior_policies.shape[0]
         self.T = T
         self.nh = prior_states.shape[0]
         if len(generative_model_rewards.shape) > 2:
@@ -46,15 +47,22 @@ class HierarchicalPerception(object):
                 self.generative_model_rewards[:,state,c] /= self.generative_model_rewards[:,state,c].sum()
 
 
+    def reset(self, params, fixed):
+
+        alphas = np.zeros((self.npi, self.nc)) + params
+        self.generative_model_rewards[:] = fixed['rew_mod'].copy()
+        self.dirichlet_rew_params[:] = fixed['beta_rew'].copy()
+        self.prior_policies[:] = alphas / alphas.sum(axis=0)[None,:]
+        self.dirichlet_pol_params = alphas
+
+
     def instantiate_messages(self, policies):
-        npi = policies.shape[0]
 
-        self.bwd_messages = np.zeros((self.nh, self.T, npi, self.nc))
+        self.bwd_messages = np.zeros((self.nh, self.T, self.npi, self.nc))
         self.bwd_messages[:,-1,:, :] = 1./self.nh
-        self.fwd_messages = np.zeros((self.nh, self.T, npi, self.nc))
+        self.fwd_messages = np.zeros((self.nh, self.T, self.npi, self.nc))
         self.fwd_messages[:, 0, :, :] = self.prior_states[:, np.newaxis, np.newaxis]
-
-        self.fwd_norms = np.zeros((self.T+1, npi, self.nc))
+        self.fwd_norms = np.zeros((self.T+1, self.npi, self.nc))
         self.fwd_norms[0,:,:] = 1.
 
         self.obs_messages = np.zeros((self.nh, self.T, self.nc)) + 1/self.nh#self.prior_observations.dot(self.generative_model_observations)
