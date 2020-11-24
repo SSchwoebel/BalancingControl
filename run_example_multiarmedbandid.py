@@ -38,7 +38,7 @@ np.set_printoptions(threshold = 100000, precision = 5)
 """
 run function
 """
-def run_agent(par_list, trials, T, ns, na, nr, nc, deval=False):
+def run_agent(par_list, trials, T, ns, na, nr, nc, deval=False, ESS=None):
 
     #set parameters:
     #learn_pol: initial concentration paramter for policy prior
@@ -121,10 +121,16 @@ def run_agent(par_list, trials, T, ns, na, nr, nc, deval=False):
     set action selection method
     """
 
-    if avg:
+    if ESS is not None:
+
+        ac_sel = asl.DKLSelector(trials = trials, T = T,
+                                      number_of_actions = na, ESS=ESS)
+
+    elif avg:
 
         ac_sel = asl.AveragedSelector(trials = trials, T = T,
                                       number_of_actions = na)
+
     else:
 
         ac_sel = asl.MaxSelector(trials = trials, T = T,
@@ -193,9 +199,9 @@ def run_rew_prob_simulations(repetitions, utility, avg, T, ns, na, nr, nc, folde
 
     Rho = np.zeros((trials, nr, ns))
 
-    for tendency in [1,3,5,10,30,50,100]: #1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
+    for tendency in [1,10,100]:#,3,5,10,30,50,100]: #1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
         for trans in [99]:#[100,99,98,97,96,95,94]:
-            for prob in [100,95,90,85,80,75,70,65,60]:
+            for prob in [90]:#[100,95,90,85,80,75,70,65,60]:
                 print(tendency, trans, prob)
 
                 Rho[:] = generate_bandit_timeseries_habit(trials_training, nr, ns, n_test,p=prob/100.)
@@ -209,10 +215,24 @@ def run_rew_prob_simulations(repetitions, utility, avg, T, ns, na, nr, nc, folde
                 learn_pol = tendency
                 parameters = [learn_pol, trans/100., avg, Rho, utility]
 
-                for i in range(repetitions):
-                    worlds.append(run_agent(parameters, trials, T, ns, na, nr, nc))
+                ESS = 40
 
-                run_name = "h"+str(int(learn_pol))+"_t"+str(trans)+"_p"+str(prob)+"_train"+str(trials_training)+".json"
+                for i in range(repetitions):
+                    worlds.append(run_agent(parameters, trials, T, ns, na, nr, nc, ESS=ESS))
+                    w = worlds[-1]
+                    plt.figure()
+                    plt.plot(w.agent.action_selection.RT[:,0])
+                    #plt.plot(Rho[:,2,2])
+                    #plt.plot(Rho[:,1,1])
+                    plt.ylim([0,5])
+                    plt.show()
+                    plt.savefig("ESS"+str(ESS)+"_h"+str(int(learn_pol))+"_RT_timecourse"+str(i)+".svg")
+                    plt.figure()
+                    plt.hist(w.agent.action_selection.RT[:,0])
+                    plt.savefig("ESS"+str(ESS)+"_h"+str(int(learn_pol))+"_RT_hist"+str(i)+".svg")
+                    plt.show()
+
+                run_name = "ESS"+str(ESS)+"_h"+str(int(learn_pol))+"_t"+str(trans)+"_p"+str(prob)+"_train"+str(trials_training)+".json"
                 fname = os.path.join(folder, run_name)
 
                 jsonpickle_numpy.register_handlers()
@@ -338,7 +358,7 @@ def main():
         utility[i] = u/(nr-1)
     utility[0] = (1.-u)
 
-    repetitions = 50
+    repetitions = 3
 
     avg = True
 
@@ -352,7 +372,7 @@ def main():
     # function analyzes data, plots average runs and habit strength
     # This function requires simulation data files
     # can be run independently from the simulation function
-    plot_analyses(print_regression_results=False)
+    #plot_analyses(print_regression_results=False)
 
     # run simulations with varying training duration
     # results are stored in data folder

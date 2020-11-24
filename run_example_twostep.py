@@ -176,7 +176,7 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
 
         sel = 'avg'
 
-        ac_sel = asl.AveragedSelector(trials = trials, T = T,
+        ac_sel = asl.MCMCSelector(trials = trials, T = T,
                                       number_of_actions = na)
     else:
 
@@ -338,7 +338,7 @@ n_training = 1
 #Rho[:trials//2] = generate_bandit_timeseries_training(trials//2, nr, ns, nb, n_training)
 #Rho[trials//2:] = generate_bandit_timeseries_slowchange(trials//2, nr, ns, nb)
 
-repetitions = 100
+repetitions = 2
 
 #learn_rew = 21
 
@@ -448,16 +448,16 @@ for tendency in [1000]:#[1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
 #                with open(fname, 'w') as outfile:
 #                    json.dump(pickled, outfile)
 
-    print(gc.get_count())
+    #print(gc.get_count())
 
     pickled = 0
     #worlds = 0
 
-    print(gc.get_count())
+    #print(gc.get_count())
 
     gc.collect()
 
-    print(gc.get_count())
+    #print(gc.get_count())
 
 
 plt.figure()
@@ -516,7 +516,9 @@ def calc_measures(indices):
     print("like", like_diff.mean())
 
 
-
+plt.figure()
+plt.plot(w.agent.action_selection.RT[:,0])
+plt.show()
 """
 reload data
 """

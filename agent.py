@@ -156,6 +156,10 @@ class BayesianPlanner(object):
         #get response probability
         posterior_states = self.posterior_states[tau, t]
         posterior_policies = np.dot(self.posterior_policies[tau, t], self.posterior_context[tau, t])
+        avg_likelihood = np.dot(self.likelihood[tau,t], self.posterior_context[tau, t])
+        avg_likelihood /= avg_likelihood.sum()
+        prior = posterior_policies / avg_likelihood
+        prior /= prior.sum()
         #print(self.posterior_context[tau, t])
         posterior_policies /= posterior_policies.sum()
         non_zero = posterior_policies > 0
@@ -163,8 +167,13 @@ class BayesianPlanner(object):
         posterior_policies = posterior_policies[non_zero]
         actions = np.unique(controls)
 
+        avg_likelihood = np.dot(self.likelihood[tau,t][non_zero], self.posterior_context[tau, t])
+        avg_likelihood /= avg_likelihood.sum()
+        prior = posterior_policies / avg_likelihood
+        prior /= prior.sum()
+
         self.actions[tau, t] = self.action_selection.select_desired_action(tau,
-                                        t, posterior_policies, controls)
+                                        t, posterior_policies, controls, avg_likelihood, prior)
 
 
         return self.actions[tau, t]
