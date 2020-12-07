@@ -123,7 +123,7 @@ def run_agent(par_list, trials, T, ns, na, nr, nc, deval=False, ESS=None):
 
     if ESS is not None:
 
-        ac_sel = asl.DKLSelector(trials = trials, T = T,
+        ac_sel = asl.DirichletSelector(trials = trials, T = T,
                                       number_of_actions = na, ESS=ESS)
 
     elif avg:
@@ -158,6 +158,7 @@ def run_agent(par_list, trials, T, ns, na, nr, nc, deval=False, ESS=None):
                       number_of_states = ns,
                       prior_context = prior_context,
                       learn_habit = True,
+                      learn_rew = True,
                       #save_everything = True,
                       number_of_policies = npi,
                       number_of_rewards = nr)
@@ -199,7 +200,7 @@ def run_rew_prob_simulations(repetitions, utility, avg, T, ns, na, nr, nc, folde
 
     Rho = np.zeros((trials, nr, ns))
 
-    for tendency in [1,10,100]:#,3,5,10,30,50,100]: #1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
+    for tendency in [100]:#,3,5,10,30,50,100]: #1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
         for trans in [99]:#[100,99,98,97,96,95,94]:
             for prob in [90]:#[100,95,90,85,80,75,70,65,60]:
                 print(tendency, trans, prob)
@@ -215,7 +216,7 @@ def run_rew_prob_simulations(repetitions, utility, avg, T, ns, na, nr, nc, folde
                 learn_pol = tendency
                 parameters = [learn_pol, trans/100., avg, Rho, utility]
 
-                ESS = 40
+                ESS = 30
 
                 for i in range(repetitions):
                     worlds.append(run_agent(parameters, trials, T, ns, na, nr, nc, ESS=ESS))
@@ -224,12 +225,13 @@ def run_rew_prob_simulations(repetitions, utility, avg, T, ns, na, nr, nc, folde
                     plt.plot(w.agent.action_selection.RT[:,0])
                     #plt.plot(Rho[:,2,2])
                     #plt.plot(Rho[:,1,1])
-                    plt.ylim([0,5])
+                    #plt.ylim([ESS*10,2000])
+                    plt.ylim([0,250])
+                    plt.savefig("DLK_h"+str(int(learn_pol))+"_RT_timecourse"+str(i)+".svg")#"ESS"+str(ESS)+"_h"+str(int(learn_pol))+"_RT_timecourse"+str(i)+".svg")#
                     plt.show()
-                    plt.savefig("ESS"+str(ESS)+"_h"+str(int(learn_pol))+"_RT_timecourse"+str(i)+".svg")
                     plt.figure()
                     plt.hist(w.agent.action_selection.RT[:,0])
-                    plt.savefig("ESS"+str(ESS)+"_h"+str(int(learn_pol))+"_RT_hist"+str(i)+".svg")
+                    plt.savefig("DKL_h"+str(int(learn_pol))+"_RT_hist"+str(i)+".svg")#"ESS"+str(ESS)+"_h"+str(int(learn_pol))+"_RT_hist"+str(i)+".svg")#
                     plt.show()
 
                 run_name = "ESS"+str(ESS)+"_h"+str(int(learn_pol))+"_t"+str(trans)+"_p"+str(prob)+"_train"+str(trials_training)+".json"
@@ -358,7 +360,7 @@ def main():
         utility[i] = u/(nr-1)
     utility[0] = (1.-u)
 
-    repetitions = 3
+    repetitions = 5
 
     avg = True
 

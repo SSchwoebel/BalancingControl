@@ -54,6 +54,12 @@ def lognormal(x, mu, sigma):
 def lognormal3(x, mu, sigma, c):
     return 1./((x-a)*sigma*np.sqrt(2*np.pi)) * exp(-(ln(x-a)-mu)**2/(2*sigma**2))
 
+def Beta_function(a):
+    return scs.gamma(a).prod()/scs.gamma(a.sum())
+
+def logBeta(a):
+    return scs.loggamma(a).sum() - scs.loggamma(a.sum())
+
 def generate_bandit_timeseries_stable(Rho_0, nb, trials, changes):
     Rho = np.zeros((trials, Rho_0.shape[0], Rho_0.shape[1]))
     Rho[0] = Rho_0.copy()

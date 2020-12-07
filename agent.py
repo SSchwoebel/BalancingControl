@@ -13,6 +13,7 @@ class BayesianPlanner(object):
                  prior_states = None, prior_policies = None,
                  prior_context = None,
                  learn_habit = False,
+                 learn_rew = False,
                  trials = 1, T = 10, number_of_states = 6,
                  number_of_rewards = 2,
                  number_of_policies = 10):
@@ -50,6 +51,7 @@ class BayesianPlanner(object):
             self.nc = prior_context.shape[0]
         else:
             self.prior_context = np.ones(1)
+            self.nc = 1
 
         if prior_policies is not None:
             self.prior_policies = np.tile(prior_policies, (1,self.nc)).T
@@ -57,6 +59,7 @@ class BayesianPlanner(object):
             self.prior_policies = np.ones((self.npi,self.nc))/self.npi
 
         self.learn_habit = learn_habit
+        self.learn_rew = learn_rew
 
         #set various data structures
         self.actions = np.zeros((trials, T), dtype = int)
@@ -69,6 +72,8 @@ class BayesianPlanner(object):
         self.posterior_context = np.ones((trials, T, self.nc))
         self.posterior_context[:,:,:] = self.prior_context[np.newaxis,np.newaxis,:]
         self.likelihood = np.zeros((trials, T, self.npi, self.nc))
+        self.prior_policies = np.zeros((trials, self.npi, self.nc))
+        self.prior_policies[:] = prior_policies[np.newaxis,:,:]
         self.posterior_actions = np.zeros((trials, T-1, self.na))
         self.posterior_rewards = np.zeros((trials, T, self.nr))
         self.log_probability = 0
@@ -120,7 +125,7 @@ class BayesianPlanner(object):
 #            else:
 #                prior_context = np.dot(self.perception.transition_matrix_context, self.posterior_context[tau, t-1])
 
-        if t>=0:
+        if self.nc>1:
             self.posterior_context[tau, t] = \
             self.perception.update_beliefs_context(tau, t, \
                                                    reward, \
@@ -128,24 +133,27 @@ class BayesianPlanner(object):
                                                    self.posterior_policies[tau, t], \
                                                    prior_context, \
                                                    self.policies)
+        else:
+            self.posterior_context[tau,t] = 1
 
         if t < self.T-1:
             post_pol = np.dot(self.posterior_policies[tau, t], self.posterior_context[tau, t])
             self.posterior_actions[tau, t] = self.estimate_action_probability(tau, t, post_pol)
 
         if t == self.T-1 and self.learn_habit:
-            self.posterior_dirichlet_pol[tau] = self.perception.update_beliefs_dirichlet_pol_params(tau, t, \
+            self.posterior_dirichlet_pol[tau], self.prior_policies[tau] = self.perception.update_beliefs_dirichlet_pol_params(tau, t, \
                                                             self.posterior_policies[tau,t], \
                                                             self.posterior_context[tau,t])
 
-        if t == 1:
+        if False:
             self.posterior_rewards[tau, t-1] = np.einsum('rsc,spc,pc,c->r',
                                                   self.perception.generative_model_rewards,
                                                   self.posterior_states[tau,t,:,t],
                                                   self.posterior_policies[tau,t],
                                                   self.posterior_context[tau,t])
         #if reward > 0:
-        self.posterior_dirichlet_rew[tau,t] = self.perception.update_beliefs_dirichlet_rew_params(tau, t, \
+        if self.learn_rew:
+            self.posterior_dirichlet_rew[tau,t] = self.perception.update_beliefs_dirichlet_rew_params(tau, t, \
                                                             reward, \
                                                    self.posterior_states[tau, t], \
                                                    self.posterior_policies[tau, t], \
@@ -156,21 +164,18 @@ class BayesianPlanner(object):
         #get response probability
         posterior_states = self.posterior_states[tau, t]
         posterior_policies = np.dot(self.posterior_policies[tau, t], self.posterior_context[tau, t])
-        avg_likelihood = np.dot(self.likelihood[tau,t], self.posterior_context[tau, t])
-        avg_likelihood /= avg_likelihood.sum()
-        prior = posterior_policies / avg_likelihood
-        prior /= prior.sum()
-        #print(self.posterior_context[tau, t])
         posterior_policies /= posterior_policies.sum()
+        avg_likelihood = np.dot(self.likelihood[tau,t], self.posterior_context[tau, t])
+        #avg_likelihood /= avg_likelihood.sum()
+        prior = np.dot(self.prior_policies[tau], self.posterior_context[tau, t])
+        #prior /= prior.sum()
+        #print(self.posterior_context[tau, t])
         non_zero = posterior_policies > 0
-        controls = self.policies[:, t][non_zero]
-        posterior_policies = posterior_policies[non_zero]
+        controls = self.policies[:, t]#[non_zero]
         actions = np.unique(controls)
-
-        avg_likelihood = np.dot(self.likelihood[tau,t][non_zero], self.posterior_context[tau, t])
-        avg_likelihood /= avg_likelihood.sum()
-        prior = posterior_policies / avg_likelihood
-        prior /= prior.sum()
+        # posterior_policies = posterior_policies[non_zero]
+        # avg_likelihood = avg_likelihood[non_zero]
+        # prior = prior[non_zero]
 
         self.actions[tau, t] = self.action_selection.select_desired_action(tau,
                                         t, posterior_policies, controls, avg_likelihood, prior)
