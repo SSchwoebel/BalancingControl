@@ -200,7 +200,7 @@ def run_rew_prob_simulations(repetitions, utility, avg, T, ns, na, nr, nc, folde
 
     Rho = np.zeros((trials, nr, ns))
 
-    for tendency in [100]:#,3,5,10,30,50,100]: #1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
+    for tendency in [1000]:#,3,5,10,30,50,100]: #1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
         for trans in [99]:#[100,99,98,97,96,95,94]:
             for prob in [90]:#[100,95,90,85,80,75,70,65,60]:
                 print(tendency, trans, prob)
@@ -222,16 +222,23 @@ def run_rew_prob_simulations(repetitions, utility, avg, T, ns, na, nr, nc, folde
                     worlds.append(run_agent(parameters, trials, T, ns, na, nr, nc, ESS=ESS))
                     w = worlds[-1]
                     plt.figure()
+                    post_pol = np.einsum('tpc,tc->tp', w.agent.posterior_policies[:,0,:,:], w.agent.posterior_context[:,0,:])
+                    like = np.einsum('tpc,tc->tp', w.agent.likelihood[:,0,:,:], w.agent.posterior_context[:,0,:])
+                    plt.plot(post_pol[:,1], '.')
+                    plt.plot(like[:,1], 'x')
+                    plt.ylim([0,1])
+                    plt.show()
+                    plt.figure()
                     plt.plot(w.agent.action_selection.RT[:,0])
                     #plt.plot(Rho[:,2,2])
                     #plt.plot(Rho[:,1,1])
                     #plt.ylim([ESS*10,2000])
-                    plt.ylim([0,250])
-                    plt.savefig("DLK_h"+str(int(learn_pol))+"_RT_timecourse"+str(i)+".svg")#"ESS"+str(ESS)+"_h"+str(int(learn_pol))+"_RT_timecourse"+str(i)+".svg")#
+                    plt.ylim([0,2000])
+                    #plt.savefig("Dir_h"+str(int(learn_pol))+"_RT_timecourse"+str(i)+".svg")#"ESS"+str(ESS)+"_h"+str(int(learn_pol))+"_RT_timecourse"+str(i)+".svg")#
                     plt.show()
                     plt.figure()
                     plt.hist(w.agent.action_selection.RT[:,0])
-                    plt.savefig("DKL_h"+str(int(learn_pol))+"_RT_hist"+str(i)+".svg")#"ESS"+str(ESS)+"_h"+str(int(learn_pol))+"_RT_hist"+str(i)+".svg")#
+                    #plt.savefig("Dir_h"+str(int(learn_pol))+"_RT_hist"+str(i)+".svg")#"ESS"+str(ESS)+"_h"+str(int(learn_pol))+"_RT_hist"+str(i)+".svg")#
                     plt.show()
 
                 run_name = "ESS"+str(ESS)+"_h"+str(int(learn_pol))+"_t"+str(trans)+"_p"+str(prob)+"_train"+str(trials_training)+".json"

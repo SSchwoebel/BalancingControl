@@ -167,7 +167,7 @@ class BayesianPlanner(object):
         posterior_policies /= posterior_policies.sum()
         avg_likelihood = np.dot(self.likelihood[tau,t], self.posterior_context[tau, t])
         #avg_likelihood /= avg_likelihood.sum()
-        prior = np.dot(self.prior_policies[tau], self.posterior_context[tau, t])
+        prior = np.dot(self.prior_policies[tau-1], self.posterior_context[tau, t])
         #prior /= prior.sum()
         #print(self.posterior_context[tau, t])
         non_zero = posterior_policies > 0

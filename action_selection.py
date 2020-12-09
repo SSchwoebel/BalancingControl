@@ -103,8 +103,10 @@ class DirichletSelector(object):
         npi = posterior_policies.shape[0]
         likelihood = args[0]
         prior = args[1]
-        #likelihood = np.array([0.8,0.2])
-        #prior = np.array([0.7,0.3])
+        # likelihood = np.array([0.8,0.2])
+        # prior = np.array([0.8,0.2])
+        # posterior_policies = prior * likelihood
+        # posterior_policies /= posterior_policies.sum()
         #print(posterior_policies, prior, likelihood)
         accepted_pis = np.zeros(50000, dtype=np.int32) - 1
         dir_counts = np.ones(npi, np.double)
@@ -115,7 +117,7 @@ class DirichletSelector(object):
         H_0 =         + (dir_counts.sum()-npi)*scs.digamma(dir_counts.sum()) \
                         - ((dir_counts - 1)*scs.digamma(dir_counts)).sum() \
                         + logBeta(dir_counts)
-        print("H", H_0)
+        #print("H", H_0)
 
         pi = np.random.choice(npi, p=prior)
         accepted_pis[i] = pi
@@ -123,34 +125,35 @@ class DirichletSelector(object):
         H_dir =         + (dir_counts.sum()-npi)*scs.digamma(dir_counts.sum()) \
                         - ((dir_counts - 1)*scs.digamma(dir_counts)).sum() \
                         + logBeta(dir_counts)
-        print("H", H_dir)
+        #print("H", H_dir)
 
         i += 1
-        while H_dir>H_0 - 2 + 0.1*H_0:
+        while H_dir>H_0 - 3 + 0.5*H_0:
 
             pi = np.random.choice(npi, p=prior)
             r = np.random.rand()
             #print(i, curr_ess)
 
+            #acc_prob = min(1, posterior_policies[pi]/posterior_policies[accepted_pis[i-1]])
             acc_prob = min(1, likelihood[pi]/likelihood[accepted_pis[i-1]])
             if acc_prob >= r:#posterior_policies[pi]/posterior_policies[accepted_pis[i-1]] > r:
                 accepted_pis[i] = pi
-                dir_counts[pi] += 1#acc_prob
+                dir_counts[pi] += acc_prob
             else:
                 accepted_pis[i] = accepted_pis[i-1]
-                dir_counts[accepted_pis[i-1]] += 1#acc_prob
+                dir_counts[accepted_pis[i-1]] += 1-acc_prob
 
             H_dir =     + (dir_counts.sum()-npi)*scs.digamma(dir_counts.sum()) \
                         - ((dir_counts - 1)*scs.digamma(dir_counts)).sum() \
                         + logBeta(dir_counts)
-            print("H", H_dir)
+            #print("H", H_dir)
 
             i += 1
 
         self.RT[tau,t] = i-1
         print(tau, t, i-1)
-        #chosen_pol = accepted_pis[i-1]
-        chosen_pol = np.random.choice(npi, p=posterior_policies)
+        chosen_pol = accepted_pis[i-1]
+        #chosen_pol = np.random.choice(npi, p=posterior_policies)
         u = actions[chosen_pol]
         #print(tau,t,i,accepted_pis[i-1],u,H_rel)
 

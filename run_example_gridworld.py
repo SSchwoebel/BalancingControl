@@ -36,7 +36,7 @@ agent = 'bethe'
 save_data = False
 data_folder = os.path.join('/home/yourname/yourproject','data_folder')
 
-trials = 200 #number of trials
+trials = 100 #number of trials
 T = 5 #number of time steps in each trial
 L = 4 #grid length
 no = L**2 #number of observations
@@ -178,7 +178,8 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
     npi = pol.shape[0]
 
     prior_policies = np.ones((npi,1)) / npi
-    dirichlet_pol_param = np.ones((npi,1))
+    h = 100
+    dirichlet_pol_param = np.zeros((npi,1)) + h
 
     """
     set state prior (where agent thinks it starts)
@@ -390,6 +391,8 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
 
     plt.figure()
     plt.plot(w.agent.action_selection.RT[:,0])
+    plt.ylim([0,np.amax(w.agent.action_selection.RT[:,0])])
+    plt.savefig("Gridworld_Dir_h"+str(h)+".svg")
     plt.show()
 
     """
@@ -444,7 +447,7 @@ for p in itertools.product(l, utility):
 for pars in par_list:
     w = run_agent(pars)
 
-    print(w.agent.prior_policies[-1])
+    print(w.agent.posterior_policies[-1,0])
 
 
 """
