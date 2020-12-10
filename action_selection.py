@@ -81,12 +81,11 @@ class MCMCSelector(object):
 
 class DirichletSelector(object):
 
-    def __init__(self, trials = 1, T = 10, number_of_actions = 2, ESS = 50):
+    def __init__(self, trials = 1, T = 10, number_of_actions = 2):
         self.n_pars = 0
 
         self.na = number_of_actions
         self.control_probability = np.zeros((trials, T, self.na))
-        self.ess = ESS
         self.RT = np.zeros((trials, T-1))
 
     def reset_beliefs(self):
@@ -103,8 +102,8 @@ class DirichletSelector(object):
         npi = posterior_policies.shape[0]
         likelihood = args[0]
         prior = args[1]
-        # likelihood = np.array([0.8,0.2])
-        # prior = np.array([0.8,0.2])
+        # likelihood = np.array([0.5,0.5])
+        # prior = np.array([0.5,0.5])
         # posterior_policies = prior * likelihood
         # posterior_policies /= posterior_policies.sum()
         #print(posterior_policies, prior, likelihood)
