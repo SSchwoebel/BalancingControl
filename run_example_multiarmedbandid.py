@@ -195,7 +195,7 @@ def run_rew_prob_simulations(repetitions, utility, avg, T, ns, na, nr, nc, folde
 
     n_training = 1
     n_test = 100
-    trials =  100+n_test#number of trials
+    trials =  900+n_test#number of trials
     trials_training = trials - n_test
 
     Rho = np.zeros((trials, nr, ns))
@@ -234,11 +234,11 @@ def run_rew_prob_simulations(repetitions, utility, avg, T, ns, na, nr, nc, folde
                     #plt.plot(Rho[:,1,1])
                     #plt.ylim([ESS*10,2000])
                     plt.ylim([0,2000])
-                    #plt.savefig("Dir_h"+str(int(learn_pol))+"_RT_timecourse"+str(i)+".svg")#"ESS"+str(ESS)+"_h"+str(int(learn_pol))+"_RT_timecourse"+str(i)+".svg")#
+                    plt.savefig("Dir_h"+str(int(learn_pol))+"_RT_timecourse"+str(i)+".svg")#"ESS"+str(ESS)+"_h"+str(int(learn_pol))+"_RT_timecourse"+str(i)+".svg")#
                     plt.show()
                     plt.figure()
                     plt.hist(w.agent.action_selection.RT[:,0])
-                    #plt.savefig("Dir_h"+str(int(learn_pol))+"_RT_hist"+str(i)+".svg")#"ESS"+str(ESS)+"_h"+str(int(learn_pol))+"_RT_hist"+str(i)+".svg")#
+                    plt.savefig("uncertain_Dir_h"+str(int(learn_pol))+"_RT_hist"+str(i)+"_1000trials.svg")#"ESS"+str(ESS)+"_h"+str(int(learn_pol))+"_RT_hist"+str(i)+".svg")#
                     plt.show()
 
                 run_name = "ESS"+str(ESS)+"_h"+str(int(learn_pol))+"_t"+str(trans)+"_p"+str(prob)+"_train"+str(trials_training)+".json"
@@ -367,7 +367,7 @@ def main():
         utility[i] = u/(nr-1)
     utility[0] = (1.-u)
 
-    repetitions = 5
+    repetitions = 1
 
     avg = True
 
