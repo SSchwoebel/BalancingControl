@@ -56,7 +56,7 @@ def run_action_selection(post, prior, like, trials = 100):
     return ac_sel.RT.squeeze()
 
 # set up number of trials
-trials = 1000
+trials = 5000
 
 # conflict
 prior = np.array(conflict)

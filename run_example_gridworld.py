@@ -22,8 +22,10 @@ import jsonpickle.ext.numpy as jsonpickle_numpy
 import json
 import seaborn as sns
 import os
+import pandas as pd
+import gc
 np.set_printoptions(threshold = 100000, precision = 5)
-
+plt.style.use('seaborn-whitegrid')
 
 
 """
@@ -36,7 +38,7 @@ agent = 'bethe'
 save_data = False
 data_folder = os.path.join('/home/yourname/yourproject','data_folder')
 
-trials = 100 #number of trials
+trials = 200 #number of trials
 T = 5 #number of time steps in each trial
 L = 4 #grid length
 no = L**2 #number of observations
@@ -44,6 +46,7 @@ ns = L**2 #number of states
 na = 4 #number of actions
 npi = na**(T-1)
 nr = 2
+nc = 1
 actions = np.array([[-1,0],[0,-1], [1,0], [0,1]])
 
 """
@@ -56,7 +59,7 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
     #state_unc: state transition uncertainty condition
     #goal_pol: evaluate only policies that lead to the goal
     #utility: goal prior, preference p(o)
-    obs_unc, state_unc, goal_pol, avg, utility, = par_list
+    obs_unc, state_unc, goal_pol, avg, utility, h = par_list
 
 
     """
@@ -157,6 +160,9 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
 
     environment = env.GridWorld(A, B, Rho, trials = trials, T = T)
 
+    Rho_agent = np.ones((nr,ns,nc))/ nr
+
+    dirichlet_rew_params = np.ones_like(Rho_agent)
 
     """
     create policies
@@ -177,9 +183,8 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
 
     npi = pol.shape[0]
 
-    prior_policies = np.ones((npi,1)) / npi
-    h = 1
-    dirichlet_pol_param = np.zeros((npi,1)) + h
+    prior_policies = np.ones((npi,nc)) / npi
+    dirichlet_pol_param = np.zeros_like(prior_policies) + h
 
     """
     set state prior (where agent thinks it starts)
@@ -224,7 +229,10 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
 
         # perception and planning
 
-        bayes_prc = prc.HierarchicalPerception(A, B, Rho, [1], state_prior, util, prior_policies, dirichlet_pol_params = dirichlet_pol_param)
+        bayes_prc = prc.HierarchicalPerception(A, B, Rho_agent, [1], state_prior,
+                                               util, prior_policies,
+                                               dirichlet_pol_params = dirichlet_pol_param,
+                                               dirichlet_rew_params = dirichlet_rew_params)
 
         bayes_pln = agt.BayesianPlanner(bayes_prc, ac_sel, pol,
                       trials = trials, T = T,
@@ -232,6 +240,7 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
                       prior_policies = prior_policies,
                       number_of_states = ns,
                       learn_habit = True,
+                      learn_rew = True,
                       #save_everything = True,
                       number_of_policies = npi,
                       number_of_rewards = nr)
@@ -389,11 +398,13 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
 
     plt.show()
 
-    plt.figure()
-    plt.plot(w.agent.action_selection.RT[:,0])
-    plt.ylim([0,np.amax(w.agent.action_selection.RT[:,0])])
-    plt.savefig("Gridworld_Dir_h"+str(h)+".svg")
-    plt.show()
+    # max_RT = np.amax(w.agent.action_selection.RT[:,0])
+    # plt.figure()
+    # plt.plot(w.agent.action_selection.RT[:,0], '.')
+    # plt.ylim([0,1.05*max_RT])
+    # plt.xlim([0,trials])
+    # plt.savefig("Gridworld_Dir_h"+str(h)+".svg")
+    # plt.show()
 
     """
     save data
@@ -415,21 +426,20 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
 """
 set condition dependent up parameters
 """
-
+repetitions = 100
 # prior over outcomes: encodes utility
 utility = []
 
 #ut = [0.5, 0.6, 0.7, 0.8, 0.9, 1-1e-3]
-ut = [0.999]
-for u in ut:
-    utility.append(np.zeros(ns))
-    utility[-1][-5] = u
-    utility[-1][:-5] = (1-u)/(ns-1)
-    utility[-1][-4:] = (1-u)/(ns-1)
+u = 0.999
+utility = np.zeros(ns)
+utility[-5] = u
+utility[:-5] = (1-u)/(ns-1)
+utility[-4:] = (1-u)/(ns-1)
 
 # action selection: avergaed or max selection
 avg = True
-
+tendencies = [1,1000]
 # parameter list
 l = []
 
@@ -437,17 +447,38 @@ l = []
 #l.append([True, False, False, avg])
 
 # or state uncertainty
-l.append([False, True, False, avg])
+l.append([False, True, False, avg, utility])
 
 par_list = []
 
-for p in itertools.product(l, utility):
+for p in itertools.product(l, tendencies):
     par_list.append(p[0]+[p[1]])
 
-for pars in par_list:
-    w = run_agent(pars)
+# num_threads = 11
+# pool = Pool(num_threads)
 
-    print(w.agent.prior_policies[-1])
+RTs = np.zeros((repetitions*trials*len(tendencies)))
+for n,pars in enumerate(par_list):
+    h = pars[-1]
+    for i in range(repetitions):
+        w = run_agent(pars)
+        RTs[i*trials+n*(repetitions*trials):(i+1)*trials+n*(repetitions*trials)] = w.agent.action_selection.RT[:,0].copy()
+        w = 0
+        gc.collect()
+
+
+runs = np.tile(np.tile(np.arange(repetitions), (trials, 1)).reshape(-1, order='f'),len(tendencies))
+times = np.tile(np.arange(trials), repetitions*len(tendencies))
+tend_idx = np.array(['h = '+str(1./tendencies[i//(repetitions*trials)]) for i in range(repetitions*trials*len(tendencies))])
+DataFrame = pd.DataFrame({'trial': times, 'run': runs,'tendency h':tend_idx, 'RT': RTs})
+
+plt.figure()
+sns.lineplot(data=DataFrame, x='trial', y='RT', style='tendency h', estimator=np.nanmedian, linewidth=2, err_kws={'alpha':0.4})
+#plt.legend()
+plt.xlim([0,trials])
+plt.ylabel('RT (#sampples)')
+plt.savefig('Dir_gridworld_RT_stats.svg', spi=600)
+plt.show()
 
 
 """
