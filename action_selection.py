@@ -107,7 +107,7 @@ class DirichletSelector(object):
         # posterior_policies = prior * likelihood
         # posterior_policies /= posterior_policies.sum()
         #print(posterior_policies, prior, likelihood)
-        accepted_pis = np.zeros(50000, dtype=np.int32) - 1
+        accepted_pis = np.zeros(100000, dtype=np.int32) - 1
         dir_counts = np.ones(npi, np.double)
 
         curr_ess = 0
@@ -127,7 +127,7 @@ class DirichletSelector(object):
         #print("H", H_dir)
 
         i += 1
-        while H_dir>H_0 - 3 + 0.5*H_0:
+        while H_dir>H_0 - 3 + 0.4*H_0:
 
             pi = np.random.choice(npi, p=prior)
             r = np.random.rand()

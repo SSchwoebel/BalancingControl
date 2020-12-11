@@ -178,7 +178,7 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
     npi = pol.shape[0]
 
     prior_policies = np.ones((npi,1)) / npi
-    h = 100
+    h = 1
     dirichlet_pol_param = np.zeros((npi,1)) + h
 
     """
@@ -447,7 +447,7 @@ for p in itertools.product(l, utility):
 for pars in par_list:
     w = run_agent(pars)
 
-    print(w.agent.posterior_policies[-1,0])
+    print(w.agent.prior_policies[-1])
 
 
 """
