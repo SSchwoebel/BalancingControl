@@ -66,7 +66,7 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
     create matrices
     """
 
-    vals = np.ones(4)#np.array([1., 2/3., 1/2., 1./2.])
+    vals = np.array([1., 2/3., 1/2., 1./2.])
 
     #generating probability of observations in each state
     A = np.eye(ns)
@@ -283,11 +283,12 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
     unsuccessfull = np.where(environment.hidden_states[:,-1]!=goal)[0]
     total  = len(successfull)
 
-    #set up figure
-    factor = 2
-    fig = plt.figure(figsize=[factor*5,factor*5])
-
-    ax = fig.gca()
+    #set up figure params
+    factor = 3
+    grid_plot_kwargs = {'vmin': -2, 'vmax': 2, 'center': 0, 'linecolor': '#D3D3D3',
+                        'linewidths': 7, 'alpha': 1, 'xticklabels': False,
+                        'yticklabels': False, 'cbar': False,
+                        'cmap': sns.diverging_palette(120, 45, as_cmap=True)} #"RdBu_r",
 
     #plot start and goal state
     start_goal = np.zeros((L,L))
@@ -295,11 +296,27 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
     start_goal[0,1] = 1.
     start_goal[-2,-1] = -1.
 
-    u = sns.heatmap(start_goal, vmin=-1, vmax=1, zorder=2,
-                    ax = ax, linewidths = 2, alpha=0.7, cmap="RdBu_r",
-                    xticklabels = False,
-                    yticklabels = False,
-                    cbar=False)
+    # plot grid
+    fig = plt.figure(figsize=[factor*5,factor*5])
+
+    ax = fig.gca()
+
+    annot = np.zeros((L,L))
+    for i in range(L):
+        for j in range(L):
+            annot[i,j] = i*L+j
+
+    u = sns.heatmap(start_goal, ax = ax, **grid_plot_kwargs, annot=annot, annot_kws={"fontsize": 40})
+    ax.invert_yaxis()
+    plt.savefig('grid.svg', dpi=600)
+    plt.show()
+
+    # set up paths figure
+    fig = plt.figure(figsize=[factor*5,factor*5])
+
+    ax = fig.gca()
+
+    u = sns.heatmap(start_goal, zorder=2, ax = ax, **grid_plot_kwargs)
     ax.invert_yaxis()
 
     #find paths and count them
@@ -368,8 +385,8 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
                     xp = x + [x[0] + 0]
                     yp = y + [y[0] + 1]
 
-                plt.plot(xp,yp, '-', color='r', linewidth=factor*30*un[i,j],
-                         zorder = 9, alpha=0.6)
+                plt.plot(xp,yp, '-', color='#D5647C', linewidth=factor*75*un[i,j],
+                         zorder = 9, alpha=1)
 
     #set plot title
     plt.title("Planning: successful "+str(round(100*total/trials))+"%", fontsize=factor*9)
@@ -389,13 +406,14 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
                 if j == 1:
                     xp = x + [x[0] + 0]
                     yp = y + [y[0] + 1]
-                plt.plot(xp,yp, '-', color='c', linewidth=factor*30*n[i,j],
-                         zorder = 10, alpha=0.6)
+                plt.plot(xp,yp, '-', color='#4682B4', linewidth=factor*75*n[i,j],
+                         zorder = 10, alpha=1)
 
 
     print("percent won", total/trials, "state prior", np.amax(utility))
 
 
+    plt.savefig('chosen_paths_h'+str(h)+'.svg')
     plt.show()
 
     # max_RT = np.amax(w.agent.action_selection.RT[:,0])
@@ -426,7 +444,7 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
 """
 set condition dependent up parameters
 """
-repetitions = 100
+repetitions = 1
 # prior over outcomes: encodes utility
 utility = []
 
@@ -439,15 +457,18 @@ utility[-4:] = (1-u)/(ns-1)
 
 # action selection: avergaed or max selection
 avg = True
-tendencies = [1,1000]
+tendencies = [1,10000]
 # parameter list
 l = []
 
 # either observation uncertainty
-#l.append([True, False, False, avg])
+#l.append([True, False, False, avg, utility])
 
 # or state uncertainty
-l.append([False, True, False, avg, utility])
+#l.append([False, True, False, avg, utility])
+
+# or no uncertainty
+l.append([False, False, False, avg, utility])
 
 par_list = []
 
@@ -473,11 +494,12 @@ tend_idx = np.array(['h = '+str(1./tendencies[i//(repetitions*trials)]) for i in
 DataFrame = pd.DataFrame({'trial': times, 'run': runs,'tendency h':tend_idx, 'RT': RTs})
 
 plt.figure()
-sns.lineplot(data=DataFrame, x='trial', y='RT', style='tendency h', estimator=np.nanmedian, linewidth=2, err_kws={'alpha':0.4})
+sns.lineplot(data=DataFrame, x='trial', y='RT', style='tendency h', estimator=np.nanmedian, linewidth=2, err_kws={'alpha':0.4}, ci=99)
 #plt.legend()
 plt.xlim([0,trials])
+plt.ylim([0,0.75*np.amax(RTs)])
 plt.ylabel('RT (#sampples)')
-plt.savefig('Dir_gridworld_RT_stats.svg', spi=600)
+plt.savefig('Dir_gridworld_RT_stats_'+str(repetitions)+'repetitions.svg', dpi=600)
 plt.show()
 
 
