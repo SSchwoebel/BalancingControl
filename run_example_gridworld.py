@@ -389,7 +389,7 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
                          zorder = 9, alpha=1)
 
     #set plot title
-    plt.title("Planning: successful "+str(round(100*total/trials))+"%", fontsize=factor*9)
+    #plt.title("Planning: successful "+str(round(100*total/trials))+"%", fontsize=factor*9)
 
     #plot successful paths on top
     for i in range(ns):

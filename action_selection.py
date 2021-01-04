@@ -2,6 +2,7 @@ from misc import ln, logBeta, Beta_function
 import numpy as np
 from statsmodels.tsa.stattools import acovf as acov
 import scipy.special as scs
+from scipy.stats import entropy
 
 class MCMCSelector(object):
 
@@ -81,12 +82,17 @@ class MCMCSelector(object):
 
 class DirichletSelector(object):
 
-    def __init__(self, trials = 1, T = 10, number_of_actions = 2):
+    def __init__(self, trials = 1, T = 10, number_of_actions = 2, calc_dkl=False):
         self.n_pars = 0
 
         self.na = number_of_actions
         self.control_probability = np.zeros((trials, T, self.na))
         self.RT = np.zeros((trials, T-1))
+
+        self.calc_dkl = calc_dkl
+        if calc_dkl:
+            self.DKL_post = np.zeros((trials, T-1))
+            self.DKL_prior = np.zeros((trials, T-1))
 
     def reset_beliefs(self):
         self.control_probability[:,:,:] = 0
@@ -97,7 +103,7 @@ class DirichletSelector(object):
     def log_prior(self):
         return 0
 
-    def select_desired_action(self, tau, t, posterior_policies, actions, *args):
+    def select_desired_action(self, tau, t, posterior_policies, actions, *args, factor=0.4):
 
         npi = posterior_policies.shape[0]
         likelihood = args[0]
@@ -127,7 +133,7 @@ class DirichletSelector(object):
         #print("H", H_dir)
 
         i += 1
-        while H_dir>H_0 - 3 + 0.4*H_0:
+        while H_dir>H_0 - 3 + factor*H_0:
 
             pi = np.random.choice(npi, p=prior)
             r = np.random.rand()
@@ -155,6 +161,22 @@ class DirichletSelector(object):
         #chosen_pol = np.random.choice(npi, p=posterior_policies)
         u = actions[chosen_pol]
         #print(tau,t,i,accepted_pis[i-1],u,H_rel)
+
+        if self.calc_dkl:
+            # autocorr = acov(accepted_pis[:i+1])
+
+            # if autocorr[0] > 0:
+            #     ACT = 1 + 2*np.abs(autocorr[1:]).sum()/autocorr[0]
+            #     ess = i/ACT
+            #     ess = round(ess)
+            # else:
+            #     ess = 1
+
+            dist = dir_counts / dir_counts.sum()
+            D_KL = entropy(posterior_policies, dist)
+            self.DKL_post[tau,t] = D_KL
+            D_KL = entropy(prior, dist)
+            self.DKL_prior[tau,t] = D_KL
 
         #estimate action probability
         self.estimate_action_probability(tau, t, posterior_policies, actions)
