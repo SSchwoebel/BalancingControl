@@ -38,6 +38,8 @@ agent = 'bethe'
 save_data = False
 data_folder = os.path.join('/home/yourname/yourproject','data_folder')
 
+const = 1e-10
+
 trials = 200 #number of trials
 T = 5 #number of time steps in each trial
 L = 4 #grid length
@@ -59,7 +61,7 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
     #state_unc: state transition uncertainty condition
     #goal_pol: evaluate only policies that lead to the goal
     #utility: goal prior, preference p(o)
-    obs_unc, state_unc, goal_pol, avg, utility, h = par_list
+    obs_unc, state_unc, goal_pol, avg, context, utility, h, q = par_list
 
 
     """
@@ -69,7 +71,8 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
     vals = np.array([1., 2/3., 1/2., 1./2.])
 
     #generating probability of observations in each state
-    A = np.eye(ns)
+    A = np.eye(ns) + const
+    np.fill_diagonal(A, 1-(ns-1)*const)
 
     #generate horizontal gradient for observation uncertainty condition
     if obs_unc:
@@ -102,7 +105,7 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
 
 
     #state transition generative probability (matrix)
-    B = np.zeros((ns, ns, na))
+    B = np.zeros((ns, ns, na)) + const
 
     cert_arr = np.zeros(ns)
     for s in range(ns):
@@ -143,18 +146,18 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
 
             s_new = L*x + y
             if s_new == s:
-                B[s, s, u] = 1
+                B[s, s, u] = 1 - (ns-1)*const
             else:
-                B[s, s, u] = 1-c
-                B[s_new, s, u] = c
+                B[s, s, u] = 1-c + const
+                B[s_new, s, u] = c - (ns-1)*const
 
 
     """
     create environment (grid world)
     """
-    Rho = np.zeros((nr,ns))
-    Rho[0,:] = 1
-    Rho[:,np.argmax(utility)] = [0, 1]
+    Rho = np.zeros((nr,ns)) + const
+    Rho[0,:] = 1 - (nr-1)*const
+    Rho[:,np.argmax(utility)] = [0+const, 1-(nr-1)*const]
     print(Rho)
     util = np.array([1-np.amax(utility), np.amax(utility)])
 
@@ -198,6 +201,18 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
     state_prior[5] = 1./4.
 
     """
+    set context prior and matrix
+    """
+
+    context_prior = np.ones(nc)
+    trans_matrix_context = np.ones((nc,nc))
+    if nc > 1:
+        context_prior[0] = 0.9
+        context_prior[1:] = 0.1 / (nc-1)
+        trans_matrix_context[:] = (1-q) / (nc-1)
+        np.fill_diagonal(trans_matrix_context, q)
+
+    """
     set action selection method
     """
 
@@ -205,8 +220,8 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
 
         sel = 'avg'
 
-        ac_sel = asl.DirichletSelector(trials = trials, T = T,
-                                      number_of_actions = na)
+        ac_sel = asl.DirichletSelector(trials = trials, T = T, factor=0.6,
+                                      number_of_actions = na, calc_entropy=True, calc_dkl=True)
     else:
 
         sel = 'max'
@@ -229,7 +244,7 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
 
         # perception and planning
 
-        bayes_prc = prc.HierarchicalPerception(A, B, Rho_agent, [1], state_prior,
+        bayes_prc = prc.HierarchicalPerception(A, B, Rho_agent, trans_matrix_context, state_prior,
                                                util, prior_policies,
                                                dirichlet_pol_params = dirichlet_pol_param,
                                                dirichlet_rew_params = dirichlet_rew_params)
@@ -238,6 +253,7 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
                       trials = trials, T = T,
                       prior_states = state_prior,
                       prior_policies = prior_policies,
+                      prior_context = context_prior,
                       number_of_states = ns,
                       learn_habit = True,
                       learn_rew = True,
@@ -271,8 +287,17 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
     simulate experiment
     """
 
-    w.simulate_experiment()
-
+    if not context:
+        w.simulate_experiment()
+    else:
+        w.simulate_experiment(curr_trials=range(0, trials//2))
+        Rho_new = np.zeros((nr,ns)) + const
+        Rho_new[0,:] = 1 - (nr-1)*const
+        Rho_new[:,12] = [0+const, 1-(nr-1)*const]
+        print(Rho_new)
+        w.environment.Rho[:] = Rho_new
+        #w.agent.perception.generative_model_rewards = Rho_new
+        w.simulate_experiment(curr_trials=range(trials//2, trials))
 
     """
     plot and evaluate results
@@ -457,7 +482,10 @@ utility[-4:] = (1-u)/(ns-1)
 
 # action selection: avergaed or max selection
 avg = True
-tendencies = [1,10000]
+tendencies = [1,1000]
+context = True
+if context:
+    nc = 2
 # parameter list
 l = []
 
@@ -468,24 +496,72 @@ l = []
 #l.append([False, True, False, avg, utility])
 
 # or no uncertainty
-l.append([False, False, False, avg, utility])
+l.append([False, False, False, avg, context, utility])
 
 par_list = []
 
 for p in itertools.product(l, tendencies):
     par_list.append(p[0]+[p[1]])
 
+qs = [0.85, 0.95]
 # num_threads = 11
 # pool = Pool(num_threads)
-
+worlds = []
 RTs = np.zeros((repetitions*trials*len(tendencies)))
 for n,pars in enumerate(par_list):
     h = pars[-1]
+    q = qs[n]
     for i in range(repetitions):
-        w = run_agent(pars)
+        worlds.append(run_agent(pars+[q]))
+        w = worlds[-1]
         RTs[i*trials+n*(repetitions*trials):(i+1)*trials+n*(repetitions*trials)] = w.agent.action_selection.RT[:,0].copy()
-        w = 0
-        gc.collect()
+        if True:#i == repetitions-1:
+            plt.figure()
+            plt.plot(w.agent.posterior_context[:,0,0])
+            plt.show()
+            plt.figure()
+            rew_prob = np.einsum('tsc,tc->ts', w.agent.posterior_dirichlet_rew[:,0,1,:,:],w.agent.posterior_context[:,0])
+            rew_prob /= rew_prob.sum(axis=1)[:,None]
+            plt.plot(rew_prob)
+            plt.ylim([0, .75])
+            plt.show()
+            plt.figure()
+            plt.plot(np.einsum('tsc,tc->ts', w.agent.posterior_dirichlet_rew[:,0,1,:,:],w.agent.posterior_context[:,0]))
+            plt.ylim([0, 40])
+            plt.show()
+            plt.figure()
+            plt.plot(w.agent.action_selection.entropy_post[:,0])
+            plt.ylim([2.5,5])
+            plt.show()
+            plt.figure()
+            plt.plot(w.agent.action_selection.entropy_like[:,0])
+            plt.ylim([2.5,5])
+            plt.show()
+            plt.figure()
+            plt.plot(w.agent.action_selection.entropy_prior[:,0])
+            plt.ylim([2.5,5])
+            plt.show()
+            plt.figure()
+            plt.figure()
+            plt.plot(w.agent.action_selection.DKL_post[:,0])
+            plt.show()
+            plt.figure()
+            plt.plot(w.agent.action_selection.DKL_prior[:,0])
+            plt.show()
+            posterior_policies = np.einsum('tpc,tc->tp', w.agent.likelihood[:,0], w.agent.posterior_context[:,0])
+            k = 12
+            ind = np.argpartition(posterior_policies, -k, axis=1)[:,-k:]
+            max_pol = np.array([posterior_policies[i,ind[i]].sum() for i in range(trials)])
+            plt.plot(max_pol)
+            plt.show()
+            plt.figure()
+            plt.plot(posterior_policies.argmax(axis=1))
+            plt.show()
+            plt.figure()
+            plt.plot(w.agent.action_selection.RT[:,0], 'x')
+            plt.show()
+        # w = 0
+        # gc.collect()
 
 
 runs = np.tile(np.tile(np.arange(repetitions), (trials, 1)).reshape(-1, order='f'),len(tendencies))
@@ -494,15 +570,33 @@ tend_idx = np.array(['h = '+str(1./tendencies[i//(repetitions*trials)]) for i in
 DataFrame = pd.DataFrame({'trial': times, 'run': runs,'tendency h':tend_idx, 'RT': RTs})
 
 plt.figure()
-sns.lineplot(data=DataFrame, x='trial', y='RT', style='tendency h', estimator=np.nanmedian, linewidth=2, err_kws={'alpha':0.4}, ci=99)
+sns.lineplot(data=DataFrame, x='trial', y='RT', style='tendency h', estimator=np.nanmean, linewidth=2, err_kws={'alpha':0.4}, ci=99)
 #plt.legend()
 plt.xlim([0,trials])
-plt.ylim([0,0.75*np.amax(RTs)])
+plt.ylim([0,0.5*np.amax(RTs)])#0.75*
 plt.ylabel('RT (#sampples)')
-plt.savefig('Dir_gridworld_RT_stats_'+str(repetitions)+'repetitions.svg', dpi=600)
+plt.savefig('Dir_gridworld_RT_stats_norewlearn_'+str(repetitions)+'repetitions.svg', dpi=600)
+plt.show()
+
+plt.figure()
+sns.lineplot(data=DataFrame, x='trial', y='RT', style='tendency h', estimator=np.nanmean, linewidth=2, err_kws={'alpha':0.4}, ci=99)
+#plt.legend()
+plt.xlim([0,trials])
+plt.ylabel('RT (#sampples)')
+plt.savefig('Dir_gridworld_RT_stats_norewlearn_'+str(repetitions)+'repetitions_large.svg', dpi=600)
 plt.show()
 
 
+def run_action_selection(post, prior, like, trials = trials, crit_factor = 0.4, calc_dkl = False):
+
+    ac_sel = asl.DirichletSelector(trials, 2, npi, factor=crit_factor, calc_dkl=calc_dkl)
+    for t in range(trials):
+        ac_sel.select_desired_action(t, 0, post[t], list(range(npi)), like[t], prior[t])
+
+    if calc_dkl:
+        return ac_sel.RT.squeeze(), ac_sel.DKL_post.squeeze(), ac_sel.DKL_prior.squeeze()
+    else:
+        return ac_sel.RT.squeeze()
 """
 reload data
 """

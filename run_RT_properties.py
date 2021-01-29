@@ -11,6 +11,7 @@ import matplotlib.pylab as plt
 import action_selection as asl
 import seaborn as sns
 import pandas as pd
+from scipy.stats import entropy
 #sns.set_style("whitegrid", {"axes.edgecolor": "0.15"})#, "axes.spines.top": "False", "axes.spines.right": "False"})
 #plt.style.use('seaborn-darkgrid')
 plt.style.use('seaborn-whitegrid')
@@ -38,6 +39,7 @@ plt.figure()
 plt.plot(l, label='likelihood, habit, goal')
 plt.plot(p, label='prior agreement')
 plt.plot(conflict, label='prior conflict')
+plt.plot(flat, label='flat')
 plt.ylim([0,0.2])
 plt.legend()
 plt.xlim([0,npi])
@@ -47,11 +49,11 @@ plt.savefig('underlying_prior_like_for_distributions.svg')
 plt.show()
 
 # test function
-def run_action_selection(post, prior, like, trials = 100, crit_factor = 0.4, calc_dkl = False):
+def run_action_selection(post, prior, like, trials = 100, crit_factor = 0.5, calc_dkl = False):
 
-    ac_sel = asl.DirichletSelector(trials, 2, npi, calc_dkl=calc_dkl)
+    ac_sel = asl.DirichletSelector(trials, 2, npi, factor=crit_factor, calc_dkl=calc_dkl)
     for t in range(trials):
-        ac_sel.select_desired_action(t, 0, post, list(range(npi)), like, prior, factor=crit_factor)
+        ac_sel.select_desired_action(t, 0, post, list(range(npi)), like, prior)
 
     if calc_dkl:
         return ac_sel.RT.squeeze(), ac_sel.DKL_post.squeeze(), ac_sel.DKL_prior.squeeze()
@@ -59,7 +61,7 @@ def run_action_selection(post, prior, like, trials = 100, crit_factor = 0.4, cal
         return ac_sel.RT.squeeze()
 
 # set up number of trials
-trials = 5000
+trials = 200
 
 # conflict
 prior = np.array(conflict)
@@ -153,36 +155,36 @@ def plot_common_histogram(factors, trials):
 
     frame['factor'] = np.repeat(factors, trials)
 
-    bins = 155
+    bins = 90
 
     plt.figure()
     sns.histplot(frame[['conflict', 'agreement']], alpha=0.5, bins=bins, binrange=[min_RT,max_RT],edgecolor='black')#, common_bins=False)#
     # for f in frames:
     #     sns.histplot(f[['conflict', 'agreement']], alpha=0.5, bins=100, binrange=[min_RT,max_RT],edgecolor='black', common_bins=True)#
-    plt.savefig('RT_tests_histogram_conflict_agreement_all_'+str(npi)+'npi_'+str(trials)+'trials.svg',dpi=600)
     plt.xlim(0,1600)
-    plt.ylim([0,trials])
+    plt.ylim([0,trials+100])
     plt.xlabel('RT (#samples)')
+    plt.savefig('RT_tests_histogram_conflict_agreement_all_'+str(npi)+'npi_'+str(trials)+'trials.svg',dpi=600)
     plt.show()
 
     plt.figure()
     sns.histplot(frame[["goal", "habit"]], alpha=0.5, bins=bins, binrange=[min_RT,max_RT],edgecolor='black')#, common_bins=False)#
-    plt.savefig('RT_tests_histogram_goal_habit_all_'+str(npi)+'npi_'+str(trials)+'trials.svg',dpi=600)
     plt.xlim(0,1600)
-    plt.ylim([0,trials])
+    plt.ylim([0,trials+100])
     plt.xlabel('RT (#samples)')
+    plt.savefig('RT_tests_histogram_goal_habit_all_'+str(npi)+'npi_'+str(trials)+'trials.svg',dpi=600)
     plt.show()
 
     plt.figure()
     sns.histplot(frame, alpha=0.6, bins=bins, binrange=[min_RT,max_RT],edgecolor='black')#, common_bins=False)#
-    plt.savefig('RT_tests_histogram_all_all_'+str(npi)+'npi_'+str(trials)+'trials.svg',dpi=600)
     plt.xlim(0,1600)
-    plt.ylim([0,trials])
+    plt.ylim([0,trials+100])
     plt.xlabel('RT (#samples)')
+    plt.savefig('RT_tests_histogram_all_all_'+str(npi)+'npi_'+str(trials)+'trials.svg',dpi=600)
     plt.show()
 
 def evaluate_DKL(num_tests, trials, conflict):
-    factors = np.arange(0.05,0.65,0.05)
+    factors = np.arange(0.05,0.85,0.05)
     num_factors = len(factors)
     RT = np.zeros((num_factors,trials))
     DKL = np.zeros((3,num_factors*trials*2))
@@ -206,11 +208,56 @@ def evaluate_DKL(num_tests, trials, conflict):
     plt.show()
 
 
+def RT_of_like_entropy(trials):
+    pass
+
+l_values = np.arange(1./npi, 0.16334205362982337, 0.01)
+num_tests = len(l_values)
+likes = np.array([[l]*gp+[(1-l*gp)/(n-gp)]*(n-gp) for l in l_values])
+prior = flat
+crit_factor = 0.5
+entropies = [entropy(l) for l in likes ]
+
+RT = np.zeros((2,num_tests*trials))
+for i, l in enumerate(likes):
+    post = l
+    like = l
+    RT[0, i*trials:(i+1)*trials] = run_action_selection(post, prior, like, trials, crit_factor=crit_factor)
+    RT[1, i*trials:(i+1)*trials] = entropies[i]
+RT_df = pd.DataFrame(data=RT.T, columns=['RT','entropy'])
+
+plt.figure()
+sns.lineplot(data=RT_df, x='entropy', y='RT')
+plt.title('mean RT as a function of likelihood entropy')
+plt.savefig('RT_like_entropy.svg')
+plt.show()
+
+# RT = np.zeros((num_tests, trials))
+# for i, l in enumerate(likes):
+#     post = l
+#     like = l
+#     RT[i] = run_action_selection(post, prior, like, trials, crit_factor=crit_factor)
+# RT = pd.DataFrame(data=RT.T, columns=entropies)
+
+# plt.figure()
+# sns.histplot(RT, bins=50)
+# plt.show()
+
+# means = [RT[e].mean() for e in entropies]
+# means.reverse()
+# e_r  = entropies.copy()
+# e_r.reverse()
+# plt.figure()
+# plt.plot(means)
+# plt.xticks(ticks=range(len(e_r)), labels=np.around(e_r, decimals=2))
+# plt.title('mean RT as a function of likelihood entropy')
+# plt.show()
+
 #evaluate_DKL(num_tests, trials, test_vals[0])
 #plot_RT_distributions(num_tests, trials, test_vals, 0.1)
 
-factors = [0.1,0.3,0.5]
-plot_common_histogram(factors, trials)
+# factors = [0.1,0.3,0.5]
+# plot_common_histogram(factors, trials)
 
 
 

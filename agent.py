@@ -118,14 +118,14 @@ class BayesianPlanner(object):
         #update beliefs about policies
         self.posterior_policies[tau, t], self.likelihood[tau,t] = self.perception.update_beliefs_policies(tau, t)
 
-        if t == 0 and tau == 0:
+        if tau == 0:
             prior_context = self.prior_context
         else: #elif t == 0:
             prior_context = np.dot(self.perception.transition_matrix_context, self.posterior_context[tau-1, -1]).reshape((self.nc))
 #            else:
 #                prior_context = np.dot(self.perception.transition_matrix_context, self.posterior_context[tau, t-1])
 
-        if self.nc>1:
+        if self.nc>1 and t>0:
             self.posterior_context[tau, t] = \
             self.perception.update_beliefs_context(tau, t, \
                                                    reward, \
@@ -133,8 +133,14 @@ class BayesianPlanner(object):
                                                    self.posterior_policies[tau, t], \
                                                    prior_context, \
                                                    self.policies)
+        elif self.nc>1 and t==0:
+            self.posterior_context[tau, t] = prior_context
         else:
             self.posterior_context[tau,t] = 1
+
+        # print(tau,t)
+        # print("prior", prior_context)
+        # print("post", self.posterior_context[tau, t])
 
         if t < self.T-1:
             post_pol = np.dot(self.posterior_policies[tau, t], self.posterior_context[tau, t])
@@ -163,12 +169,12 @@ class BayesianPlanner(object):
 
         #get response probability
         posterior_states = self.posterior_states[tau, t]
-        posterior_policies = np.dot(self.posterior_policies[tau, t], self.posterior_context[tau, t])
+        posterior_policies = np.einsum('pc,c->p', self.posterior_policies[tau, t], self.posterior_context[tau, t])
         posterior_policies /= posterior_policies.sum()
-        avg_likelihood = np.dot(self.likelihood[tau,t], self.posterior_context[tau, t])
-        #avg_likelihood /= avg_likelihood.sum()
-        prior = np.dot(self.prior_policies[tau-1], self.posterior_context[tau, t])
-        #prior /= prior.sum()
+        avg_likelihood = np.einsum('pc,c->p', self.likelihood[tau,t], self.posterior_context[tau, t])
+        avg_likelihood /= avg_likelihood.sum()
+        prior = np.einsum('pc,c->p', self.prior_policies[tau-1], self.posterior_context[tau, t])
+        prior /= prior.sum()
         #print(self.posterior_context[tau, t])
         non_zero = posterior_policies > 0
         controls = self.policies[:, t]#[non_zero]

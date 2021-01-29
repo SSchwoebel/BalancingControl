@@ -41,10 +41,11 @@ class HierarchicalPerception(object):
 
             for c in range(self.nc):
                 for state in range(self.nh):
-                    self.generative_model_rewards[:,state,c] =\
-                    np.exp(scs.digamma(self.dirichlet_rew_params[:,state,c])\
-                           -scs.digamma(self.dirichlet_rew_params[:,state,c].sum()))
-                    self.generative_model_rewards[:,state,c] /= self.generative_model_rewards[:,state,c].sum()
+                    self.generative_model_rewards[:,state,c] = self.dirichlet_rew_params[:,state,c] / self.dirichlet_rew_params[:,state,c].sum()
+                    # self.generative_model_rewards[:,state,c] =\
+                    # np.exp(scs.digamma(self.dirichlet_rew_params[:,state,c])\
+                    #        -scs.digamma(self.dirichlet_rew_params[:,state,c].sum()))
+                    # self.generative_model_rewards[:,state,c] /= self.generative_model_rewards[:,state,c].sum()
 
 
     def reset(self, params, fixed):
@@ -225,7 +226,7 @@ class HierarchicalPerception(object):
         chosen_pol = np.argmax(posterior_policies, axis=0)
 #        self.dirichlet_pol_params[chosen_pol,:] += posterior_context.sum(axis=0)/posterior_context.sum()
         self.dirichlet_pol_params[chosen_pol,:] += posterior_context
-        self.prior_policies[:] = np.exp(scs.digamma(self.dirichlet_pol_params) - scs.digamma(self.dirichlet_pol_params.sum(axis=0))[np.newaxis,:])
+        self.prior_policies[:] = self.dirichlet_pol_params.copy() #np.exp(scs.digamma(self.dirichlet_pol_params) - scs.digamma(self.dirichlet_pol_params.sum(axis=0))[np.newaxis,:])
         self.prior_policies /= self.prior_policies.sum(axis=0)[np.newaxis,:]
 
         return self.dirichlet_pol_params, self.prior_policies
@@ -236,9 +237,10 @@ class HierarchicalPerception(object):
         self.dirichlet_rew_params[reward,:,:] += states * posterior_context[np.newaxis,:]
         for c in range(self.nc):
             for state in range(self.nh):
+                #self.generative_model_rewards[:,state,c] = self.dirichlet_rew_params[:,state,c] / self.dirichlet_rew_params[:,state,c].sum()
                 self.generative_model_rewards[:,state,c] =\
                 np.exp(scs.digamma(self.dirichlet_rew_params[:,state,c])\
-                       -scs.digamma(self.dirichlet_rew_params[:,state,c].sum()))
+                        -scs.digamma(self.dirichlet_rew_params[:,state,c].sum()))
                 self.generative_model_rewards[:,state,c] /= self.generative_model_rewards[:,state,c].sum()
 
             self.rew_messages[:,t+1:,c] = self.prior_rewards.dot(self.generative_model_rewards[:,:,c])[:,np.newaxis]

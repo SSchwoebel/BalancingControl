@@ -82,17 +82,23 @@ class MCMCSelector(object):
 
 class DirichletSelector(object):
 
-    def __init__(self, trials = 1, T = 10, number_of_actions = 2, calc_dkl=False):
+    def __init__(self, trials = 1, T = 10, number_of_actions = 2, factor=0.4, calc_dkl=False, calc_entropy=False):
         self.n_pars = 0
 
         self.na = number_of_actions
         self.control_probability = np.zeros((trials, T, self.na))
         self.RT = np.zeros((trials, T-1))
+        self.factor = factor
 
         self.calc_dkl = calc_dkl
         if calc_dkl:
             self.DKL_post = np.zeros((trials, T-1))
             self.DKL_prior = np.zeros((trials, T-1))
+        self.calc_entropy = calc_entropy
+        if calc_entropy:
+            self.entropy_post = np.zeros((trials, T-1))
+            self.entropy_prior = np.zeros((trials, T-1))
+            self.entropy_like = np.zeros((trials, T-1))
 
     def reset_beliefs(self):
         self.control_probability[:,:,:] = 0
@@ -103,11 +109,11 @@ class DirichletSelector(object):
     def log_prior(self):
         return 0
 
-    def select_desired_action(self, tau, t, posterior_policies, actions, *args, factor=0.4):
+    def select_desired_action(self, tau, t, posterior_policies, actions, *args):
 
         npi = posterior_policies.shape[0]
         likelihood = args[0]
-        prior = args[1]
+        prior = args[1] #np.ones_like(likelihood)/npi #
         # likelihood = np.array([0.5,0.5])
         # prior = np.array([0.5,0.5])
         # posterior_policies = prior * likelihood
@@ -132,33 +138,39 @@ class DirichletSelector(object):
                         + logBeta(dir_counts)
         #print("H", H_dir)
 
-        i += 1
-        while H_dir>H_0 - 3 + factor*H_0:
-
-            pi = np.random.choice(npi, p=prior)
-            r = np.random.rand()
-            #print(i, curr_ess)
-
-            #acc_prob = min(1, posterior_policies[pi]/posterior_policies[accepted_pis[i-1]])
-            acc_prob = min(1, likelihood[pi]/likelihood[accepted_pis[i-1]])
-            if acc_prob >= r:#posterior_policies[pi]/posterior_policies[accepted_pis[i-1]] > r:
-                accepted_pis[i] = pi
-                dir_counts[pi] += acc_prob
-            else:
-                accepted_pis[i] = accepted_pis[i-1]
-                dir_counts[accepted_pis[i-1]] += 1-acc_prob
-
-            H_dir =     + (dir_counts.sum()-npi)*scs.digamma(dir_counts.sum()) \
-                        - ((dir_counts - 1)*scs.digamma(dir_counts)).sum() \
-                        + logBeta(dir_counts)
-            #print("H", H_dir)
-
+        if t == 0:
             i += 1
+            while H_dir>H_0 - 3 + self.factor*H_0:
 
-        self.RT[tau,t] = i-1
-        print(tau, t, i-1)
-        chosen_pol = accepted_pis[i-1]
-        #chosen_pol = np.random.choice(npi, p=posterior_policies)
+                pi = np.random.choice(npi, p=prior)
+                r = np.random.rand()
+                #print(i, curr_ess)
+
+                #acc_prob = min(1, posterior_policies[pi]/posterior_policies[accepted_pis[i-1]])
+                if likelihood[accepted_pis[i-1]]>0:
+                    acc_prob = min(1, likelihood[pi]/likelihood[accepted_pis[i-1]])
+                else:
+                    acc_prob = 1
+                if acc_prob >= r:#posterior_policies[pi]/posterior_policies[accepted_pis[i-1]] > r:
+                    accepted_pis[i] = pi
+                    dir_counts[pi] += 1#acc_prob
+                else:
+                    accepted_pis[i] = accepted_pis[i-1]
+                    dir_counts[accepted_pis[i-1]] += 1#1-acc_prob
+
+                H_dir =     + (dir_counts.sum()-npi)*scs.digamma(dir_counts.sum()) \
+                            - ((dir_counts - 1)*scs.digamma(dir_counts)).sum() \
+                            + logBeta(dir_counts)
+                #print("H", H_dir)
+
+                i += 1
+
+            self.RT[tau,t] = i-1
+            #print(tau, t, i-1)
+        else:
+            self.RT[tau,t] = 0
+        #chosen_pol = accepted_pis[i-1]
+        chosen_pol = np.random.choice(npi, p=posterior_policies)
         u = actions[chosen_pol]
         #print(tau,t,i,accepted_pis[i-1],u,H_rel)
 
@@ -177,6 +189,17 @@ class DirichletSelector(object):
             self.DKL_post[tau,t] = D_KL
             D_KL = entropy(prior, dist)
             self.DKL_prior[tau,t] = D_KL
+
+        if self.calc_entropy:
+            self.entropy_post[tau,t] = entropy(posterior_policies)
+            self.entropy_prior[tau,t] = entropy(prior)
+            self.entropy_like[tau,t] = entropy(likelihood)
+            # if t==0:
+            #     print(tau)
+            #     n = 12
+            #     ind = np.argpartition(posterior_policies, -n)[-n:]
+            #     print(np.sort(ind))
+            #     print(np.sort(posterior_policies[ind]))
 
         #estimate action probability
         self.estimate_action_probability(tau, t, posterior_policies, actions)
