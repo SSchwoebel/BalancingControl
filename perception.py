@@ -145,7 +145,8 @@ class HierarchicalPerception(object):
         posterior = self.fwd_messages*self.bwd_messages*self.obs_messages[:,:,np.newaxis,:]*self.rew_messages[:,:,np.newaxis,:]
         norm = posterior.sum(axis = 0)
         self.fwd_norms[-1] = norm[-1]
-        posterior /= norm
+        non_zero = norm > 0
+        posterior[:,non_zero] /= norm[non_zero]
         return np.nan_to_num(posterior)
 
     def update_beliefs_policies(self, tau, t):
@@ -234,6 +235,8 @@ class HierarchicalPerception(object):
     def update_beliefs_dirichlet_rew_params(self, tau, t, reward, posterior_states, posterior_policies, posterior_context = [1]):
         states = (posterior_states[:,t,:,:] * posterior_policies[np.newaxis,:,:]).sum(axis=1)
         old = self.dirichlet_rew_params.copy()
+        # c = np.argmax(posterior_context)
+        # self.dirichlet_rew_params[reward,:,c] += states[:,c]
         self.dirichlet_rew_params[reward,:,:] += states * posterior_context[np.newaxis,:]
         for c in range(self.nc):
             for state in range(self.nh):

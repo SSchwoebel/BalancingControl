@@ -3,6 +3,7 @@ import numpy as np
 from statsmodels.tsa.stattools import acovf as acov
 import scipy.special as scs
 from scipy.stats import entropy
+import matplotlib.pylab as plt
 
 class MCMCSelector(object):
 
@@ -173,6 +174,10 @@ class DirichletSelector(object):
         chosen_pol = np.random.choice(npi, p=posterior_policies)
         u = actions[chosen_pol]
         #print(tau,t,i,accepted_pis[i-1],u,H_rel)
+        # if tau in range(100,110) and t==0:
+        #     plt.figure()
+        #     plt.plot(posterior_policies)
+        #     plt.show()
 
         if self.calc_dkl:
             # autocorr = acov(accepted_pis[:i+1])

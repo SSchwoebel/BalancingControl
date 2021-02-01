@@ -38,23 +38,27 @@ agent = 'bethe'
 save_data = False
 data_folder = os.path.join('/home/yourname/yourproject','data_folder')
 
-const = 1e-10
+const = 0#1e-10
 
 trials = 200 #number of trials
 T = 5 #number of time steps in each trial
-L = 4 #grid length
-no = L**2 #number of observations
-ns = L**2 #number of states
-na = 4 #number of actions
+Lx = 4 #grid length
+Ly = 5
+no = Lx*Ly#Lx*Ly #number of observations
+ns = Lx*Ly#Lx*Ly #number of states
+na = 3 #number of actions
 npi = na**(T-1)
 nr = 2
 nc = 1
-actions = np.array([[-1,0],[0,-1], [1,0], [0,1]])
+actions = np.array([[0,-1], [1,0], [0,1]])#[-1,0],
+g1 = 14
+g2 = 10
+start = 2
 
 """
 run function
 """
-def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
+def run_agent(par_list, trials=trials, T=T, Lx = Lx, Ly = Ly, ns=ns, na=na):
 
     #set parameters:
     #obs_unc: observation uncertainty condition
@@ -75,33 +79,33 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
     np.fill_diagonal(A, 1-(ns-1)*const)
 
     #generate horizontal gradient for observation uncertainty condition
-    if obs_unc:
+    # if obs_unc:
 
-        condition = 'obs'
+    #     condition = 'obs'
 
-        for s in range(ns):
-            x = s//L
-            y = s%L
+    #     for s in range(ns):
+    #         x = s//Ly
+    #         y = s%Ly
 
-            c = vals[L - y - 1]
+    #         c = 1#vals[L - y - 1]
 
-            # look for neighbors
-            neighbors = []
-            if (s-4)>=0 and (s-4)!=11:
-                neighbors.append(s-4)
+    #         # look for neighbors
+    #         neighbors = []
+    #         if (s-4)>=0 and (s-4)!=g1:
+    #             neighbors.append(s-4)
 
-            if (s%4)!=0 and (s-1)!=11:
-                neighbors.append(s-1)
+    #         if (s%4)!=0 and (s-1)!=g1:
+    #             neighbors.append(s-1)
 
-            if (s+4)<=(ns-1) and (s+4)!=11:
-                neighbors.append(s+4)
+    #         if (s+4)<=(ns-1) and (s+4)!=g1:
+    #             neighbors.append(s+4)
 
-            if ((s+1)%4)!=0 and (s+1)!=11:
-                neighbors.append(s+1)
+    #         if ((s+1)%4)!=0 and (s+1)!=g1:
+    #             neighbors.append(s+1)
 
-            A[s,s] = c
-            for n in neighbors:
-                A[n,s] = (1-c)/len(neighbors)
+    #         A[s,s] = c
+    #         for n in neighbors:
+    #             A[n,s] = (1-c)/len(neighbors)
 
 
     #state transition generative probability (matrix)
@@ -109,8 +113,8 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
 
     cert_arr = np.zeros(ns)
     for s in range(ns):
-        x = s//L
-        y = s%L
+        x = s//Ly
+        y = s%Ly
 
         #state uncertainty condition
         if state_unc:
@@ -130,21 +134,21 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
 
         cert_arr[s] = c
         for u in range(na):
-            x = s//L+actions[u][0]
-            y = s%L+actions[u][1]
+            x = s//Ly+actions[u][0]
+            y = s%Ly+actions[u][1]
 
             #check if state goes over boundary
             if x < 0:
                 x = 0
-            elif x == L:
-                x = L-1
+            elif x == Lx:
+                x = Lx-1
 
             if y < 0:
                 y = 0
-            elif y == L:
-                y = L-1
+            elif y == Ly:
+                y = Ly-1
 
-            s_new = L*x + y
+            s_new = Ly*x + y
             if s_new == s:
                 B[s, s, u] = 1 - (ns-1)*const
             else:
@@ -161,11 +165,21 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
     print(Rho)
     util = np.array([1-np.amax(utility), np.amax(utility)])
 
-    environment = env.GridWorld(A, B, Rho, trials = trials, T = T)
+    environment = env.GridWorld(A, B, Rho, trials = trials, T = T, initial_state=start)
 
     Rho_agent = np.ones((nr,ns,nc))/ nr
 
-    dirichlet_rew_params = np.ones_like(Rho_agent)
+
+    if context:
+        templates = np.ones_like(Rho_agent)
+        templates[0] *= 100
+        assert ns == nc
+        for s in range(ns):
+            templates[0,s,s] = 1
+            templates[1,s,s] = 100
+        dirichlet_rew_params = templates
+    else:
+        dirichlet_rew_params = np.ones_like(Rho_agent)
 
     """
     create policies
@@ -182,7 +196,7 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
     else:
         pol = np.array(list(itertools.product(list(range(na)), repeat=T-1)))
 
-    pol = pol[np.where(pol[:,0]>1)]
+    #pol = pol[np.where(pol[:,0]>1)]
 
     npi = pol.shape[0]
 
@@ -195,10 +209,11 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
 
     state_prior = np.zeros((ns))
 
-    state_prior[0] = 1./4.
-    state_prior[1] = 1./4.
-    state_prior[4] = 1./4.
-    state_prior[5] = 1./4.
+    # state_prior[0] = 1./4.
+    # state_prior[1] = 1./4.
+    # state_prior[4] = 1./4.
+    # state_prior[5] = 1./4.
+    state_prior[start] = 1
 
     """
     set context prior and matrix
@@ -207,8 +222,9 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
     context_prior = np.ones(nc)
     trans_matrix_context = np.ones((nc,nc))
     if nc > 1:
-        context_prior[0] = 0.9
-        context_prior[1:] = 0.1 / (nc-1)
+        # context_prior[0] = 0.9
+        # context_prior[1:] = 0.1 / (nc-1)
+        context_prior /= nc
         trans_matrix_context[:] = (1-q) / (nc-1)
         np.fill_diagonal(trans_matrix_context, q)
 
@@ -220,7 +236,7 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
 
         sel = 'avg'
 
-        ac_sel = asl.DirichletSelector(trials = trials, T = T, factor=0.6,
+        ac_sel = asl.DirichletSelector(trials = trials, T = T, factor=0.4,
                                       number_of_actions = na, calc_entropy=True, calc_dkl=True)
     else:
 
@@ -287,13 +303,13 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
     simulate experiment
     """
 
-    if not context:
+    if False:#not context:
         w.simulate_experiment()
     else:
         w.simulate_experiment(curr_trials=range(0, trials//2))
         Rho_new = np.zeros((nr,ns)) + const
         Rho_new[0,:] = 1 - (nr-1)*const
-        Rho_new[:,12] = [0+const, 1-(nr-1)*const]
+        Rho_new[:,g2] = [0+const, 1-(nr-1)*const]
         print(Rho_new)
         w.environment.Rho[:] = Rho_new
         #w.agent.perception.generative_model_rewards = Rho_new
@@ -316,20 +332,22 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
                         'cmap': sns.diverging_palette(120, 45, as_cmap=True)} #"RdBu_r",
 
     #plot start and goal state
-    start_goal = np.zeros((L,L))
+    start_goal = np.zeros((Lx,Ly))
 
-    start_goal[0,1] = 1.
-    start_goal[-2,-1] = -1.
+    x_y_start = (start//Ly, start%Ly)
+    start_goal[x_y_start] = 1.
+    x_y_g1 = (g1//Ly, g1%Ly)
+    start_goal[x_y_g1] = -1.
 
     # plot grid
-    fig = plt.figure(figsize=[factor*5,factor*5])
+    fig = plt.figure(figsize=[factor*5,factor*4])
 
     ax = fig.gca()
 
-    annot = np.zeros((L,L))
-    for i in range(L):
-        for j in range(L):
-            annot[i,j] = i*L+j
+    annot = np.zeros((Lx,Ly))
+    for i in range(Lx):
+        for j in range(Ly):
+            annot[i,j] = i*Ly+j
 
     u = sns.heatmap(start_goal, ax = ax, **grid_plot_kwargs, annot=annot, annot_kws={"fontsize": 40})
     ax.invert_yaxis()
@@ -337,7 +355,7 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
     plt.show()
 
     # set up paths figure
-    fig = plt.figure(figsize=[factor*5,factor*5])
+    fig = plt.figure(figsize=[factor*5,factor*4])
 
     ax = fig.gca()
 
@@ -351,15 +369,15 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
 
         for j in range(T-1):
             d = environment.hidden_states[i, j+1] - environment.hidden_states[i, j]
-            if d not in [1,-1,4,-4,0]:
+            if d not in [1,-1,Ly,-Ly,0]:
                 print("ERROR: beaming")
             if d == 1:
                 n[environment.hidden_states[i, j],0] +=1
             if d == -1:
                 n[environment.hidden_states[i, j]-1,0] +=1
-            if d == 4:
+            if d == Ly:
                 n[environment.hidden_states[i, j],1] +=1
-            if d == -4:
+            if d == -Ly:
                 n[environment.hidden_states[i, j]-4,1] +=1
 
     un = np.zeros((ns, na))
@@ -368,15 +386,15 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
 
         for j in range(T-1):
             d = environment.hidden_states[i, j+1] - environment.hidden_states[i, j]
-            if d not in [1,-1,L,-L,0]:
+            if d not in [1,-1,Ly,-Ly,0]:
                 print("ERROR: beaming")
             if d == 1:
                 un[environment.hidden_states[i, j],0] +=1
             if d == -1:
                 un[environment.hidden_states[i, j]-1,0] +=1
-            if d == 4:
+            if d == Ly:
                 un[environment.hidden_states[i, j],1] +=1
-            if d == -4:
+            if d == -Ly:
                 un[environment.hidden_states[i, j]-4,1] +=1
 
     total_num = n.sum() + un.sum()
@@ -390,8 +408,8 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
     #plotting
     for i in range(ns):
 
-        x = [i%L + .5]
-        y = [i//L + .5]
+        x = [i%Ly + .5]
+        y = [i//Ly + .5]
 
         #plot uncertainties
         if obs_unc:
@@ -419,8 +437,8 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
     #plot successful paths on top
     for i in range(ns):
 
-        x = [i%L + .5]
-        y = [i//L + .5]
+        x = [i%Ly + .5]
+        y = [i//Ly + .5]
 
         for j in range(2):
 
@@ -469,23 +487,23 @@ def run_agent(par_list, trials=trials, T=T, L = L, ns=ns, na=na):
 """
 set condition dependent up parameters
 """
-repetitions = 1
+repetitions = 10
 # prior over outcomes: encodes utility
 utility = []
 
 #ut = [0.5, 0.6, 0.7, 0.8, 0.9, 1-1e-3]
 u = 0.999
 utility = np.zeros(ns)
-utility[-5] = u
-utility[:-5] = (1-u)/(ns-1)
-utility[-4:] = (1-u)/(ns-1)
+utility[g1] = u
+utility[:g1] = (1-u)/(ns-1)
+utility[g1+1:] = (1-u)/(ns-1)
 
 # action selection: avergaed or max selection
 avg = True
 tendencies = [1,1000]
 context = True
 if context:
-    nc = 2
+    nc = ns
 # parameter list
 l = []
 
@@ -503,7 +521,7 @@ par_list = []
 for p in itertools.product(l, tendencies):
     par_list.append(p[0]+[p[1]])
 
-qs = [0.85, 0.95]
+qs = [0.97, 0.97]
 # num_threads = 11
 # pool = Pool(num_threads)
 worlds = []
@@ -516,9 +534,11 @@ for n,pars in enumerate(par_list):
         w = worlds[-1]
         RTs[i*trials+n*(repetitions*trials):(i+1)*trials+n*(repetitions*trials)] = w.agent.action_selection.RT[:,0].copy()
         if True:#i == repetitions-1:
-            plt.figure()
-            plt.plot(w.agent.posterior_context[:,0,0])
-            plt.show()
+            if context:
+                plt.figure()
+                plt.plot(w.agent.posterior_context[:,0,:])
+                #plt.plot(w.agent.posterior_context[:,0,g2])
+                plt.show()
             plt.figure()
             rew_prob = np.einsum('tsc,tc->ts', w.agent.posterior_dirichlet_rew[:,0,1,:,:],w.agent.posterior_context[:,0])
             rew_prob /= rew_prob.sum(axis=1)[:,None]
@@ -548,18 +568,30 @@ for n,pars in enumerate(par_list):
             plt.figure()
             plt.plot(w.agent.action_selection.DKL_prior[:,0])
             plt.show()
-            posterior_policies = np.einsum('tpc,tc->tp', w.agent.likelihood[:,0], w.agent.posterior_context[:,0])
-            k = 12
+            posterior_policies = np.einsum('tpc,tc->tp', w.agent.posterior_policies[:,0], w.agent.posterior_context[:,0])
+            k=6
             ind = np.argpartition(posterior_policies, -k, axis=1)[:,-k:]
-            max_pol = np.array([posterior_policies[i,ind[i]].sum() for i in range(trials)])
+            max_pol = np.array([posterior_policies[i,ind[i]] for i in range(trials)])
+            plt.figure()
             plt.plot(max_pol)
-            plt.show()
+            plt.figure()
             plt.figure()
             plt.plot(posterior_policies.argmax(axis=1))
             plt.show()
             plt.figure()
             plt.plot(w.agent.action_selection.RT[:,0], 'x')
             plt.show()
+            like = np.einsum('tpc,tc->tp', w.agent.posterior_policies[:,0], w.agent.posterior_context[:,0])
+            # for i in range(25,30):
+            #     plt.figure()
+            #     plt.plot(np.sort(like[i]))
+            #     plt.title("trial "+str(i))
+            #     plt.show()
+            # for i in range(125,130):
+            #     plt.figure()
+            #     plt.plot(np.sort(like[i]))
+            #     plt.title("trial "+str(i))
+            #     plt.show()
         # w = 0
         # gc.collect()
 
@@ -569,21 +601,33 @@ times = np.tile(np.arange(trials), repetitions*len(tendencies))
 tend_idx = np.array(['h = '+str(1./tendencies[i//(repetitions*trials)]) for i in range(repetitions*trials*len(tendencies))])
 DataFrame = pd.DataFrame({'trial': times, 'run': runs,'tendency h':tend_idx, 'RT': RTs})
 
+# plt.figure()
+# sns.lineplot(data=DataFrame, x='trial', y='RT', style='tendency h', estimator=np.nanmean, linewidth=2, err_kws={'alpha':0.4}, ci=99)
+# #plt.legend()
+# plt.xlim([0,trials])
+# plt.ylim([0,0.5*np.amax(RTs)])#0.75*
+# plt.ylabel('RT (#sampples)')
+# plt.savefig('Dir_gridworld_RT_stats_context_'+str(repetitions)+'repetitions.svg', dpi=600)
+# plt.show()
+
 plt.figure()
-sns.lineplot(data=DataFrame, x='trial', y='RT', style='tendency h', estimator=np.nanmean, linewidth=2, err_kws={'alpha':0.4}, ci=99)
+palette = [(31/255,119/255,180/255),(79/255, 128/255, 23/255)]
+sns.lineplot(data=DataFrame, x='trial', y='RT', hue='tendency h', style='tendency h', estimator=np.nanmedian, linewidth=2, err_kws={'alpha':0.4}, ci=99, palette=palette)
 #plt.legend()
+plt.ylim([0,np.amax(RTs)])
 plt.xlim([0,trials])
-plt.ylim([0,0.5*np.amax(RTs)])#0.75*
 plt.ylabel('RT (#sampples)')
-plt.savefig('Dir_gridworld_RT_stats_norewlearn_'+str(repetitions)+'repetitions.svg', dpi=600)
+plt.savefig('Dir_gridworld_RT_stats_context_'+str(repetitions)+'repetitions_median.svg', dpi=600)
 plt.show()
 
 plt.figure()
-sns.lineplot(data=DataFrame, x='trial', y='RT', style='tendency h', estimator=np.nanmean, linewidth=2, err_kws={'alpha':0.4}, ci=99)
+palette = [(31/255,119/255,180/255),(79/255, 128/255, 23/255)]
+sns.lineplot(data=DataFrame, x='trial', y='RT', hue='tendency h', style='tendency h', estimator=np.nanmean, linewidth=2, err_kws={'alpha':0.4}, ci=99, palette=palette)
 #plt.legend()
+plt.ylim([0,np.amax(RTs)])
 plt.xlim([0,trials])
 plt.ylabel('RT (#sampples)')
-plt.savefig('Dir_gridworld_RT_stats_norewlearn_'+str(repetitions)+'repetitions_large.svg', dpi=600)
+plt.savefig('Dir_gridworld_RT_stats_context_'+str(repetitions)+'repetitions_mean.svg', dpi=600)
 plt.show()
 
 

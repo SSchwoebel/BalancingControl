@@ -169,11 +169,11 @@ class BayesianPlanner(object):
 
         #get response probability
         posterior_states = self.posterior_states[tau, t]
-        posterior_policies = np.einsum('pc,c->p', self.posterior_policies[tau, t], self.posterior_context[tau, t])
+        posterior_policies = np.einsum('pc,c->p', self.posterior_policies[tau, t], self.posterior_context[tau, 0])
         posterior_policies /= posterior_policies.sum()
-        avg_likelihood = np.einsum('pc,c->p', self.likelihood[tau,t], self.posterior_context[tau, t])
+        avg_likelihood = np.einsum('pc,c->p', self.likelihood[tau,t], self.posterior_context[tau, 0])
         avg_likelihood /= avg_likelihood.sum()
-        prior = np.einsum('pc,c->p', self.prior_policies[tau-1], self.posterior_context[tau, t])
+        prior = np.einsum('pc,c->p', self.prior_policies[tau-1], self.posterior_context[tau, 0])
         prior /= prior.sum()
         #print(self.posterior_context[tau, t])
         non_zero = posterior_policies > 0

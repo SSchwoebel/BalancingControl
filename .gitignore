@@ -4,3 +4,4 @@ data/*
 *.png
 .pymc*
 *.pymc*
+*.pkl
