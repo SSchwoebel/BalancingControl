@@ -28,23 +28,25 @@ conflict = vals.copy()
 conflict.reverse()
 """
 gp = 6
-n = 128
-l = [0.16334205362982337]*gp+[0.00016350555918901252]*(n-gp)
-p = [(1-(0.00327*(n-gp)))/6]*gp+[0.00327]*(n-gp)
-conflict = [.00327]*gp+[(1-(0.00327*(n-gp)))/6]*gp+[.00327]*(n-2*gp)
+n = 81
+val = 0.148
+l = [val]*gp+[(1-6*val)/(n-gp)]*(n-gp)
+v = 0.00571
+p = [(1-(v*(n-gp)))/6]*gp+[v]*(n-gp)
+conflict = [v]*gp+[(1-(v*(n-gp)))/6]*gp+[v]*(n-2*gp)
 npi = n
 flat = [1./npi]*npi
 
 plt.figure()
-plt.plot(l, label='likelihood, habit, goal')
-plt.plot(p, label='prior agreement')
-plt.plot(conflict, label='prior conflict')
-plt.plot(flat, label='flat')
-plt.ylim([0,0.2])
+plt.plot(l, label='likelihood, habit, goal', linewidth=3)
+plt.plot(p, label='prior agreement', linewidth=3)
+plt.plot(conflict, label='prior conflict', linewidth=3)
+plt.plot(flat, label='flat', linewidth=3)
+plt.ylim([0,0.25])
 plt.legend()
 plt.xlim([0,npi])
-plt.xlabel('policy')
-plt.ylabel('probability')
+plt.xlabel('policy', fontsize=16)
+plt.ylabel('probability', fontsize=16)
 plt.savefig('underlying_prior_like_for_distributions.svg')
 plt.show()
 
@@ -61,7 +63,7 @@ def run_action_selection(post, prior, like, trials = 100, crit_factor = 0.5, cal
         return ac_sel.RT.squeeze()
 
 # set up number of trials
-trials = 200
+trials = 500
 
 # conflict
 prior = np.array(conflict)
@@ -142,7 +144,7 @@ def plot_RT_distributions(num_tests, trials, test_vals, crit_factor=0.4):
     plt.xlabel('RT (#samples)')
     plt.show()
 
-    if max_RT < 0.9*trials:
+    if True:#max_RT < 0.9*trials:
         RT.to_pickle('RT_'+str(crit_factor)+'factor_'+str(npi)+'npi_'+str(trials)+'trials.pkl')
 
 def plot_common_histogram(factors, trials):
@@ -155,7 +157,7 @@ def plot_common_histogram(factors, trials):
 
     frame['factor'] = np.repeat(factors, trials)
 
-    bins = 90
+    bins = 75
 
     plt.figure()
     sns.histplot(frame[['conflict', 'agreement']], alpha=0.5, bins=bins, binrange=[min_RT,max_RT],edgecolor='black')#, common_bins=False)#
@@ -184,7 +186,7 @@ def plot_common_histogram(factors, trials):
     plt.show()
 
 def evaluate_DKL(num_tests, trials, conflict):
-    factors = np.arange(0.05,0.85,0.05)
+    factors = np.arange(0.05,0.75,0.05)
     num_factors = len(factors)
     RT = np.zeros((num_factors,trials))
     DKL = np.zeros((3,num_factors*trials*2))
@@ -204,6 +206,7 @@ def evaluate_DKL(num_tests, trials, conflict):
     plt.figure()
     sns.lineplot(data=DKL_df, x='factor', y='DKL', style='type', ci=95, linewidth=2)
     plt.xlim([factors[0], factors[-1]])
+    plt.ylim([0,1.7])
     plt.savefig('dkl_threshold_factor_'+str(npi)+'npi_'+str(trials)+'trials.svg', dpi=600)
     plt.show()
 
@@ -211,26 +214,26 @@ def evaluate_DKL(num_tests, trials, conflict):
 def RT_of_like_entropy(trials):
     pass
 
-l_values = np.arange(1./npi, 0.16334205362982337, 0.01)
-num_tests = len(l_values)
-likes = np.array([[l]*gp+[(1-l*gp)/(n-gp)]*(n-gp) for l in l_values])
-prior = flat
-crit_factor = 0.5
-entropies = [entropy(l) for l in likes ]
+# l_values = np.arange(1./npi, 0.16334205362982337, 0.01)
+# num_tests = len(l_values)
+# likes = np.array([[l]*gp+[(1-l*gp)/(n-gp)]*(n-gp) for l in l_values])
+# prior = flat
+# crit_factor = 0.5
+# entropies = [entropy(l) for l in likes ]
 
-RT = np.zeros((2,num_tests*trials))
-for i, l in enumerate(likes):
-    post = l
-    like = l
-    RT[0, i*trials:(i+1)*trials] = run_action_selection(post, prior, like, trials, crit_factor=crit_factor)
-    RT[1, i*trials:(i+1)*trials] = entropies[i]
-RT_df = pd.DataFrame(data=RT.T, columns=['RT','entropy'])
+# RT = np.zeros((2,num_tests*trials))
+# for i, l in enumerate(likes):
+#     post = l
+#     like = l
+#     RT[0, i*trials:(i+1)*trials] = run_action_selection(post, prior, like, trials, crit_factor=crit_factor)
+#     RT[1, i*trials:(i+1)*trials] = entropies[i]
+# RT_df = pd.DataFrame(data=RT.T, columns=['RT','entropy'])
 
-plt.figure()
-sns.lineplot(data=RT_df, x='entropy', y='RT')
-plt.title('mean RT as a function of likelihood entropy')
-plt.savefig('RT_like_entropy.svg')
-plt.show()
+# plt.figure()
+# sns.lineplot(data=RT_df, x='entropy', y='RT')
+# plt.title('mean RT as a function of likelihood entropy')
+# plt.savefig('RT_like_entropy.svg')
+# plt.show()
 
 # RT = np.zeros((num_tests, trials))
 # for i, l in enumerate(likes):
@@ -253,10 +256,11 @@ plt.show()
 # plt.title('mean RT as a function of likelihood entropy')
 # plt.show()
 
-#evaluate_DKL(num_tests, trials, test_vals[0])
-#plot_RT_distributions(num_tests, trials, test_vals, 0.1)
+evaluate_DKL(num_tests, trials, test_vals[0])
 
 # factors = [0.1,0.3,0.5]
+# for f in factors:
+#     plot_RT_distributions(num_tests, trials, test_vals, f)
 # plot_common_histogram(factors, trials)
 
 

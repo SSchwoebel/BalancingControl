@@ -148,6 +148,71 @@ class MultiArmedBandid(object):
 
         return r
 
+class TaskSwitching(object):
+
+    def __init__(self, Omega, Theta, Rho, start_states,
+                 trials = 1, T = 10):
+
+        #set probability distribution used for generating observations
+        self.Omega = Omega.copy()
+
+        #set probability distribution used for generating rewards
+#        self.Rho = np.zeros((trials, Rho.shape[0], Rho.shape[1]))
+#        self.Rho[0] = Rho.copy()
+        self.Rho = Rho.copy()
+
+        #set probability distribution used for generating state transitions
+        self.Theta = Theta.copy()
+
+        self.nh = Theta.shape[0]
+
+#        self.changes = np.array([0.01, -0.01])
+
+        assert(len(start_states==trials))
+
+        #set container that keeps track the evolution of the hidden states
+        self.hidden_states = np.zeros((trials, T), dtype = int)
+        self.hidden_states[:,0] = start_states
+
+        self.trials = trials
+
+    def set_initial_states(self, tau):
+        #start in lower corner
+        #self.hidden_states[tau, 0] = 0
+        pass
+
+#        if tau%100==0:
+#            print("trial:", tau)
+
+
+    def generate_observations(self, tau, t):
+        #generate one sample from multinomial distribution
+        o = np.random.multinomial(1, self.Omega[:, self.hidden_states[tau, t]]).argmax()
+        return o
+
+
+    def update_hidden_states(self, tau, t, response):
+
+        current_state = self.hidden_states[tau, t-1]
+
+        self.hidden_states[tau, t] = np.random.choice(self.Theta.shape[0],
+                          p = self.Theta[:, current_state, int(response)])
+
+    def generate_rewards(self, tau, t):
+        #generate one sample from multinomial distribution
+        r = np.random.choice(self.Rho.shape[1], p = self.Rho[tau, :, self.hidden_states[tau, t]])
+
+#        if tau < self.trials-1:
+#            #change Rho slowly
+#            change = np.random.choice(self.changes, size=self.nh-1)
+#            self.Rho[tau+1,0,1:] = self.Rho[tau,0,1:] + change
+#            self.Rho[tau+1,1,1:] = self.Rho[tau,1,1:] - change
+#            self.Rho[tau+1][self.Rho[tau+1] > 1.] = 1.
+#            self.Rho[tau+1][self.Rho[tau+1] < 0.] = 0.
+
+        return r
+
+
 class TMaze(object):
 
     def __init__(self, Omega, Theta, Rho,

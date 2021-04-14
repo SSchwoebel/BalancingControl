@@ -237,6 +237,44 @@ def D_KL_dirichlet_categorical(alpha, beta):
 
     return D_KL
 
+def switching_timeseries(trials, states=None, state_trans=None, pattern=None, ns=6, na=2, nr=2):
+
+    if pattern is None:
+        pattern = np.tile([0, 0, 1, 1], trials//4)
+
+    if states is None:
+        states = np.random.choice(4,size=trials)
+
+    if state_trans is None:
+        state_trans = np.array([[[0, 0, 0, 0, 0, 0],
+                                 [0, 0, 0, 0, 0, 0],
+                                 [0, 0, 0, 0, 0, 0],
+                                 [0, 0, 0, 0, 0, 0],
+                                 [1, 1, 1, 1, 1, 1],
+                                 [0, 0, 0, 0, 0, 0],],
+                                [[0, 0, 0, 0, 0, 0],
+                                 [0, 0, 0, 0, 0, 0],
+                                 [0, 0, 0, 0, 0, 0],
+                                 [0, 0, 0, 0, 0, 0],
+                                 [0, 0, 0, 0, 0, 0],
+                                 [1, 1, 1, 1, 1, 1],]])
+
+    state_trans = np.transpose(state_trans, axes=(1,2,0))
+
+    Rho = np.zeros((trials,nr,ns))
+    Rho[:,:,0:4] = np.array([1,0])[None,:,None]
+    for t,task in enumerate(pattern):
+        s = states[t]
+        if task == 0:
+            corr_a = s%2
+        if task == 1:
+            corr_a = s//2
+
+        Rho[t,:,4] = [0+corr_a, 1-corr_a]
+        Rho[t,:,5] = [1-corr_a, 0+corr_a]
+
+    return Rho, states, state_trans
+
 
 def plot_habit_learning(w, results, save_figs=False, fname=''):
 
