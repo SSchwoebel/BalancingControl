@@ -123,9 +123,14 @@ class World(object):
         if t==0:
             self.environment.set_initial_states(tau)
             response = None
+            if hasattr(self.environment, 'Chi'):
+                context = self.environment.generate_context_obs(tau)
+            else:
+                context = None
         else:
             response = self.actions[tau, t-1]
             self.environment.update_hidden_states(tau, t, response)
+            context = None
 
         self.observations[tau, t] = \
             self.environment.generate_observations(tau, t)
@@ -137,7 +142,7 @@ class World(object):
 
         reward = self.rewards[tau, t]
 
-        self.agent.update_beliefs(tau, t, observation, reward, response)
+        self.agent.update_beliefs(tau, t, observation, reward, response, context)
 
 
         if t < self.T-1:

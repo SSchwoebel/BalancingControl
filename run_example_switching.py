@@ -34,7 +34,7 @@ np.set_printoptions(threshold = 100000, precision = 5)
 run function
 """
 
-def run_agent(par_list, trials, T, ns, na, nr, nc, f, states, state_trans=None):
+def run_agent(par_list, trials, T, ns, na, nr, nc, f, contexts, states, state_trans=None):
     #set parameters:
     #learn_pol: initial concentration paramter for policy prior
     #trans_prob: reward probability
@@ -83,12 +83,15 @@ def run_agent(par_list, trials, T, ns, na, nr, nc, f, states, state_trans=None):
     transition_matrix_context += q/(nc-1)
     for i in range(nc):
         transition_matrix_context[i,i] = p
+        
+    # context observation matrix
+    D = np.eye(nc)
 
     """
     create environment (grid world)
     """
 
-    environment = env.TaskSwitching(A, B, Rho, states, trials = trials, T = T)
+    environment = env.TaskSwitching(A, B, Rho, D, states, contexts, trials = trials, T = T)
 
 
     """
@@ -131,7 +134,7 @@ def run_agent(par_list, trials, T, ns, na, nr, nc, f, states, state_trans=None):
     """
 
     # perception
-    bayes_prc = prc.HierarchicalPerception(A, B, C_agent, transition_matrix_context, state_prior, utility, prior_pi, alphas, C_alphas, T=T)
+    bayes_prc = prc.HierarchicalPerception(A, B, C_agent, transition_matrix_context, state_prior, utility, prior_pi, alphas, C_alphas, T=T, generative_model_context=D)
 
     # agent
     bayes_pln = agt.BayesianPlanner(bayes_prc, ac_sel, pol,
@@ -168,7 +171,7 @@ set condition dependent up parameters
 
 def run_switsching_simulations(repetitions, folder):
 
-    trials = 200
+    trials = 60
     T = 2
     ns = 6
     na = 2
@@ -180,11 +183,11 @@ def run_switsching_simulations(repetitions, folder):
 
     Rho = np.zeros((trials, nr, ns))
 
-    for tendency in [1,1000]:#,3,5,10,30,50,100]: #1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
-        for trans in [50]:#[100,99,98,97,96,95,94]:
+    for tendency in [1000]:#,3,5,10,30,50,100]: #1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
+        for trans in [99]:#[100,99,98,97,96,95,94]:
 
 
-            Rho[:], states, state_trans = switching_timeseries(trials, nr=nr, ns=ns, na=na)
+            Rho[:], contexts, states, state_trans = switching_timeseries(trials, nr=nr, ns=ns, na=na, stable_length=10)
 
             # plt.figure()
             # plt.plot(Rho[:,2,2])
@@ -196,7 +199,7 @@ def run_switsching_simulations(repetitions, folder):
             parameters = [learn_pol, trans/100., Rho, utility]
 
             for i in range(repetitions):
-                worlds.append(run_agent(parameters, trials, T, ns, na, nr, nc, f, states, state_trans=state_trans))
+                worlds.append(run_agent(parameters, trials, T, ns, na, nr, nc, f, contexts, states, state_trans=state_trans))
                 w = worlds[-1]
                 plt.figure()
                 post_pol = np.einsum('tpc,tc->tp', w.agent.posterior_policies[:,0,:,:], w.agent.posterior_context[:,0,:])
@@ -206,7 +209,7 @@ def run_switsching_simulations(repetitions, folder):
                 plt.ylim([0,1])
                 plt.show()
                 plt.figure()
-                plt.plot(w.agent.action_selection.RT[:,0])
+                plt.plot(w.agent.action_selection.RT[:,0], '.')
                 #plt.plot(Rho[:,2,2])
                 #plt.plot(Rho[:,1,1])
                 #plt.ylim([ESS*10,2000])
@@ -217,8 +220,11 @@ def run_switsching_simulations(repetitions, folder):
                 plt.hist(w.agent.action_selection.RT[:,0])
                 plt.savefig("uncertain_Dir_h"+str(int(learn_pol))+"_RT_hist"+str(i)+"_1000trials.svg")#"ESS"+str(ESS)+"_h"+str(int(learn_pol))+"_RT_hist"+str(i)+".svg")#
                 plt.show()
+                plt.figure()
+                plt.plot(w.agent.posterior_context[:,0,:], 'x')
+                plt.show()
 
-            run_name = "switching_h"+str(int(learn_pol))+"_t"+str(trans)+"_p"+str(prob)+"_train"+str(trials_training)+".json"
+            run_name = "switching_h"+str(int(learn_pol))+"_t"+str(trans)+".json"
             fname = os.path.join(folder, run_name)
 
             jsonpickle_numpy.register_handlers()

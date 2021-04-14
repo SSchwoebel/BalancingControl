@@ -150,7 +150,7 @@ class MultiArmedBandid(object):
 
 class TaskSwitching(object):
 
-    def __init__(self, Omega, Theta, Rho, start_states,
+    def __init__(self, Omega, Theta, Rho, Chi, start_states, contexts,
                  trials = 1, T = 10):
 
         #set probability distribution used for generating observations
@@ -165,6 +165,8 @@ class TaskSwitching(object):
         self.Theta = Theta.copy()
 
         self.nh = Theta.shape[0]
+        
+        self.Chi = Chi.copy()
 
 #        self.changes = np.array([0.01, -0.01])
 
@@ -173,6 +175,8 @@ class TaskSwitching(object):
         #set container that keeps track the evolution of the hidden states
         self.hidden_states = np.zeros((trials, T), dtype = int)
         self.hidden_states[:,0] = start_states
+        
+        self.contexts = contexts.copy()
 
         self.trials = trials
 
@@ -211,6 +215,11 @@ class TaskSwitching(object):
 #            self.Rho[tau+1][self.Rho[tau+1] < 0.] = 0.
 
         return r
+    
+    def generate_context_obs(self, tau):
+        
+        c = np.random.choice(self.Chi.shape[0], p=self.Chi[self.contexts[tau]])
+        return c
 
 
 class TMaze(object):

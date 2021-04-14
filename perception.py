@@ -15,6 +15,7 @@ class HierarchicalPerception(object):
                  prior_policies,
                  dirichlet_pol_params = None,
                  dirichlet_rew_params = None,
+                 generative_model_context = None,
                  T=5):
 
         self.generative_model_observations = generative_model_observations.copy()
@@ -37,6 +38,8 @@ class HierarchicalPerception(object):
             self.dirichlet_pol_params = dirichlet_pol_params.copy()
         if dirichlet_rew_params is not None:
             self.dirichlet_rew_params = dirichlet_rew_params.copy()
+        if generative_model_context is not None:
+            self.generative_model_context = generative_model_context.copy()
 
 
             for c in range(self.nc):
@@ -164,7 +167,7 @@ class HierarchicalPerception(object):
         return posterior, likelihood
 
 
-    def update_beliefs_context(self, tau, t, reward, posterior_states, posterior_policies, prior_context, policies):
+    def update_beliefs_context(self, tau, t, reward, context, posterior_states, posterior_policies, prior_context, policies):
 
         post_policies = (prior_context[np.newaxis,:] * posterior_policies).sum(axis=1)
         beta = self.dirichlet_rew_params.copy()
@@ -208,7 +211,11 @@ class HierarchicalPerception(object):
             entropy = - (posterior_policies * ln(posterior_policies)).sum(axis=0)
             #policy_surprise = (post_policies[:,np.newaxis] * scs.digamma(alpha_prime)).sum(axis=0) - scs.digamma(alpha_prime.sum(axis=0))
             policy_surprise = (posterior_policies * scs.digamma(alpha_prime)).sum(axis=0) - scs.digamma(alpha_prime.sum(axis=0))
-            posterior = outcome_surprise + policy_surprise + entropy
+            if context is not None:
+                context_obs_suprise = ln(self.generative_model_context[context]+1e-10)
+            else:
+                context_obs_suprise = 0
+            posterior = outcome_surprise + policy_surprise + entropy + context_obs_suprise
 
                         #+ np.nan_to_num((posterior_policies * ln(self.fwd_norms).sum(axis = 0))).sum(axis=0)#\
 

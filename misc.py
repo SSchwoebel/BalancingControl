@@ -237,10 +237,10 @@ def D_KL_dirichlet_categorical(alpha, beta):
 
     return D_KL
 
-def switching_timeseries(trials, states=None, state_trans=None, pattern=None, ns=6, na=2, nr=2):
+def switching_timeseries(trials, states=None, state_trans=None, pattern=None, ns=6, na=2, nr=2, stable_length=2):
 
     if pattern is None:
-        pattern = np.tile([0, 0, 1, 1], trials//4)
+        pattern = np.tile([0]*stable_length+[1]*stable_length, trials//(2*stable_length))
 
     if states is None:
         states = np.random.choice(4,size=trials)
@@ -273,7 +273,7 @@ def switching_timeseries(trials, states=None, state_trans=None, pattern=None, ns
         Rho[t,:,4] = [0+corr_a, 1-corr_a]
         Rho[t,:,5] = [1-corr_a, 0+corr_a]
 
-    return Rho, states, state_trans
+    return Rho, pattern, states, state_trans
 
 
 def plot_habit_learning(w, results, save_figs=False, fname=''):
