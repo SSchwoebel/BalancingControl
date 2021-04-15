@@ -151,7 +151,8 @@ class MultiArmedBandid(object):
 class TaskSwitching(object):
 
     def __init__(self, Omega, Theta, Rho, Chi, start_states, contexts,
-                 trials = 1, T = 10):
+                 trials = 1, T = 10, correct_choice=None, congruent=None,
+                 num_in_run=None):
 
         #set probability distribution used for generating observations
         self.Omega = Omega.copy()
@@ -179,6 +180,13 @@ class TaskSwitching(object):
         self.contexts = contexts.copy().astype(int)
 
         self.trials = trials
+        
+        if correct_choice is not None:
+            self.correct_choice = correct_choice
+        if congruent is not None:
+            self.congruent = congruent
+        if num_in_run is not None:
+            self.num_in_run = num_in_run
 
     def set_initial_states(self, tau):
         #start in lower corner

@@ -129,7 +129,7 @@ class BayesianPlanner(object):
 #            else:
 #                prior_context = np.dot(self.perception.transition_matrix_context, self.posterior_context[tau, t-1])
 
-        if self.nc>1 and t>0:
+        if self.nc>1 and t>=0:
             if hasattr(self, 'context_obs'):
                 c_obs = self.context_obs[tau]
             else:

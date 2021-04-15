@@ -241,6 +241,17 @@ def switching_timeseries(trials, states=None, state_trans=None, pattern=None, ns
 
     if pattern is None:
         pattern = np.tile([0]*stable_length+[1]*stable_length, trials//(2*stable_length))
+        
+    num_in_run = np.zeros(trials)
+    old = -1
+    count = 0
+    for t,p in enumerate(pattern):
+        if p == old:
+            count+=1
+        else:
+            count=1
+        num_in_run[t] = count
+        old = p
 
     if states is None:
         states = np.random.choice(4,size=trials)
@@ -274,7 +285,8 @@ def switching_timeseries(trials, states=None, state_trans=None, pattern=None, ns
 
     Rho = np.zeros((trials,nr,ns))
     Rho[:,:,0:4] = np.array([1,0])[None,:,None]
-    correct_choice = np.zeros(trials)
+    correct_choice = np.zeros(trials, dtype=int)
+    congruent = np.zeros(trials, dtype=int)
     for t,task in enumerate(pattern):
         s = states[t]
         if task == 0:
@@ -286,8 +298,9 @@ def switching_timeseries(trials, states=None, state_trans=None, pattern=None, ns
             Rho[t,:,4] = [1, 0]
             Rho[t,:,5] = [0, 1]
         correct_choice[t] = corr_a
-
-    return Rho, pattern, states, state_trans, correct_choice
+        congruent[t] = int((s%2) == (s//2))
+        
+    return Rho, pattern, states, state_trans, correct_choice, congruent, num_in_run
 
 
 def plot_habit_learning(w, results, save_figs=False, fname=''):

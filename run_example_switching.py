@@ -34,14 +34,16 @@ np.set_printoptions(threshold = 100000, precision = 5)
 run function
 """
 
-def run_agent(par_list, trials, T, ns, na, nr, nc, f, contexts, states, state_trans=None):
+def run_agent(par_list, trials, T, ns, na, nr, nc, f, contexts, states, \
+              state_trans=None, correct_choice=None, congruent=None,\
+              num_in_run=None):
     #set parameters:
     #learn_pol: initial concentration paramter for policy prior
     #trans_prob: reward probability
     #avg: True for average action selection, False for maximum selection
     #Rho: Environment's reward generation probabilities as a function of time
     #utility: goal prior, preference p(o)
-    learn_pol, trans_prob, Rho, utility = par_list
+    learn_pol, trans_prob, Rho, utility, unc = par_list
 
 
     """
@@ -68,10 +70,10 @@ def run_agent(par_list, trials, T, ns, na, nr, nc, f, contexts, states, state_tr
     C_alphas = np.ones((nr, ns, nc))
     # initialize state in front of levers so that agent knows it yields no reward
     C_alphas[:,:4,:] = np.array([100,1])[:,None,None]
-    C_alphas[:,4:,0] = np.array([[1, 100],
-                                  [100, 1]])
-    C_alphas[:,4:,1] = np.array([[100, 1],
-                                  [1, 100]])
+    # C_alphas[:,4:,0] = np.array([[1, 100],
+    #                               [100, 1]])
+    # C_alphas[:,4:,1] = np.array([[100, 1],
+    #                               [1, 100]])
 
     # agent's initial estimate of reward generation probability
     C_agent = np.zeros((nr, ns, nc))
@@ -89,13 +91,19 @@ def run_agent(par_list, trials, T, ns, na, nr, nc, f, contexts, states, state_tr
         transition_matrix_context[i,i] = p
         
     # context observation matrix
-    D = np.eye(nc)
+    D = np.zeros((nc,nc)) + unc
+    for c in range(nc):
+        D[c,c] = 1-(unc*(nc-1))
 
     """
     create environment (grid world)
     """
 
-    environment = env.TaskSwitching(A, B, Rho, D, states, contexts, trials = trials, T = T)
+    environment = env.TaskSwitching(A, B, Rho, D, states, contexts, \
+                                    trials = trials, T = T,\
+                                    correct_choice=correct_choice, \
+                                    congruent=congruent, \
+                                    num_in_run=num_in_run)
 
 
     """
@@ -175,7 +183,7 @@ set condition dependent up parameters
 
 def run_switsching_simulations(repetitions, folder):
 
-    trials = 60
+    trials = 100
     T = 2
     ns = 6
     na = 2
@@ -187,51 +195,81 @@ def run_switsching_simulations(repetitions, folder):
 
     Rho = np.zeros((trials, nr, ns))
 
-    for tendency in [1000]:#,3,5,10,30,50,100]: #1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
-        for trans in [95]:#[100,99,98,97,96,95,94]:
+    for tendency in [1,1000]:#,3,5,10,30,50,100]: #1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
+        for trans in [95,99]:#[100,99,98,97,96,95,94]:
+            for unc in [1,5,10]:
+                print(tendency, trans, unc)
+    
+                # Rho[:], contexts, states, state_trans, correct_choice, congruent, num_in_run = \
+                #     switching_timeseries(trials, nr=nr, ns=ns, na=na, nc=nc, stable_length=5)
+    
+                # plt.figure()
+                # plt.plot(Rho[:,2,2])
+                # plt.plot(Rho[:,1,1])
+                # plt.show()
+    
+                worlds = []
+                learn_pol = tendency
+                parameters = [learn_pol, trans/100., Rho, utility, unc/100.]
+    
+                for i in range(repetitions):
+                    Rho[:], contexts, states, state_trans, correct_choice, congruent, num_in_run = \
+                    switching_timeseries(trials, nr=nr, ns=ns, na=na, nc=nc, stable_length=5)
+                    worlds.append(run_agent(parameters, trials, T, ns, na, nr, nc,\
+                                            f, contexts, states, \
+                                            state_trans=state_trans, \
+                                            correct_choice=correct_choice, \
+                                            congruent=congruent, \
+                                            num_in_run=num_in_run))
+                    # w = worlds[-1]
+                    # choices = w.actions[:,0]
+                    # correct = (choices == w.environment.correct_choice).sum()
+                    # print("percent correct:", correct/trials)
+                    # correct_cong = (choices[w.environment.congruent==1] == w.environment.correct_choice[w.environment.congruent==1]).sum()
+                    # print("percent correct congruent:", correct_cong/(w.environment.congruent==1).sum())
+                    # correct_incong = (choices[w.environment.congruent==0] == w.environment.correct_choice[w.environment.congruent==0]).sum()
+                    # print("percent correct incongruent:", correct_incong/(w.environment.congruent==0).sum())
+                    # RTs = w.agent.action_selection.RT[:,0]
+                    # RT_cong = np.median(RTs[w.environment.congruent==1])
+                    # RT_incong = np.median(RTs[w.environment.congruent==0])
+                    # print("congruent RT:", RT_cong)
+                    # print("incongruent RT:", RT_incong)
+                    # length = int(np.amax(w.environment.num_in_run)) + 1
+                    # numbers = w.environment.num_in_run
+                    # numbers_cong = numbers[w.environment.congruent==1]
+                    # numbers_incong = numbers[w.environment.congruent==0]
+                    # RT_medians_cong = [np.median(RTs[w.environment.congruent==1][numbers_cong==i]) for i in range(length)]
+                    # RT_medians_incong = [np.median(RTs[w.environment.congruent==0][numbers_incong==i]) for i in range(length)]
+                    # plt.figure()
+                    # plt.plot(RT_medians_cong, 'x')
+                    # plt.plot(RT_medians_incong, 'x')
+                    # plt.show()
+                    # plt.figure()
+                    # post_pol = np.einsum('tpc,tc->tp', w.agent.posterior_policies[:,0,:,:], w.agent.posterior_context[:,0,:])
+                    # like = np.einsum('tpc,tc->tp', w.agent.likelihood[:,0,:,:], w.agent.posterior_context[:,0,:])
+                    # plt.plot(post_pol[:,1], '.')
+                    # plt.plot(like[:,1], 'x')
+                    # plt.ylim([0,1])
+                    # plt.show()
+                    # plt.figure()
+                    # plt.plot(w.agent.action_selection.RT[:,0], '.')
+                    # #plt.plot(Rho[:,2,2])
+                    # #plt.plot(Rho[:,1,1])
+                    # #plt.ylim([ESS*10,2000])
+                    # plt.ylim([0,2000])
+                    # plt.savefig("Dir_h"+str(int(learn_pol))+"_RT_timecourse"+str(i)+".svg")#"ESS"+str(ESS)+"_h"+str(int(learn_pol))+"_RT_timecourse"+str(i)+".svg")#
+                    # plt.show()
+                    # plt.figure()
+                    # plt.hist(w.agent.action_selection.RT[:,0])
+                    # plt.savefig("uncertain_Dir_h"+str(int(learn_pol))+"_RT_hist"+str(i)+"_1000trials.svg")#"ESS"+str(ESS)+"_h"+str(int(learn_pol))+"_RT_hist"+str(i)+".svg")#
+                    # plt.show()
+                    # plt.figure()
+                    # plt.plot(w.agent.posterior_context[:,0,:], 'x')
+                    # plt.show()
+                
+            
 
-
-            Rho[:], contexts, states, state_trans, correct_choice = switching_timeseries(trials, nr=nr, ns=ns, na=na, nc=nc, stable_length=10)
-
-            # plt.figure()
-            # plt.plot(Rho[:,2,2])
-            # plt.plot(Rho[:,1,1])
-            # plt.show()
-
-            worlds = []
-            learn_pol = tendency
-            parameters = [learn_pol, trans/100., Rho, utility]
-
-            for i in range(repetitions):
-                worlds.append(run_agent(parameters, trials, T, ns, na, nr, nc, f, contexts, states, state_trans=state_trans))
-                w = worlds[-1]
-                choices = w.actions[:,0]
-                correct = (choices == correct_choice).sum()
-                print("percent correct:", correct/trials)
-                plt.figure()
-                post_pol = np.einsum('tpc,tc->tp', w.agent.posterior_policies[:,0,:,:], w.agent.posterior_context[:,0,:])
-                like = np.einsum('tpc,tc->tp', w.agent.likelihood[:,0,:,:], w.agent.posterior_context[:,0,:])
-                plt.plot(post_pol[:,1], '.')
-                plt.plot(like[:,1], 'x')
-                plt.ylim([0,1])
-                plt.show()
-                plt.figure()
-                plt.plot(w.agent.action_selection.RT[:,0], '.')
-                #plt.plot(Rho[:,2,2])
-                #plt.plot(Rho[:,1,1])
-                #plt.ylim([ESS*10,2000])
-                plt.ylim([0,2000])
-                plt.savefig("Dir_h"+str(int(learn_pol))+"_RT_timecourse"+str(i)+".svg")#"ESS"+str(ESS)+"_h"+str(int(learn_pol))+"_RT_timecourse"+str(i)+".svg")#
-                plt.show()
-                plt.figure()
-                plt.hist(w.agent.action_selection.RT[:,0])
-                plt.savefig("uncertain_Dir_h"+str(int(learn_pol))+"_RT_hist"+str(i)+"_1000trials.svg")#"ESS"+str(ESS)+"_h"+str(int(learn_pol))+"_RT_hist"+str(i)+".svg")#
-                plt.show()
-                plt.figure()
-                plt.plot(w.agent.posterior_context[:,0,:], 'x')
-                plt.show()
-
-            run_name = "switching_h"+str(int(learn_pol))+"_t"+str(trans)+".json"
+            run_name = "switching_h"+str(int(learn_pol))+"_t"+str(trans)+"_u"+str(unc)+".json"
             fname = os.path.join(folder, run_name)
 
             jsonpickle_numpy.register_handlers()
@@ -243,6 +281,66 @@ def run_switsching_simulations(repetitions, folder):
             worlds = 0
 
             gc.collect()
+            
+            
+def analyze_switching_simulations(folder):
+    
+    for tendency in [1,1000]:#,3,5,10,30,50,100]: #1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
+        for trans in [95,99]:#[100,99,98,97,96,95,94]:
+            for unc in [1,5,10]:
+                print(tendency, trans, unc)
+                
+                run_name = "switching_h"+str(int(tendency))+"_t"+str(trans)+"_u"+str(unc)+".json"
+                fname = os.path.join(folder, run_name)
+                
+                jsonpickle_numpy.register_handlers()
+                
+                with open(fname, 'r') as infile:
+                    data = json.load(infile)
+                    
+                worlds_old = pickle.decode(data)
+                
+                repetitions = len(worlds_old)
+                trials = worlds_old[0].trials
+                
+                correct = np.zeros(repetitions*trials)
+                RT = np.zeros(repetitions*trials)
+                agent = np.zeros(repetitions*trials)
+                num_in_run = np.zeros(repetitions*trials)
+                congruent = np.zeros(repetitions*trials)
+                trial_num = np.zeros(repetitions*trials)
+                epoch = np.zeros(repetitions*trials)
+                
+                for i in range(repetitions):
+                    w = worlds_old[i]
+                    correct[i*trials:(i+1)*trials] = (w.actions[:,0] == w.environment.correct_choice).astype(int)
+                    RT[i*trials:(i+1)*trials] = w.agent.action_selection.RT[:,0]
+                    agent[i*trials:(i+1)*trials] = i
+                    num_in_run[i*trials:(i+1)*trials] = w.environment.num_in_run
+                    congruent[i*trials:(i+1)*trials] = np.logical_not(w.environment.congruent)
+                    trial_num[i*trials:(i+1)*trials] = np.arange(0,trials)
+                    epoch[i*trials:(i+1)*trials] = [-1]*10 + [0]*20 + [1]*20 + [2]*20 + [3]*(trials-70)
+                    
+                data_dict = {"correct": correct, "RT": RT, "agent": agent, 
+                             "num_in_run": num_in_run, "congruent": congruent,
+                             "trial_num": trial_num, "epoch": epoch}
+                data = pd.DataFrame(data_dict)
+                
+                # plt.figure()
+                # for i in range(0,3):
+                #     sns.lineplot(x='num_in_run', y='RT', data=data.query('epoch == @i'), style='congruent', label=str(i), ci = 95, estimator=np.nanmean, linewidth=3)
+                # plt.show()
+                plt.figure()
+                sns.lineplot(x='num_in_run', y='RT', data=data.query('epoch >= 0 and epoch < 3'), style='congruent', hue='epoch', ci = 95, estimator=np.nanmean, linewidth=3)
+                plt.show()
+                plt.figure()
+                sns.lineplot(x='num_in_run', y='correct', data=data.query('epoch >= 0 and epoch < 3'), style='congruent', hue='epoch', ci = 95, estimator=np.nanmean, linewidth=3)
+                plt.show()
+                # plt.figure()
+                # sns.lineplot(x='num_in_run', y='RT', data=data.query('congruent == 1 and trial_num > 50'), ci = 95, estimator=np.nanmedian, linewidth=3)
+                # sns.lineplot(x='num_in_run', y='RT', data=data.query('congruent == 0 and trial_num > 50'), ci = 95, estimator=np.nanmedian, linewidth=3)
+                # plt.show()
+            
 
 def main():
 
@@ -254,7 +352,7 @@ def main():
     if not os.path.isdir(folder):
         os.mkdir(folder)
 
-    repetitions = 2
+    repetitions = 100
 
     """
     run simulations
@@ -262,6 +360,8 @@ def main():
     # runs simulations with varying habitual tendency and reward probability
     # results are stored in data folder
     run_switsching_simulations(repetitions, folder)
+    
+    analyze_switching_simulations(folder)
 
 
 if __name__ == "__main__":
