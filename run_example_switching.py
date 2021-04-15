@@ -68,6 +68,10 @@ def run_agent(par_list, trials, T, ns, na, nr, nc, f, contexts, states, state_tr
     C_alphas = np.ones((nr, ns, nc))
     # initialize state in front of levers so that agent knows it yields no reward
     C_alphas[:,:4,:] = np.array([100,1])[:,None,None]
+    C_alphas[:,4:,0] = np.array([[1, 100],
+                                  [100, 1]])
+    C_alphas[:,4:,1] = np.array([[100, 1],
+                                  [1, 100]])
 
     # agent's initial estimate of reward generation probability
     C_agent = np.zeros((nr, ns, nc))
@@ -179,15 +183,15 @@ def run_switsching_simulations(repetitions, folder):
     nc = 2
     u = 0.99
     utility = np.array([1-u,u])
-    f = 0.4
+    f = 0.5
 
     Rho = np.zeros((trials, nr, ns))
 
     for tendency in [1000]:#,3,5,10,30,50,100]: #1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
-        for trans in [99]:#[100,99,98,97,96,95,94]:
+        for trans in [95]:#[100,99,98,97,96,95,94]:
 
 
-            Rho[:], contexts, states, state_trans = switching_timeseries(trials, nr=nr, ns=ns, na=na, stable_length=10)
+            Rho[:], contexts, states, state_trans, correct_choice = switching_timeseries(trials, nr=nr, ns=ns, na=na, nc=nc, stable_length=10)
 
             # plt.figure()
             # plt.plot(Rho[:,2,2])
@@ -201,6 +205,9 @@ def run_switsching_simulations(repetitions, folder):
             for i in range(repetitions):
                 worlds.append(run_agent(parameters, trials, T, ns, na, nr, nc, f, contexts, states, state_trans=state_trans))
                 w = worlds[-1]
+                choices = w.actions[:,0]
+                correct = (choices == correct_choice).sum()
+                print("percent correct:", correct/trials)
                 plt.figure()
                 post_pol = np.einsum('tpc,tc->tp', w.agent.posterior_policies[:,0,:,:], w.agent.posterior_context[:,0,:])
                 like = np.einsum('tpc,tc->tp', w.agent.likelihood[:,0,:,:], w.agent.posterior_context[:,0,:])

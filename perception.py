@@ -84,7 +84,7 @@ class HierarchicalPerception(object):
                                                 self.obs_messages[:, tp+1,c]*\
                                                 self.rew_messages[:, tp+1,c]
                     self.bwd_messages[:,tp,pi,c] = self.bwd_messages[:,tp,pi,c]\
-                        .dot(self.generative_model_states[:,:,u])
+                        .dot(self.generative_model_states[:,:,u,c])
                     self.bwd_messages[:,tp, pi,c] /= self.bwd_messages[:,tp,pi,c].sum()
 
     def update_messages(self, t, pi, cs, c=0):
@@ -94,7 +94,7 @@ class HierarchicalPerception(object):
                                                 self.obs_messages[:,t-i,c]*\
                                                 self.rew_messages[:, t-i,c]
                 self.bwd_messages[:,t-1-i,pi,c] = self.bwd_messages[:,t-1-i,pi,c]\
-                    .dot(self.generative_model_states[:,:,u])
+                    .dot(self.generative_model_states[:,:,u,c])
 
                 norm = self.bwd_messages[:,t-1-i,pi,c].sum()
                 if norm > 0:
@@ -105,8 +105,9 @@ class HierarchicalPerception(object):
                self.fwd_messages[:, t+1+i, pi,c] = self.fwd_messages[:,t+i, pi,c]*\
                                                 self.obs_messages[:, t+i,c]*\
                                                 self.rew_messages[:, t+i,c]
+               
                self.fwd_messages[:, t+1+i, pi,c] = \
-                                                self.generative_model_states[:,:,u].\
+                                                self.generative_model_states[:,:,u,c].\
                                                 dot(self.fwd_messages[:, t+1+i, pi,c])
                self.fwd_norms[t+1+i,pi,c] = self.fwd_messages[:,t+1+i,pi,c].sum()
                if self.fwd_norms[t+1+i, pi,c] > 0: #???? Shouldn't this not happen?
@@ -125,7 +126,7 @@ class HierarchicalPerception(object):
                                                 self.obs_messages[:, tp+1,c]*\
                                                 self.rew_messages[:, tp+1,c]
                     self.bwd_messages[:,tp,pi,c] = self.bwd_messages[:,tp,pi,c]\
-                        .dot(self.generative_model_states[:,:,u])
+                        .dot(self.generative_model_states[:,:,u,c])
                     self.bwd_messages[:,tp, pi,c] /= self.bwd_messages[:,tp,pi,c].sum()
 
     def update_beliefs_states(self, tau, t, observation, reward, policies, possible_policies):
@@ -159,6 +160,7 @@ class HierarchicalPerception(object):
         likelihood /= likelihood.sum(axis=0)[np.newaxis,:]
         posterior = likelihood * self.prior_policies
         posterior/= posterior.sum(axis=0)[np.newaxis,:]
+        posterior = np.nan_to_num(posterior)
 
         #posterior = softmax(ln(self.fwd_norms).sum(axis = 0)+ln(self.prior_policies))
 
@@ -223,7 +225,6 @@ class HierarchicalPerception(object):
 #                #print(tau, np.exp(outcome_surprise), np.exp(policy_surprise))
 #                print(tau, np.exp(outcome_surprise[1])/np.exp(outcome_surprise[0]), np.exp(policy_surprise[1])/np.exp(policy_surprise[0]))
 
-
             posterior = np.nan_to_num(softmax(posterior+ln(prior_context)))
 
         return posterior
@@ -252,7 +253,6 @@ class HierarchicalPerception(object):
                 np.exp(scs.digamma(self.dirichlet_rew_params[:,state,c])\
                         -scs.digamma(self.dirichlet_rew_params[:,state,c].sum()))
                 self.generative_model_rewards[:,state,c] /= self.generative_model_rewards[:,state,c].sum()
-
             self.rew_messages[:,t+1:,c] = self.prior_rewards.dot(self.generative_model_rewards[:,:,c])[:,np.newaxis]
 
 #        for c in range(self.nc):

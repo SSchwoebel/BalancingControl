@@ -176,7 +176,7 @@ class TaskSwitching(object):
         self.hidden_states = np.zeros((trials, T), dtype = int)
         self.hidden_states[:,0] = start_states
         
-        self.contexts = contexts.copy()
+        self.contexts = contexts.copy().astype(int)
 
         self.trials = trials
 
@@ -198,9 +198,10 @@ class TaskSwitching(object):
     def update_hidden_states(self, tau, t, response):
 
         current_state = self.hidden_states[tau, t-1]
+        current_context = self.contexts[tau]
 
         self.hidden_states[tau, t] = np.random.choice(self.Theta.shape[0],
-                          p = self.Theta[:, current_state, int(response)])
+                          p = self.Theta[:, current_state, int(response), current_context])
 
     def generate_rewards(self, tau, t):
         #generate one sample from multinomial distribution

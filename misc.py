@@ -237,7 +237,7 @@ def D_KL_dirichlet_categorical(alpha, beta):
 
     return D_KL
 
-def switching_timeseries(trials, states=None, state_trans=None, pattern=None, ns=6, na=2, nr=2, stable_length=2):
+def switching_timeseries(trials, states=None, state_trans=None, pattern=None, ns=6, na=4, nr=2, nc=2, stable_length=2):
 
     if pattern is None:
         pattern = np.tile([0]*stable_length+[1]*stable_length, trials//(2*stable_length))
@@ -246,34 +246,48 @@ def switching_timeseries(trials, states=None, state_trans=None, pattern=None, ns
         states = np.random.choice(4,size=trials)
 
     if state_trans is None:
-        state_trans = np.array([[[0, 0, 0, 0, 0, 0],
-                                 [0, 0, 0, 0, 0, 0],
-                                 [0, 0, 0, 0, 0, 0],
-                                 [0, 0, 0, 0, 0, 0],
-                                 [1, 1, 1, 1, 1, 1],
-                                 [0, 0, 0, 0, 0, 0],],
-                                [[0, 0, 0, 0, 0, 0],
-                                 [0, 0, 0, 0, 0, 0],
-                                 [0, 0, 0, 0, 0, 0],
-                                 [0, 0, 0, 0, 0, 0],
-                                 [0, 0, 0, 0, 0, 0],
-                                 [1, 1, 1, 1, 1, 1],]])
-
-    state_trans = np.transpose(state_trans, axes=(1,2,0))
+        state_trans = np.zeros((ns,ns,na,nc))
+        state_trans[:,:,0,0] = [[0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0],
+                                [1, 0, 1, 0, 1, 1],
+                                [0, 1, 0, 1, 0, 0],]
+        state_trans[:,:,1,0] = [[0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0],
+                                [0, 1, 0, 1, 1, 1],
+                                [1, 0, 1, 0, 0, 0],]
+        state_trans[:,:,1,1] = [[0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0],
+                                [1, 1, 0, 0, 0, 0],
+                                [0, 0, 1, 1, 1, 1],]
+        state_trans[:,:,0,1] = [[0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0],
+                                [0, 0, 1, 1, 0, 0],
+                                [1, 1, 0, 0, 1, 1],]
 
     Rho = np.zeros((trials,nr,ns))
     Rho[:,:,0:4] = np.array([1,0])[None,:,None]
+    correct_choice = np.zeros(trials)
     for t,task in enumerate(pattern):
         s = states[t]
         if task == 0:
             corr_a = s%2
+            Rho[t,:,4] = [0, 1]
+            Rho[t,:,5] = [1, 0]
         if task == 1:
             corr_a = s//2
+            Rho[t,:,4] = [1, 0]
+            Rho[t,:,5] = [0, 1]
+        correct_choice[t] = corr_a
 
-        Rho[t,:,4] = [0+corr_a, 1-corr_a]
-        Rho[t,:,5] = [1-corr_a, 0+corr_a]
-
-    return Rho, pattern, states, state_trans
+    return Rho, pattern, states, state_trans, correct_choice
 
 
 def plot_habit_learning(w, results, save_figs=False, fname=''):
