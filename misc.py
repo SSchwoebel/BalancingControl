@@ -303,6 +303,51 @@ def switching_timeseries(trials, states=None, state_trans=None, pattern=None, ns
     return Rho, pattern, states, state_trans, correct_choice, congruent, num_in_run
 
 
+def single_task_timeseries(trials, states=None, state_trans=None, pattern=None, ns=6, na=4, nr=2, nc=1):
+
+    if pattern is None:
+        pattern = np.zeros(trials)
+
+    if states is None:
+        states = np.random.choice(4,size=trials)
+
+    if state_trans is None:
+        state_trans = np.zeros((ns,ns,na,nc))
+        state_trans[:,:,0,0] = [[0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0],
+                                [1, 0, 1, 0, 1, 1],
+                                [0, 1, 0, 1, 0, 0],]
+        state_trans[:,:,1,0] = [[0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0],
+                                [0, 1, 0, 1, 1, 1],
+                                [1, 0, 1, 0, 0, 0],]
+
+    Rho = np.zeros((trials,nr,ns))
+    Rho[:,:,0:4] = np.array([1,0])[None,:,None]
+    correct_choice = np.zeros(trials, dtype=int)
+    congruent = np.zeros(trials, dtype=int)
+    for t,task in enumerate(pattern):
+        s = states[t]
+        if task == 0:
+            corr_a = s%2
+            Rho[t,:,4] = [0, 1]
+            Rho[t,:,5] = [1, 0]
+        if task == 1:
+            corr_a = s//2
+            Rho[t,:,4] = [1, 0]
+            Rho[t,:,5] = [0, 1]
+        correct_choice[t] = corr_a
+        congruent[t] = int((s%2) == (s//2))
+        
+    num_in_run = np.ones(trials)
+        
+    return Rho, pattern, states, state_trans, correct_choice, congruent, num_in_run
+
+
 def plot_habit_learning(w, results, save_figs=False, fname=''):
 
     #plot Rho
