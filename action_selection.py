@@ -170,8 +170,8 @@ class DirichletSelector(object):
             #print(tau, t, i-1)
         else:
             self.RT[tau,t] = 0
-        #chosen_pol = accepted_pis[i-1]
-        chosen_pol = np.random.choice(npi, p=posterior_policies)
+        chosen_pol = accepted_pis[i-1]
+        #chosen_pol = np.random.choice(npi, p=posterior_policies)
         u = actions[chosen_pol]
         #print(tau,t,i,accepted_pis[i-1],u,H_rel)
         # if tau in range(100,110) and t==0:
