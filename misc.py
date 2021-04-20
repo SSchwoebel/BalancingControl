@@ -348,6 +348,44 @@ def single_task_timeseries(trials, states=None, state_trans=None, pattern=None, 
     return Rho, pattern, states, state_trans, correct_choice, congruent, num_in_run
 
 
+def flanker_timeseries(trials, states=None, flankers=None, contexts=None, state_trans=None, ns=6, na=4, nr=2, nc=2):
+
+    if states is None:
+        states = np.random.choice(4,size=trials)
+    if flankers is None:
+        flankers = np.random.choice(4,size=trials)
+    if contexts is None:
+        contexts = flankers // 2
+
+    if state_trans is None:
+        state_trans = np.zeros((ns,ns,na,nc))
+        state_trans[:,:,0,:] = np.array([[0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0],
+                                [1, 1, 0, 0, 1, 1],
+                                [0, 0, 1, 1, 0, 0],])[:,:,None]
+        state_trans[:,:,1,:] = np.array([[0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0],
+                                [0, 0, 1, 1, 1, 1],
+                                [1, 1, 0, 0, 0, 0],])[:,:,None]
+
+    Rho = np.zeros((trials,nr,ns))
+    Rho[:,:,0:4] = np.array([1,0])[None,:,None]
+    correct_choice = np.zeros(trials, dtype=int)
+    congruent = np.zeros(trials, dtype=int)
+    for t,s in enumerate(states):
+        corr_a = s//2
+        Rho[t,:,4] = [0, 1]
+        Rho[t,:,5] = [1, 0]
+        correct_choice[t] = corr_a
+        congruent[t] = int((flankers[t]//2) == (s//2))
+        
+    return Rho, states, flankers, contexts, state_trans, correct_choice, congruent
+
+
 def plot_habit_learning(w, results, save_figs=False, fname=''):
 
     #plot Rho
