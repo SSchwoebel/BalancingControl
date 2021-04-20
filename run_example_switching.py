@@ -92,9 +92,9 @@ def run_agent(par_list, trials, T, ns, na, nr, nc, f, contexts, states, \
             transition_matrix_context[i,i] = p
     else:
         transition_matrix_context = np.array([[1]])
-        
+
     # context observation matrix
-    
+
     if nc > 1:
         D = np.zeros((nc,nc)) + unc
         for c in range(nc):
@@ -144,7 +144,7 @@ def run_agent(par_list, trials, T, ns, na, nr, nc, f, contexts, states, \
     """
     set context prior
     """
-    
+
     if nc > 1:
         prior_context = np.zeros((nc)) + 0.1/(nc-1)
         prior_context[0] = 0.9
@@ -206,22 +206,22 @@ def run_switsching_simulations(repetitions, folder):
     Rho = np.zeros((trials, nr, ns))
 
     for tendency in [1,1000]:#,3,5,10,30,50,100]: #1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
-        for trans in [95]:#[95,96,97,98,99]
-            for unc in [0.1]:#[0,0.1,0.5,1,2,3,4,5,6,8,10]:
+        for trans in [94]:#[80,85,90,91,92,93,94,95,96,97,98,99]
+            for unc in [0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1,2,3,4,5,6,8,10]:
                 print(tendency, trans, unc)
-    
+
                 # Rho[:], contexts, states, state_trans, correct_choice, congruent, num_in_run = \
                 #     switching_timeseries(trials, nr=nr, ns=ns, na=na, nc=nc, stable_length=5)
-    
+
                 # plt.figure()
                 # plt.plot(Rho[:,2,2])
                 # plt.plot(Rho[:,1,1])
                 # plt.show()
-    
+
                 worlds = []
                 learn_pol = tendency
                 parameters = [learn_pol, trans/100., Rho, utility, unc/100.]
-    
+
                 for i in range(repetitions):
                     Rho[:], contexts, states, state_trans, correct_choice, congruent, num_in_run = \
                     switching_timeseries(trials, nr=nr, ns=ns, na=na, nc=nc, stable_length=5)
@@ -276,23 +276,23 @@ def run_switsching_simulations(repetitions, folder):
                     # plt.figure()
                     # plt.plot(w.agent.posterior_context[:,0,:], 'x')
                     # plt.show()
-                
-            
 
-                run_name = "switching_h"+str(int(learn_pol))+"_t"+str(trans)+"_u"+str(unc)+".json"
+
+
+                run_name = "acsel_switching_h"+str(int(learn_pol))+"_t"+str(trans)+"_u"+str(unc)+".json"
                 fname = os.path.join(folder, run_name)
-    
+
                 jsonpickle_numpy.register_handlers()
                 pickled = pickle.encode(worlds)
                 with open(fname, 'w') as outfile:
                     json.dump(pickled, outfile)
-    
+
                 pickled = 0
                 worlds = 0
-    
+
                 gc.collect()
-                
-                
+
+
 def run_single_task_simulations(repetitions, folder):
 
     trials = 100
@@ -308,22 +308,22 @@ def run_single_task_simulations(repetitions, folder):
     Rho = np.zeros((trials, nr, ns))
 
     for tendency in [1, 1000]:#,3,5,10,30,50,100]: #1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
-        for trans in [99]:#[95,96,97,98,99]
-            for unc in [0,0.1,0.5,1,2,3,4,5,6,8,10]:
+        for trans in [80]:#[95,96,97,98,99]
+            for unc in [0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1,2,3,4,5,6,8,10]:
                 print(tendency, trans, unc)
-    
+
                 # Rho[:], contexts, states, state_trans, correct_choice, congruent, num_in_run = \
                 #     switching_timeseries(trials, nr=nr, ns=ns, na=na, nc=nc, stable_length=5)
-    
+
                 # plt.figure()
                 # plt.plot(Rho[:,2,2])
                 # plt.plot(Rho[:,1,1])
                 # plt.show()
-    
+
                 worlds = []
                 learn_pol = tendency
                 parameters = [learn_pol, trans/100., Rho, utility, unc/100.]
-    
+
                 for i in range(repetitions):
                     Rho[:], contexts, states, state_trans, correct_choice, congruent, num_in_run = \
                     single_task_timeseries(trials, nr=nr, ns=ns, na=na, nc=nc)
@@ -378,39 +378,39 @@ def run_single_task_simulations(repetitions, folder):
                     # plt.figure()
                     # plt.plot(w.agent.posterior_context[:,0,:], 'x')
                     # plt.show()
-                
-            
 
-                run_name = "single_h"+str(int(learn_pol))+"_t"+str(trans)+"_u"+str(unc)+".json"
+
+
+                run_name = "acsel_single_h"+str(int(learn_pol))+"_t"+str(trans)+"_u"+str(unc)+".json"
                 fname = os.path.join(folder, run_name)
-    
+
                 jsonpickle_numpy.register_handlers()
                 pickled = pickle.encode(worlds)
                 with open(fname, 'w') as outfile:
                     json.dump(pickled, outfile)
-    
+
                 pickled = 0
                 worlds = 0
-    
+
                 gc.collect()
-                
-            
-            
+
+
+
 def analyze_switching_simulations(folder):
-    
+
     tendencies = [1,1000]
     probs = [95,96,97,98,99]
-    uncertainties = [0,0.1,0.5,1,2,3,4,5,6,8,10]
-    run_name = "switching_h"+str(int(tendencies[0]))+"_t"+str(probs[0])+"_u"+str(uncertainties[0])+".json"
+    uncertainties = [0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1,2,3,4,5,6,8,10]
+    run_name = "acsel_switching_h"+str(int(tendencies[0]))+"_t"+str(probs[0])+"_u"+str(uncertainties[0])+".json"
     fname = os.path.join(folder, run_name)
-    
+
     jsonpickle_numpy.register_handlers()
-    
+
     with open(fname, 'r') as infile:
         data = json.load(infile)
-        
+
     worlds_old = pickle.decode(data)
-    
+
     repetitions = len(worlds_old)
     trials = worlds_old[0].trials
     num_types = len(tendencies)*len(probs)*len(uncertainties)
@@ -424,28 +424,28 @@ def analyze_switching_simulations(folder):
     tend_arr = np.zeros(repetitions*trials*num_types)
     prob_arr = np.zeros(repetitions*trials*num_types)
     unc_arr  = np.zeros(repetitions*trials*num_types)
-    
+
     sim_type = 0
     for tendency in tendencies:#,3,5,10,30,50,100]: #1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
         for trans in probs:#[100,99,98,97,96,95,94]:
             for unc in uncertainties:
                 print(tendency, trans, unc)
-                
-                run_name = "switching_h"+str(int(tendency))+"_t"+str(trans)+"_u"+str(unc)+".json"
+
+                run_name = "acsel_switching_h"+str(int(tendency))+"_t"+str(trans)+"_u"+str(unc)+".json"
                 fname = os.path.join(folder, run_name)
-                
+
                 jsonpickle_numpy.register_handlers()
-                
+
                 with open(fname, 'r') as infile:
                     data = json.load(infile)
-                    
+
                 worlds_old = pickle.decode(data)
-                
+
                 repetitions = len(worlds_old)
                 trials = worlds_old[0].trials
-                
+
                 offset = sim_type*repetitions*trials
-                
+
                 for i in range(repetitions):
                     w = worlds_old[i]
                     correct[offset+i*trials:offset+(i+1)*trials] = (w.actions[:,0] == w.environment.correct_choice).astype(int)
@@ -458,38 +458,51 @@ def analyze_switching_simulations(folder):
                     tend_arr[offset+i*trials:offset+(i+1)*trials] = tendency
                     prob_arr[offset+i*trials:offset+(i+1)*trials] = trans
                     unc_arr[offset+i*trials:offset+(i+1)*trials] = unc
-                
+
                 sim_type+=1
-                    
-    data_dict = {"correct": correct, "RT": RT, "agent": agent, 
+
+    data_dict = {"correct": correct, "RT": RT, "agent": agent,
                  "num_in_run": num_in_run, "congruent": congruent,
                  "trial_num": trial_num, "epoch": epoch,
                  "uncertainty": unc_arr, "tendencies": tend_arr,
                  "trans_probs": prob_arr}
     data = pd.DataFrame(data_dict)
-    
+
     # plt.figure()
     # for i in range(0,3):
     #     sns.lineplot(x='num_in_run', y='RT', data=data.query('epoch == @i'), style='congruent', label=str(i), ci = 95, estimator=np.nanmean, linewidth=3)
     # plt.show()
     tendency=1000
     trans=95
-    unc=5
+    unc=1
+
+    # RT & accuracy as a function of num in run for congruent and incongruent trials and for different training durations (Fig 3 in Steyvers 2019)
+
     plt.figure()
     plt.title("tendency "+str(tendency)+", trans "+str(trans)+", unc "+str(unc))
     sns.lineplot(x='num_in_run', y='RT', data=data.query('epoch >= 0 and epoch < 3 and tendencies==@tendency and uncertainty==@unc and trans_probs==@trans'), style='congruent', hue='epoch', ci = 95, estimator=np.nanmean, linewidth=3)
-    plt.ylim([0,1800])
+    plt.ylim([600,1800])
     plt.show()
     plt.figure()
     plt.title("tendency "+str(tendency)+", trans "+str(trans)+", unc "+str(unc))
     sns.lineplot(x='num_in_run', y='correct', data=data.query('epoch >= 0 and epoch < 3 and tendencies==@tendency and uncertainty==@unc and trans_probs==@trans'), style='congruent', hue='epoch', ci = 95, estimator=np.nanmean, linewidth=3)
-    plt.ylim([0.,1.])
+    plt.ylim([0.65,1.])
     plt.show()
+
+    # CTI
     plt.figure()
     plt.title("tendency "+str(tendency)+", trans "+str(trans))
-    sns.lineplot(x='uncertainty', y='RT', data=data.query('tendencies==@tendency and trans_probs==@trans and num_in_run<3 and uncertainty<6'), style='num_in_run', ci = 95, estimator=np.nanmean, linewidth=3)
-    plt.ylim([0,1800])
+    sns.lineplot(x='uncertainty', y='RT', data=data.query('tendencies==@tendency and trans_probs==@trans and num_in_run<3 and uncertainty<2 and uncertainty>0'), style='num_in_run', ci = 95, estimator=np.nanmean, linewidth=3)
+    plt.ylim([1000,1500])
     plt.show()
+    # RTI
+    plt.figure()
+    plt.title("tendency "+str(tendency)+", trans "+str(trans))
+    sns.lineplot(x='trans_probs', y='RT', data=data.query('tendencies==@tendency and num_in_run<3 and uncertainty==@unc'), style='num_in_run', ci = 95, estimator=np.nanmean, linewidth=3)
+    plt.ylim([1000,1500])
+    plt.show()
+
+
     plt.figure()
     plt.title("tendency "+str(tendency)+", trans "+str(trans))
     sns.lineplot(x='num_in_run', y='RT', data=data.query('tendencies==@tendency and trans_probs==@trans and uncertainty<11 and epoch>2'), hue='uncertainty', style='congruent', ci = 95, estimator=np.nanmean, linewidth=3)
@@ -504,9 +517,9 @@ def analyze_switching_simulations(folder):
     # sns.lineplot(x='num_in_run', y='RT', data=data.query('congruent == 1 and trial_num > 50'), ci = 95, estimator=np.nanmedian, linewidth=3)
     # sns.lineplot(x='num_in_run', y='RT', data=data.query('congruent == 0 and trial_num > 50'), ci = 95, estimator=np.nanmedian, linewidth=3)
     # plt.show()
-    
+
     return data
-            
+
 
 def main():
 
@@ -525,11 +538,11 @@ def main():
     """
     # runs simulations with varying habitual tendency and reward probability
     # results are stored in data folder
-    #run_switsching_simulations(repetitions, folder)
-    run_single_task_simulations(repetitions, folder)
-    
-    # data = analyze_switching_simulations(folder)
-    # return data
+    run_switsching_simulations(repetitions, folder)
+    #run_single_task_simulations(repetitions, folder)
+
+    #data = analyze_switching_simulations(folder)
+    #return data
 
 
 if __name__ == "__main__":
