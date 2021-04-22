@@ -205,8 +205,8 @@ def run_switsching_simulations(repetitions, folder):
 
     Rho = np.zeros((trials, nr, ns))
 
-    for tendency in [1,1000]:#,3,5,10,30,50,100]: #1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
-        for trans in [94]:#[80,85,90,91,92,93,94,95,96,97,98,99]
+    for tendency in [10]:#[1,1000]:#,3,5,10,30,50,100]: #1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
+        for trans in [80]:#[80,85,90,91,92,93,94,95,96,97,98,99]
             for unc in [0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1,2,3,4,5,6,8,10]:
                 print(tendency, trans, unc)
 
@@ -398,8 +398,8 @@ def run_single_task_simulations(repetitions, folder):
 
 def analyze_switching_simulations(folder):
 
-    tendencies = [1,1000]
-    probs = [95,96,97,98,99]
+    tendencies = [1,10,1000]
+    probs = [80,85,90,91,92,93,94,95,96,97,98,99]
     uncertainties = [0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1,2,3,4,5,6,8,10]
     run_name = "acsel_switching_h"+str(int(tendencies[0]))+"_t"+str(probs[0])+"_u"+str(uncertainties[0])+".json"
     fname = os.path.join(folder, run_name)
@@ -472,8 +472,8 @@ def analyze_switching_simulations(folder):
     # for i in range(0,3):
     #     sns.lineplot(x='num_in_run', y='RT', data=data.query('epoch == @i'), style='congruent', label=str(i), ci = 95, estimator=np.nanmean, linewidth=3)
     # plt.show()
-    tendency=1000
-    trans=95
+    tendency=10
+    trans=90
     unc=1
 
     # RT & accuracy as a function of num in run for congruent and incongruent trials and for different training durations (Fig 3 in Steyvers 2019)
@@ -492,13 +492,13 @@ def analyze_switching_simulations(folder):
     # CTI
     plt.figure()
     plt.title("tendency "+str(tendency)+", trans "+str(trans))
-    sns.lineplot(x='uncertainty', y='RT', data=data.query('tendencies==@tendency and trans_probs==@trans and num_in_run<3 and uncertainty<2 and uncertainty>0'), style='num_in_run', ci = 95, estimator=np.nanmean, linewidth=3)
+    sns.lineplot(x='uncertainty', y='RT', data=data.query('tendencies==@tendency and trans_probs==@trans and num_in_run<3 and uncertainty<6 and uncertainty>0'), style='num_in_run', ci = 95, estimator=np.nanmean, linewidth=3)
     plt.ylim([1000,1500])
     plt.show()
     # RTI
     plt.figure()
-    plt.title("tendency "+str(tendency)+", trans "+str(trans))
-    sns.lineplot(x='trans_probs', y='RT', data=data.query('tendencies==@tendency and num_in_run<3 and uncertainty==@unc'), style='num_in_run', ci = 95, estimator=np.nanmean, linewidth=3)
+    plt.title("tendency "+str(tendency)+", unc "+str(unc))
+    sns.lineplot(x='trans_probs', y='RT', data=data.query('tendencies==@tendency and num_in_run<3 and uncertainty==@unc and trans_probs<96'), style='num_in_run', ci = 95, estimator=np.nanmean, linewidth=3)
     plt.ylim([1000,1500])
     plt.show()
 
@@ -596,7 +596,7 @@ def analyze_single_simulations(folder):
     # for i in range(0,3):
     #     sns.lineplot(x='num_in_run', y='RT', data=data.query('epoch == @i'), style='congruent', label=str(i), ci = 95, estimator=np.nanmean, linewidth=3)
     # plt.show()
-    tendency=1000
+    tendency=1
     trans=95
     unc=5
     plt.figure()
