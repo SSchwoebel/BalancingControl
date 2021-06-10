@@ -241,7 +241,7 @@ def switching_timeseries(trials, states=None, state_trans=None, pattern=None, ns
 
     if pattern is None:
         pattern = np.tile([0]*stable_length+[1]*stable_length, trials//(2*stable_length))
-        
+
     num_in_run = np.zeros(trials)
     old = -1
     count = 0
@@ -299,7 +299,7 @@ def switching_timeseries(trials, states=None, state_trans=None, pattern=None, ns
             Rho[t,:,5] = [0, 1]
         correct_choice[t] = corr_a
         congruent[t] = int((s%2) == (s//2))
-        
+
     return Rho, pattern, states, state_trans, correct_choice, congruent, num_in_run
 
 
@@ -342,9 +342,9 @@ def single_task_timeseries(trials, states=None, state_trans=None, pattern=None, 
             Rho[t,:,5] = [0, 1]
         correct_choice[t] = corr_a
         congruent[t] = int((s%2) == (s//2))
-        
+
     num_in_run = np.ones(trials)
-        
+
     return Rho, pattern, states, state_trans, correct_choice, congruent, num_in_run
 
 
@@ -363,14 +363,14 @@ def flanker_timeseries(trials, states=None, flankers=None, contexts=None, state_
                                 [0, 0, 0, 0, 0, 0],
                                 [0, 0, 0, 0, 0, 0],
                                 [0, 0, 0, 0, 0, 0],
-                                [1, 1, 0, 0, 1, 1],
-                                [0, 0, 1, 1, 0, 0],])[:,:,None]
+                                [0, 0, 1, 1, 1, 1],
+                                [1, 1, 0, 0, 0, 0],])[:,:,None]
         state_trans[:,:,1,:] = np.array([[0, 0, 0, 0, 0, 0],
                                 [0, 0, 0, 0, 0, 0],
                                 [0, 0, 0, 0, 0, 0],
                                 [0, 0, 0, 0, 0, 0],
-                                [0, 0, 1, 1, 1, 1],
-                                [1, 1, 0, 0, 0, 0],])[:,:,None]
+                                [1, 1, 0, 0, 1, 1],
+                                [0, 0, 1, 1, 0, 0],])[:,:,None]
 
     Rho = np.zeros((trials,nr,ns))
     Rho[:,:,0:4] = np.array([1,0])[None,:,None]
@@ -378,11 +378,48 @@ def flanker_timeseries(trials, states=None, flankers=None, contexts=None, state_
     congruent = np.zeros(trials, dtype=int)
     for t,s in enumerate(states):
         corr_a = s//2
-        Rho[t,:,4] = [0, 1]
-        Rho[t,:,5] = [1, 0]
+        Rho[t,:,4] = [1, 0]
+        Rho[t,:,5] = [0, 1]
         correct_choice[t] = corr_a
         congruent[t] = int((flankers[t]//2) == (s//2))
-        
+
+    return Rho, states, flankers, contexts, state_trans, correct_choice, congruent
+
+def flanker_timeseries2(trials, states=None, flankers=None, contexts=None, state_trans=None, ns=4, na=4, nr=2, nc=2):
+
+    if states is None:
+        states = np.random.choice(4,size=trials)
+    if flankers is None:
+        flankers = np.random.choice(4,size=trials)
+    if contexts is None:
+        contexts = flankers // 2
+
+    if state_trans is None:
+        state_trans = np.zeros((ns,ns,na,nc))
+        state_trans[:,:,0,:] = np.array([[0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0],
+                                [1, 1, 1, 1, 1, 1],])[:,:,None]
+        state_trans[:,:,1,:] = np.array([[0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0],
+                                [1, 1, 1, 1, 1, 1],
+                                [0, 0, 0, 0, 0, 0],])[:,:,None]
+
+    Rho = np.zeros((trials,nr,ns))
+    Rho[:,:,0:4] = np.array([1,0])[None,:,None]
+    correct_choice = np.zeros(trials, dtype=int)
+    congruent = np.zeros(trials, dtype=int)
+    for t,s in enumerate(states):
+        corr_a = s//2
+        Rho[t,:,4] = [1-corr_a, corr_a]
+        Rho[t,:,5] = [corr_a, 1-corr_a]
+        correct_choice[t] = corr_a
+        congruent[t] = int((flankers[t]//2) == (s//2))
+
     return Rho, states, flankers, contexts, state_trans, correct_choice, congruent
 
 

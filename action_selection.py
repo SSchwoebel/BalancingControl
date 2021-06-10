@@ -83,13 +83,14 @@ class MCMCSelector(object):
 
 class DirichletSelector(object):
 
-    def __init__(self, trials = 1, T = 10, number_of_actions = 2, factor=0.4, calc_dkl=False, calc_entropy=False):
+    def __init__(self, trials = 1, T = 10, number_of_actions = 2, factor=0.4, calc_dkl=False, calc_entropy=False, draw_true_post=False):
         self.n_pars = 0
 
         self.na = number_of_actions
         self.control_probability = np.zeros((trials, T, self.na))
         self.RT = np.zeros((trials, T-1))
         self.factor = factor
+        self.draw_true_post = draw_true_post
 
         self.calc_dkl = calc_dkl
         if calc_dkl:
@@ -141,7 +142,7 @@ class DirichletSelector(object):
 
         if t == 0:
             i += 1
-            while H_dir>H_0 - 3 + self.factor*H_0:
+            while H_dir>H_0 - self.factor + self.factor*H_0:
 
                 pi = np.random.choice(npi, p=prior)
                 r = np.random.rand()
@@ -170,8 +171,12 @@ class DirichletSelector(object):
             #print(tau, t, i-1)
         else:
             self.RT[tau,t] = 0
-        chosen_pol = accepted_pis[i-1]
-        #chosen_pol = np.random.choice(npi, p=posterior_policies)
+
+        if self.draw_true_post:
+            chosen_pol = np.random.choice(npi, p=posterior_policies)
+        else:
+            chosen_pol = accepted_pis[i-1]
+
         u = actions[chosen_pol]
         #print(tau,t,i,accepted_pis[i-1],u,H_rel)
         # if tau in range(100,110) and t==0:

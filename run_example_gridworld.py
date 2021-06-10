@@ -236,7 +236,7 @@ def run_agent(par_list, trials=trials, T=T, Lx = Lx, Ly = Ly, ns=ns, na=na):
 
         sel = 'avg'
 
-        ac_sel = asl.DirichletSelector(trials = trials, T = T, factor=0.6,
+        ac_sel = asl.DirichletSelector(trials = trials, T = T, factor=0.5, draw_true_post=True,
                                       number_of_actions = na, calc_entropy=True, calc_dkl=True)
     else:
 
@@ -363,7 +363,7 @@ def run_agent(par_list, trials=trials, T=T, Lx = Lx, Ly = Ly, ns=ns, na=na):
     annot = np.zeros((Lx,Ly))
     for i in range(Lx):
         for j in range(Ly):
-            annot[i,j] = i*Ly+j
+            annot[i,j] = i*Ly+j +1
 
     u = sns.heatmap(start_goal, ax = ax, **grid_plot_kwargs, annot=annot, annot_kws={"fontsize": 40})
     ax.invert_yaxis()
@@ -557,7 +557,7 @@ utility[g1+1:] = (1-u)/(ns-1)
 # action selection: avergaed or max selection
 avg = True
 tendencies = [1,1000]
-context = False
+context = True
 if context:
     name_str = "context_"
 else:

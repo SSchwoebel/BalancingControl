@@ -167,7 +167,7 @@ class BayesianPlanner(object):
                                                   self.posterior_policies[tau,t],
                                                   self.posterior_context[tau,t])
         #if reward > 0:
-        if self.learn_rew:
+        if self.learn_rew and t==self.T-1:
             self.posterior_dirichlet_rew[tau,t] = self.perception.update_beliefs_dirichlet_rew_params(tau, t, \
                                                             reward, \
                                                    self.posterior_states[tau, t], \

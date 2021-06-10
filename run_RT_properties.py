@@ -29,22 +29,22 @@ conflict.reverse()
 """
 gp = 6
 n = 81
-val = 0.148
+val = 0.16
 l = [val]*gp+[(1-6*val)/(n-gp)]*(n-gp)
-v = 0.00571
+v = 0.0055
 p = [(1-(v*(n-gp)))/6]*gp+[v]*(n-gp)
 conflict = [v]*gp+[(1-(v*(n-gp)))/6]*gp+[v]*(n-2*gp)
 npi = n
 flat = [1./npi]*npi
 
 plt.figure()
-plt.plot(l, label='likelihood, habit, goal', linewidth=3)
-plt.plot(p, label='prior agreement', linewidth=3)
-plt.plot(conflict, label='prior conflict', linewidth=3)
-plt.plot(flat, label='flat', linewidth=3)
+plt.plot(range(1,npi+1), l, label='likelihood, habit, goal', linewidth=3)
+plt.plot(range(1,npi+1), p, label='prior agreement', linewidth=3)
+plt.plot(range(1,npi+1), conflict, label='prior conflict', linewidth=3)
+plt.plot(range(1,npi+1), flat, label='flat', linewidth=3)
 plt.ylim([0,0.25])
 plt.legend()
-plt.xlim([0,npi])
+plt.xlim([1,npi])
 plt.xlabel('policy', fontsize=16)
 plt.ylabel('probability', fontsize=16)
 plt.savefig('underlying_prior_like_for_distributions.svg')
@@ -63,7 +63,7 @@ def run_action_selection(post, prior, like, trials = 100, crit_factor = 0.5, cal
         return ac_sel.RT.squeeze()
 
 # set up number of trials
-trials = 500
+trials = 1000
 
 # conflict
 prior = np.array(conflict)
@@ -157,13 +157,13 @@ def plot_common_histogram(factors, trials):
 
     frame['factor'] = np.repeat(factors, trials)
 
-    bins = 75
+    bins = 50
 
     plt.figure()
     sns.histplot(frame[['conflict', 'agreement']], alpha=0.5, bins=bins, binrange=[min_RT,max_RT],edgecolor='black')#, common_bins=False)#
     # for f in frames:
     #     sns.histplot(f[['conflict', 'agreement']], alpha=0.5, bins=100, binrange=[min_RT,max_RT],edgecolor='black', common_bins=True)#
-    plt.xlim(0,1600)
+    plt.xlim(0,1000)
     plt.ylim([0,trials+100])
     plt.xlabel('RT (#samples)')
     plt.savefig('RT_tests_histogram_conflict_agreement_all_'+str(npi)+'npi_'+str(trials)+'trials.svg',dpi=600)
@@ -171,7 +171,7 @@ def plot_common_histogram(factors, trials):
 
     plt.figure()
     sns.histplot(frame[["goal", "habit"]], alpha=0.5, bins=bins, binrange=[min_RT,max_RT],edgecolor='black')#, common_bins=False)#
-    plt.xlim(0,1600)
+    plt.xlim(0,1000)
     plt.ylim([0,trials+100])
     plt.xlabel('RT (#samples)')
     plt.savefig('RT_tests_histogram_goal_habit_all_'+str(npi)+'npi_'+str(trials)+'trials.svg',dpi=600)
@@ -179,7 +179,7 @@ def plot_common_histogram(factors, trials):
 
     plt.figure()
     sns.histplot(frame, alpha=0.6, bins=bins, binrange=[min_RT,max_RT],edgecolor='black')#, common_bins=False)#
-    plt.xlim(0,1600)
+    plt.xlim(0,1000)
     plt.ylim([0,trials+100])
     plt.xlabel('RT (#samples)')
     plt.savefig('RT_tests_histogram_all_all_'+str(npi)+'npi_'+str(trials)+'trials.svg',dpi=600)
@@ -206,7 +206,7 @@ def evaluate_DKL(num_tests, trials, conflict):
     plt.figure()
     sns.lineplot(data=DKL_df, x='factor', y='DKL', style='type', ci=95, linewidth=2)
     plt.xlim([factors[0], factors[-1]])
-    plt.ylim([0,1.7])
+    #plt.ylim([0,1.7])
     plt.savefig('dkl_threshold_factor_'+str(npi)+'npi_'+str(trials)+'trials.svg', dpi=600)
     plt.show()
 
@@ -258,10 +258,10 @@ def RT_of_like_entropy(trials):
 
 evaluate_DKL(num_tests, trials, test_vals[0])
 
-# factors = [0.1,0.3,0.5]
-# for f in factors:
-#     plot_RT_distributions(num_tests, trials, test_vals, f)
-# plot_common_histogram(factors, trials)
+factors = [0.1,0.3,0.5]
+for f in factors:
+    plot_RT_distributions(num_tests, trials, test_vals, f)
+plot_common_histogram(factors, trials)
 
 
 
