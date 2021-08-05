@@ -121,7 +121,7 @@ class DirichletSelector(object):
         # posterior_policies = prior * likelihood
         # posterior_policies /= posterior_policies.sum()
         #print(posterior_policies, prior, likelihood)
-        accepted_pis = np.zeros(100000, dtype=np.int32) - 1
+        self.accepted_pis = np.zeros(100000, dtype=np.int32) - 1
         dir_counts = np.ones(npi, np.double)
 
         curr_ess = 0
@@ -133,7 +133,7 @@ class DirichletSelector(object):
         #print("H", H_0)
 
         pi = np.random.choice(npi, p=prior)
-        accepted_pis[i] = pi
+        self.accepted_pis[i] = pi
         dir_counts[pi] += 1
         H_dir =         + (dir_counts.sum()-npi)*scs.digamma(dir_counts.sum()) \
                         - ((dir_counts - 1)*scs.digamma(dir_counts)).sum() \
@@ -148,17 +148,17 @@ class DirichletSelector(object):
                 r = np.random.rand()
                 #print(i, curr_ess)
 
-                #acc_prob = min(1, posterior_policies[pi]/posterior_policies[accepted_pis[i-1]])
-                if likelihood[accepted_pis[i-1]]>0:
-                    acc_prob = min(1, likelihood[pi]/likelihood[accepted_pis[i-1]])
+                #acc_prob = min(1, posterior_policies[pi]/posterior_policies[self.accepted_pis[i-1]])
+                if likelihood[self.accepted_pis[i-1]]>0:
+                    acc_prob = min(1, likelihood[pi]/likelihood[self.accepted_pis[i-1]])
                 else:
                     acc_prob = 1
-                if acc_prob >= r:#posterior_policies[pi]/posterior_policies[accepted_pis[i-1]] > r:
-                    accepted_pis[i] = pi
+                if acc_prob >= r:#posterior_policies[pi]/posterior_policies[self.accepted_pis[i-1]] > r:
+                    self.accepted_pis[i] = pi
                     dir_counts[pi] += 1#acc_prob
                 else:
-                    accepted_pis[i] = accepted_pis[i-1]
-                    dir_counts[accepted_pis[i-1]] += 1#1-acc_prob
+                    self.accepted_pis[i] = self.accepted_pis[i-1]
+                    dir_counts[self.accepted_pis[i-1]] += 1#1-acc_prob
 
                 H_dir =     + (dir_counts.sum()-npi)*scs.digamma(dir_counts.sum()) \
                             - ((dir_counts - 1)*scs.digamma(dir_counts)).sum() \
@@ -175,17 +175,17 @@ class DirichletSelector(object):
         if self.draw_true_post:
             chosen_pol = np.random.choice(npi, p=posterior_policies)
         else:
-            chosen_pol = accepted_pis[i-1]
+            chosen_pol = self.accepted_pis[i-1]
 
         u = actions[chosen_pol]
-        #print(tau,t,i,accepted_pis[i-1],u,H_rel)
+        #print(tau,t,iself.accepted_pis[i-1],u,H_rel)
         # if tau in range(100,110) and t==0:
         #     plt.figure()
         #     plt.plot(posterior_policies)
         #     plt.show()
 
         if self.calc_dkl:
-            # autocorr = acov(accepted_pis[:i+1])
+            # autocorr = acov(self.accepted_pis[:i+1])
 
             # if autocorr[0] > 0:
             #     ACT = 1 + 2*np.abs(autocorr[1:]).sum()/autocorr[0]

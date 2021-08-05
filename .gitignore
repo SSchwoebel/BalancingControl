@@ -5,3 +5,6 @@ data/*
 .pymc*
 *.pymc*
 *.pkl
+*.gif
+*.json
+*.mp4

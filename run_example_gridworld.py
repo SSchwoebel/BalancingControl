@@ -154,6 +154,9 @@ def run_agent(par_list, trials=trials, T=T, Lx = Lx, Ly = Ly, ns=ns, na=na):
             else:
                 B[s, s, u] = 1-c + const
                 B[s_new, s, u] = c - (ns-1)*const
+                
+    B_c = np.broadcast_to(B[:,:,:,np.newaxis], (ns, ns, na, nc))
+    print(B.shape)
 
 
     """
@@ -236,8 +239,8 @@ def run_agent(par_list, trials=trials, T=T, Lx = Lx, Ly = Ly, ns=ns, na=na):
 
         sel = 'avg'
 
-        ac_sel = asl.DirichletSelector(trials = trials, T = T, factor=0.5, draw_true_post=True,
-                                      number_of_actions = na, calc_entropy=True, calc_dkl=True)
+        ac_sel = asl.DirichletSelector(trials = trials, T = T, factor=0.5,
+                                      number_of_actions = na, calc_entropy=False, calc_dkl=False, draw_true_post=True)
     else:
 
         sel = 'max'
@@ -260,7 +263,7 @@ def run_agent(par_list, trials=trials, T=T, Lx = Lx, Ly = Ly, ns=ns, na=na):
 
         # perception and planning
 
-        bayes_prc = prc.HierarchicalPerception(A, B, Rho_agent, trans_matrix_context, state_prior,
+        bayes_prc = prc.HierarchicalPerception(A, B_c, Rho_agent, trans_matrix_context, state_prior,
                                                util, prior_policies,
                                                dirichlet_pol_params = dirichlet_pol_param,
                                                dirichlet_rew_params = dirichlet_rew_params)
@@ -349,171 +352,171 @@ def run_agent(par_list, trials=trials, T=T, Lx = Lx, Ly = Ly, ns=ns, na=na):
  (199/255, 174/255, 147/255)]
 
     #set up figure params
-    factor = 3
-    grid_plot_kwargs = {'vmin': -2, 'vmax': 2, 'center': 0, 'linecolor': '#D3D3D3',
-                        'linewidths': 7, 'alpha': 1, 'xticklabels': False,
-                        'yticklabels': False, 'cbar': False,
-                        'cmap': palette}#sns.diverging_palette(120, 45, as_cmap=True)} #"RdBu_r",
+    # ~ factor = 3
+    # ~ grid_plot_kwargs = {'vmin': -2, 'vmax': 2, 'center': 0, 'linecolor': '#D3D3D3',
+                        # ~ 'linewidths': 7, 'alpha': 1, 'xticklabels': False,
+                        # ~ 'yticklabels': False, 'cbar': False,
+                        # ~ 'cmap': palette}#sns.diverging_palette(120, 45, as_cmap=True)} #"RdBu_r",
 
-    # plot grid
-    fig = plt.figure(figsize=[factor*5,factor*4])
+    # ~ # plot grid
+    # ~ fig = plt.figure(figsize=[factor*5,factor*4])
 
-    ax = fig.gca()
+    # ~ ax = fig.gca()
 
-    annot = np.zeros((Lx,Ly))
-    for i in range(Lx):
-        for j in range(Ly):
-            annot[i,j] = i*Ly+j +1
+    # ~ annot = np.zeros((Lx,Ly))
+    # ~ for i in range(Lx):
+        # ~ for j in range(Ly):
+            # ~ annot[i,j] = i*Ly+j
 
-    u = sns.heatmap(start_goal, ax = ax, **grid_plot_kwargs, annot=annot, annot_kws={"fontsize": 40})
-    ax.invert_yaxis()
-    plt.savefig('grid.svg', dpi=600)
-    plt.show()
+    # ~ u = sns.heatmap(start_goal, ax = ax, **grid_plot_kwargs, annot=annot, annot_kws={"fontsize": 40})
+    # ~ ax.invert_yaxis()
+    # ~ plt.savefig('grid.svg', dpi=600)
+    # ~ #plt.show()
 
-    # set up paths figure
-    fig = plt.figure(figsize=[factor*5,factor*4])
+    # ~ # set up paths figure
+    # ~ fig = plt.figure(figsize=[factor*5,factor*4])
 
-    ax = fig.gca()
+    # ~ ax = fig.gca()
 
-    u = sns.heatmap(start_goal, zorder=2, ax = ax, **grid_plot_kwargs)
-    ax.invert_yaxis()
+    # ~ u = sns.heatmap(start_goal, zorder=2, ax = ax, **grid_plot_kwargs)
+    # ~ ax.invert_yaxis()
 
-    #find paths and count them
-    n1 = np.zeros((ns, na))
+    # ~ #find paths and count them
+    # ~ n1 = np.zeros((ns, na))
 
-    for i in successfull_g1:
+    # ~ for i in successfull_g1:
 
-        for j in range(T-1):
-            d = environment.hidden_states[i, j+1] - environment.hidden_states[i, j]
-            if d not in [1,-1,Ly,-Ly,0]:
-                print("ERROR: beaming")
-            if d == 1:
-                n1[environment.hidden_states[i, j],0] +=1
-            if d == -1:
-                n1[environment.hidden_states[i, j]-1,0] +=1
-            if d == Ly:
-                n1[environment.hidden_states[i, j],1] +=1
-            if d == -Ly:
-                n1[environment.hidden_states[i, j]-Ly,1] +=1
+        # ~ for j in range(T-1):
+            # ~ d = environment.hidden_states[i, j+1] - environment.hidden_states[i, j]
+            # ~ if d not in [1,-1,Ly,-Ly,0]:
+                # ~ print("ERROR: beaming")
+            # ~ if d == 1:
+                # ~ n1[environment.hidden_states[i, j],0] +=1
+            # ~ if d == -1:
+                # ~ n1[environment.hidden_states[i, j]-1,0] +=1
+            # ~ if d == Ly:
+                # ~ n1[environment.hidden_states[i, j],1] +=1
+            # ~ if d == -Ly:
+                # ~ n1[environment.hidden_states[i, j]-Ly,1] +=1
 
-    n2 = np.zeros((ns, na))
+    # ~ n2 = np.zeros((ns, na))
 
-    if context:
-        for i in successfull_g2:
+    # ~ if context:
+        # ~ for i in successfull_g2:
 
-            for j in range(T-1):
-                d = environment.hidden_states[i, j+1] - environment.hidden_states[i, j]
-                if d not in [1,-1,Ly,-Ly,0]:
-                    print("ERROR: beaming")
-                if d == 1:
-                    n2[environment.hidden_states[i, j],0] +=1
-                if d == -1:
-                    n2[environment.hidden_states[i, j]-1,0] +=1
-                if d == Ly:
-                    n2[environment.hidden_states[i, j],1] +=1
-                if d == -Ly:
-                    n2[environment.hidden_states[i, j]-Ly,1] +=1
+            # ~ for j in range(T-1):
+                # ~ d = environment.hidden_states[i, j+1] - environment.hidden_states[i, j]
+                # ~ if d not in [1,-1,Ly,-Ly,0]:
+                    # ~ print("ERROR: beaming")
+                # ~ if d == 1:
+                    # ~ n2[environment.hidden_states[i, j],0] +=1
+                # ~ if d == -1:
+                    # ~ n2[environment.hidden_states[i, j]-1,0] +=1
+                # ~ if d == Ly:
+                    # ~ n2[environment.hidden_states[i, j],1] +=1
+                # ~ if d == -Ly:
+                    # ~ n2[environment.hidden_states[i, j]-Ly,1] +=1
 
-    un = np.zeros((ns, na))
+    # ~ un = np.zeros((ns, na))
 
-    for i in unsuccessfull:
+    # ~ for i in unsuccessfull:
 
-        for j in range(T-1):
-            d = environment.hidden_states[i, j+1] - environment.hidden_states[i, j]
-            if d not in [1,-1,Ly,-Ly,0]:
-                print("ERROR: beaming")
-            if d == 1:
-                un[environment.hidden_states[i, j],0] +=1
-            if d == -1:
-                un[environment.hidden_states[i, j]-1,0] +=1
-            if d == Ly:
-                un[environment.hidden_states[i, j],1] +=1
-            if d == -Ly:
-                un[environment.hidden_states[i, j]-4,1] +=1
+        # ~ for j in range(T-1):
+            # ~ d = environment.hidden_states[i, j+1] - environment.hidden_states[i, j]
+            # ~ if d not in [1,-1,Ly,-Ly,0]:
+                # ~ print("ERROR: beaming")
+            # ~ if d == 1:
+                # ~ un[environment.hidden_states[i, j],0] +=1
+            # ~ if d == -1:
+                # ~ un[environment.hidden_states[i, j]-1,0] +=1
+            # ~ if d == Ly:
+                # ~ un[environment.hidden_states[i, j],1] +=1
+            # ~ if d == -Ly:
+                # ~ un[environment.hidden_states[i, j]-4,1] +=1
 
-    total_num = n1.sum() + n2.sum() + un.sum()
+    # ~ total_num = n1.sum() + n2.sum() + un.sum()
 
-    if np.any(n1 > 0):
-        n1 /= total_num
+    # ~ if np.any(n1 > 0):
+        # ~ n1 /= total_num
 
-    if np.any(n2 > 0):
-        n2 /= total_num
+    # ~ if np.any(n2 > 0):
+        # ~ n2 /= total_num
 
-    if np.any(un > 0):
-        un /= total_num
+    # ~ if np.any(un > 0):
+        # ~ un /= total_num
 
-    #plotting
-    for i in range(ns):
+    # ~ #plotting
+    # ~ for i in range(ns):
 
-        x = [i%Ly + .5]
-        y = [i//Ly + .5]
+        # ~ x = [i%Ly + .5]
+        # ~ y = [i//Ly + .5]
 
-        #plot uncertainties
-        if obs_unc:
-            plt.plot(x,y, 'o', color=(219/256,122/256,147/256), markersize=factor*12/(A[i,i])**2, alpha=1.)
-        if state_unc:
-            plt.plot(x,y, 'o', color=(100/256,149/256,237/256), markersize=factor*12/(cert_arr[i])**2, alpha=1.)
+        # ~ #plot uncertainties
+        # ~ if obs_unc:
+            # ~ plt.plot(x,y, 'o', color=(219/256,122/256,147/256), markersize=factor*12/(A[i,i])**2, alpha=1.)
+        # ~ if state_unc:
+            # ~ plt.plot(x,y, 'o', color=(100/256,149/256,237/256), markersize=factor*12/(cert_arr[i])**2, alpha=1.)
 
-        #plot unsuccessful paths
-        for j in range(2):
+        # ~ #plot unsuccessful paths
+        # ~ for j in range(2):
 
-            if un[i,j]>0.0:
-                if j == 0:
-                    xp = x + [x[0] + 1]
-                    yp = y + [y[0] + 0]
-                if j == 1:
-                    xp = x + [x[0] + 0]
-                    yp = y + [y[0] + 1]
+            # ~ if un[i,j]>0.0:
+                # ~ if j == 0:
+                    # ~ xp = x + [x[0] + 1]
+                    # ~ yp = y + [y[0] + 0]
+                # ~ if j == 1:
+                    # ~ xp = x + [x[0] + 0]
+                    # ~ yp = y + [y[0] + 1]
 
-                plt.plot(xp,yp, '-', color='#D5647C', linewidth=factor*75*un[i,j],
-                         zorder = 9, alpha=1)
+                # ~ plt.plot(xp,yp, '-', color='#D5647C', linewidth=factor*75*un[i,j],
+                         # ~ zorder = 9, alpha=1)
 
-    #set plot title
-    #plt.title("Planning: successful "+str(round(100*total/trials))+"%", fontsize=factor*9)
+    # ~ #set plot title
+    # ~ #plt.title("Planning: successful "+str(round(100*total/trials))+"%", fontsize=factor*9)
 
-    #plot successful paths on top
-    for i in range(ns):
+    # ~ #plot successful paths on top
+    # ~ for i in range(ns):
 
-        x = [i%Ly + .5]
-        y = [i//Ly + .5]
+        # ~ x = [i%Ly + .5]
+        # ~ y = [i//Ly + .5]
 
-        for j in range(2):
+        # ~ for j in range(2):
 
-            if n1[i,j]>0.0:
-                if j == 0:
-                    xp = x + [x[0] + 1]
-                    yp = y + [y[0]]
-                if j == 1:
-                    xp = x + [x[0] + 0]
-                    yp = y + [y[0] + 1]
-                plt.plot(xp,yp, '-', color='#4682B4', linewidth=factor*75*n1[i,j],
-                         zorder = 10, alpha=1)
+            # ~ if n1[i,j]>0.0:
+                # ~ if j == 0:
+                    # ~ xp = x + [x[0] + 1]
+                    # ~ yp = y + [y[0]]
+                # ~ if j == 1:
+                    # ~ xp = x + [x[0] + 0]
+                    # ~ yp = y + [y[0] + 1]
+                # ~ plt.plot(xp,yp, '-', color='#4682B4', linewidth=factor*75*n1[i,j],
+                         # ~ zorder = 10, alpha=1)
 
-    #plot successful paths on top
-    if context:
-        for i in range(ns):
+    # ~ #plot successful paths on top
+    # ~ if context:
+        # ~ for i in range(ns):
 
-            x = [i%Ly + .5]
-            y = [i//Ly + .5]
+            # ~ x = [i%Ly + .5]
+            # ~ y = [i//Ly + .5]
 
-            for j in range(2):
+            # ~ for j in range(2):
 
-                if n2[i,j]>0.0:
-                    if j == 0:
-                        xp = x + [x[0] + 1]
-                        yp = y + [y[0]]
-                    if j == 1:
-                        xp = x + [x[0] + 0]
-                        yp = y + [y[0] + 1]
-                    plt.plot(xp,yp, '-', color='#55ab75', linewidth=factor*75*n2[i,j],
-                             zorder = 10, alpha=1)
-
-
-    #print("percent won", total/trials, "state prior", np.amax(utility))
+                # ~ if n2[i,j]>0.0:
+                    # ~ if j == 0:
+                        # ~ xp = x + [x[0] + 1]
+                        # ~ yp = y + [y[0]]
+                    # ~ if j == 1:
+                        # ~ xp = x + [x[0] + 0]
+                        # ~ yp = y + [y[0] + 1]
+                    # ~ plt.plot(xp,yp, '-', color='#55ab75', linewidth=factor*75*n2[i,j],
+                             # ~ zorder = 10, alpha=1)
 
 
-    plt.savefig('chosen_paths_'+name_str+'h'+str(h)+'.svg')
-    plt.show()
+    # ~ #print("percent won", total/trials, "state prior", np.amax(utility))
+
+
+    # ~ plt.savefig('chosen_paths_'+name_str+'h'+str(h)+'.svg')
+    #plt.show()
 
     # max_RT = np.amax(w.agent.action_selection.RT[:,0])
     # plt.figure()
@@ -543,160 +546,438 @@ def run_agent(par_list, trials=trials, T=T, Lx = Lx, Ly = Ly, ns=ns, na=na):
 """
 set condition dependent up parameters
 """
-repetitions = 1
-# prior over outcomes: encodes utility
-utility = []
 
-#ut = [0.5, 0.6, 0.7, 0.8, 0.9, 1-1e-3]
-u = 0.999
-utility = np.zeros(ns)
-utility[g1] = u
-utility[:g1] = (1-u)/(ns-1)
-utility[g1+1:] = (1-u)/(ns-1)
+def run_gridworld_simulations(repetitions):
+    # prior over outcomes: encodes utility
+    utility = []
+    
+    #ut = [0.5, 0.6, 0.7, 0.8, 0.9, 1-1e-3]
+    u = 0.999
+    utility = np.zeros(ns)
+    utility[g1] = u
+    utility[:g1] = (1-u)/(ns-1)
+    utility[g1+1:] = (1-u)/(ns-1)
+    
+    # action selection: avergaed or max selection
+    avg = True
+    tendencies = [1,1000]
+    context = True
+    if context:
+        name_str = "context_"
+    else:
+        name_str = ""
+    # parameter list
+    l = []
+    
+    # either observation uncertainty
+    #l.append([True, False, False, avg, utility])
+    
+    # or state uncertainty
+    #l.append([False, True, False, avg, utility])
+    
+    # or no uncertainty
+    l.append([False, False, False, avg, context, utility])
+    
+    par_list = []
+    
+    for p in itertools.product(l, tendencies):
+        par_list.append(p[0]+[p[1]])
+    
+    qs = [0.97, 0.97]
+    # num_threads = 11
+    # pool = Pool(num_threads)
+    for n,pars in enumerate(par_list):
+        h = pars[-1]
+        q = qs[n]
+        #worlds = []
+        for i in range(repetitions):
+            # worlds.append(run_agent(pars+[q]))
+            # w = worlds[-1]
+            w = run_agent(pars+[q])
+            #if i == repetitions-1:
+            #    if context:
+            #        plt.figure()
+            #        plt.plot(w.agent.posterior_context[:,0,:])
+            #        #plt.plot(w.agent.posterior_context[:,0,g2])
+            #        plt.show()
+            #    plt.figure()
+            #    rew_prob = np.einsum('tsc,tc->ts', w.agent.posterior_dirichlet_rew[:,0,1,:,:],w.agent.posterior_context[:,0])
+            #    rew_prob /= rew_prob.sum(axis=1)[:,None]
+            #    plt.plot(rew_prob)
+            #    plt.ylim([0, .75])
+            #    plt.show()
+            #    plt.figure()
+            #    plt.plot(np.einsum('tsc,tc->ts', w.agent.posterior_dirichlet_rew[:,0,1,:,:],w.agent.posterior_context[:,0]))
+            #    plt.ylim([0, 40])
+            #    plt.show()
+            #    plt.figure()
+            #    plt.plot(w.agent.action_selection.entropy_post[:,0])
+            #    plt.ylim([2.5,5])
+            #    plt.show()
+            #    plt.figure()
+            #    plt.plot(w.agent.action_selection.entropy_like[:,0])
+            #    plt.ylim([2.5,5])
+            #    plt.show()
+            #    plt.figure()
+            #    plt.plot(w.agent.action_selection.entropy_prior[:,0])
+            #    plt.ylim([2.5,5])
+            #    plt.show()
+            #    plt.figure()
+            #    plt.figure()
+            #    plt.plot(w.agent.action_selection.DKL_post[:,0])
+            #    plt.show()
+            #    plt.figure()
+            #    plt.plot(w.agent.action_selection.DKL_prior[:,0])
+            #    plt.show()
+            #    posterior_policies = np.einsum('tpc,tc->tp', w.agent.posterior_policies[:,0], w.agent.posterior_context[:,0])
+            #    k=6
+            #    ind = np.argpartition(posterior_policies, -k, axis=1)[:,-k:]
+            #    max_pol = np.array([posterior_policies[i,ind[i]] for i in range(trials)])
+            #    plt.figure()
+            #    plt.plot(max_pol)
+            #    plt.figure()
+            #    plt.figure()
+            #    plt.plot(posterior_policies.argmax(axis=1))
+            #    plt.show()
+            #    plt.figure()
+            #    plt.plot(w.agent.action_selection.RT[:,0], 'x')
+            #    plt.show()
+            #    like = np.einsum('tpc,tc->tp', w.agent.likelihood[:,0], w.agent.posterior_context[:,0])
+            #    prior = np.einsum('tpc,tc->tp', w.agent.prior_policies[:], w.agent.posterior_context[:,0])
+            #    for i in [20,40,100,trials-1]:
+            #        plt.figure()
+            #        plt.plot(np.sort(like[i]), linewidth=3, label='likelihood')
+            #        plt.plot(np.sort(prior[i]), linewidth=3, label='prior')
+            #        plt.title("trial "+str(i))
+            #        plt.ylim([0,0.25])
+            #        plt.xlim([0,len(prior[i])])
+            #        plt.xlabel('policy', fontsize=16)
+            #        plt.ylabel('probability', fontsize=16)
+            #        plt.legend()
+            #        plt.savefig('underlying_prior_like_trial_'+str(i)+'_h_'+str(h)+'.svg')
+            #        plt.show()
+            #     for i in [trials-1]:
+            #         plt.figure()
+            #         plt.plot(np.sort(prior[i]))
+            #         plt.title("trial "+str(i))
+            #         plt.ylim([0,1])
+            #         plt.show()
+            # plt.figure()
+            # plt.plot(max_num[i*trials+n*(repetitions*trials):(i+1)*trials+n*(repetitions*trials)])
+            # plt.show()
+            # w = 0
+            # gc.collect()
+        
+            jsonpickle_numpy.register_handlers()
+        
+            fname = 'Dir_gridworld_'+name_str+str(repetitions)+'repetitions_h'+str(h)+'_run'+str(i)+'.json'
+            #fname = os.path.join('data', fname)
+            pickled = pickle.encode(w)
+            with open(fname, 'w') as outfile:
+                json.dump(pickled, outfile)
+                
+            w = 0
+            pickled = 0
+            gc.collect()
+        
+def load_gridworld_simulations(repetitions):
+    # prior over outcomes: encodes utility
+    utility = []
+    
+    #ut = [0.5, 0.6, 0.7, 0.8, 0.9, 1-1e-3]
+    u = 0.999
+    utility = np.zeros(ns)
+    utility[g1] = u
+    utility[:g1] = (1-u)/(ns-1)
+    utility[g1+1:] = (1-u)/(ns-1)
+    
+    # action selection: avergaed or max selection
+    avg = True
+    tendencies = [1,1000]
+    context = True
+    if context:
+        name_str = "context_"
+    else:
+        name_str = ""
+    # parameter list
+    l = []
+    
+    # either observation uncertainty
+    #l.append([True, False, False, avg, utility])
+    
+    # or state uncertainty
+    #l.append([False, True, False, avg, utility])
+    
+    # or no uncertainty
+    l.append([False, False, False, avg, context, utility])
+    
+    par_list = []
+    
+    for p in itertools.product(l, tendencies):
+        par_list.append(p[0]+[p[1]])
+    
+    qs = [0.97, 0.97]
+    # num_threads = 11
+    # pool = Pool(num_threads)
+    RTs = np.zeros((repetitions*trials*len(tendencies)))
+    chosen_pols = np.zeros((repetitions*trials*len(tendencies)))
+    correct = np.zeros((repetitions*trials*len(tendencies)))
+    num_chosen = np.zeros((repetitions*trials*len(tendencies)))
+    max_num = np.zeros((repetitions*trials*len(tendencies)))
+    for n,pars in enumerate(par_list):
+        h = pars[-1]
+        q = qs[n]
+        #worlds = []
+        for i in range(repetitions):
+            # worlds.append(run_agent(pars+[q]))
+            # w = worlds[-1]
+            
+        
+            fname = 'Dir_gridworld_'+name_str+str(repetitions)+'repetitions_h'+str(h)+'_run'+str(i)+'.json'
+            #fname = os.path.join(folder, run_name)
 
-# action selection: avergaed or max selection
-avg = True
-tendencies = [1,1000]
-context = True
-if context:
-    name_str = "context_"
-else:
-    name_str = ""
-# parameter list
-l = []
+            jsonpickle_numpy.register_handlers()
 
-# either observation uncertainty
-#l.append([True, False, False, avg, utility])
+            with open(fname, 'r') as infile:
+                data = json.load(infile)
 
-# or state uncertainty
-#l.append([False, True, False, avg, utility])
+            w = pickle.decode(data)
+            #worlds.append(w)
+            RTs[i*trials+n*(repetitions*trials):(i+1)*trials+n*(repetitions*trials)] = w.agent.action_selection.RT[:,0].copy()
+            posterior_policies = np.einsum('tpc,tc->tp', w.agent.posterior_policies[:,-1], w.agent.posterior_context[:,-1])
+            chosen_pols[i*trials+n*(repetitions*trials):(i+1)*trials+n*(repetitions*trials)] = np.argmax(posterior_policies, axis=1)
+            chosen = chosen_pols[i*trials+n*(repetitions*trials):(i+1)*trials+n*(repetitions*trials)]
+            n_bin = 10
+            uniq = np.zeros((trials,2))
+            for k in range(trials//n_bin):
+                un, counts = np.unique(chosen[k*n_bin:(k+1)*n_bin], return_counts=True)
+                uniq[k*n_bin:(k+1)*n_bin] = [len(un), np.amax(counts)]
+            num_chosen[i*trials+n*(repetitions*trials):(i+1)*trials+n*(repetitions*trials)] = uniq[:,0]#np.repeat(np.array([len(np.unique(chosen[k*n_bin:(k+1)*n_bin])) for k in range(trials//n_bin)]),n_bin)
+            max_num[i*trials+n*(repetitions*trials):(i+1)*trials+n*(repetitions*trials)] = uniq[:,1]
+            correct[i*trials+n*(repetitions*trials):(i+1)*trials+n*(repetitions*trials)-trials//2] = (w.environment.hidden_states[:trials//2,-1]==g1).astype(int)
+            correct[i*trials+n*(repetitions*trials)+trials//2:(i+1)*trials+n*(repetitions*trials)] = (w.environment.hidden_states[trials//2:,-1]==g2).astype(int)
+                
+            w = 0
+            pickled = 0
+            gc.collect()
 
-# or no uncertainty
-l.append([False, False, False, avg, context, utility])
+    runs = np.tile(np.tile(np.arange(repetitions), (trials, 1)).reshape(-1, order='f'),len(tendencies))
+    times = np.tile(np.arange(trials), repetitions*len(tendencies))
+    tend_idx = np.array([1./tendencies[i//(repetitions*trials)] for i in range(repetitions*trials*len(tendencies))])
+    DataFrame = pd.DataFrame({'trial': times, 'run': runs,'tendency_h':tend_idx, 
+                              'RT': RTs, 'correct': correct, 'policy': chosen_pols, 
+                              'num_chosen': num_chosen, 'max_num': max_num})
+    
+    return DataFrame, name_str
 
-par_list = []
+def plot_analyses(DataFrame, name_str):
 
-for p in itertools.product(l, tendencies):
-    par_list.append(p[0]+[p[1]])
+    # plt.figure()
+    # sns.lineplot(data=DataFrame, x='trial', y='RT', style='tendency_h', estimator=np.nanmean, linewidth=3, err_kws={'alpha':0.4}, ci=99)
+    # #plt.legend()
+    # plt.xlim([0,trials])
+    # plt.ylim([0,0.5*np.amax(RTs)])#0.75*
+    # plt.ylabel('RT (#sampples)')
+    # plt.savefig('Dir_gridworld_RT_stats_context_'+str(repetitions)+'repetitions.svg', dpi=600)
+    # plt.show()
+    
+    plt.figure()
+    palette = [(38/255,99/255,141/255),(141/255, 74/255, 38/255)]# [(38/255,99/255,141/255),(54/255, 142/255, 201/255)]#[(30/255,82/255,225/255),(30/255, 164/255, 255/255)]#[(31/255,119/255,180/255),(79/255, 128/255, 23/255)]
+    sns.lineplot(data=DataFrame, x='trial', y='RT', hue='tendency_h', style='tendency_h', estimator=np.nanmedian, linewidth=3, err_kws={'alpha':0.4}, ci=95, palette=palette)
+    #plt.legend()
+    plt.ylim([0,5000])
+    plt.xlim([0,trials])
+    plt.xticks(fontsize=14)
+    plt.yticks(fontsize=14)
+    plt.ylabel('RT (#sampples)', fontsize=16)
+    plt.xlabel('miniblock', fontsize=16)
+    plt.savefig('Dir_gridworld_RT_stats_'+name_str+str(repetitions)+'repetitions_median.svg', dpi=600)
+    plt.savefig('Dir_gridworld_RT_stats_'+name_str+str(repetitions)+'repetitions_median.png', dpi=600)
+    plt.show()
+    
+    plt.figure()
+    sns.lineplot(data=DataFrame, x='trial', y='RT', hue='tendency_h', style='tendency_h', estimator=np.nanmean, linewidth=3, err_kws={'alpha':0.4}, ci=95, palette=palette)
+    #plt.legend()
+    plt.ylim([0,5000])
+    plt.xlim([0,trials])
+    plt.xticks(fontsize=14)
+    plt.yticks(fontsize=14)
+    plt.ylabel('RT (#sampples)', fontsize=16)
+    plt.xlabel('miniblock', fontsize=16)
+    plt.savefig('Dir_gridworld_RT_stats_'+name_str+str(repetitions)+'repetitions_mean.svg', dpi=600)
+    plt.savefig('Dir_gridworld_RT_stats_'+name_str+str(repetitions)+'repetitions_mean.png', dpi=600)
+    plt.show()
+    
+    plt.figure()
+    sns.lineplot(data=DataFrame, x='trial', y='RT', hue='tendency_h', style='tendency_h', estimator=np.nanmean, linewidth=3, err_kws={'alpha':0.4}, ci=95, palette=palette)
+    #plt.legend()
+    plt.ylim([0,5000])
+    plt.xlim([trials//2,trials//2+10])
+    plt.xticks(fontsize=14)
+    plt.yticks(fontsize=14)
+    plt.ylabel('RT (#sampples)', fontsize=16)
+    plt.xlabel('miniblock', fontsize=16)
+    plt.savefig('Dir_gridworld_RT_zoom_middle_'+name_str+str(repetitions)+'repetitions_mean.svg', dpi=600)
+    plt.savefig('Dir_gridworld_RT_zoom_middle_'+name_str+str(repetitions)+'repetitions_mean.png', dpi=600)
+    plt.show()
+    
+    plt.figure()
+    sns.lineplot(data=DataFrame, x='trial', y='RT', hue='tendency_h', style='tendency_h', estimator=np.nanmedian, linewidth=3, err_kws={'alpha':0.4}, ci="sd", palette=palette)
+    #plt.legend()
+    plt.ylim([0,5000])
+    plt.xticks(fontsize=14)
+    plt.yticks(fontsize=14)
+    plt.ylabel('RT (#sampples)', fontsize=16)
+    plt.xlabel('miniblock', fontsize=16)
+    plt.ylabel('RT (#sampples)')
+    plt.savefig('Dir_gridworld_RT_stats_'+name_str+str(repetitions)+'repetitions_median_sd.svg', dpi=600)
+    plt.savefig('Dir_gridworld_RT_stats_'+name_str+str(repetitions)+'repetitions_median_sd.png', dpi=600)
+    plt.show()
+    
+    plt.figure()
+    sns.lineplot(data=DataFrame, x='trial', y='RT', hue='tendency_h', style='tendency_h', estimator=np.nanmean, linewidth=3, err_kws={'alpha':0.4}, ci="sd", palette=palette)
+    #plt.legend()
+    plt.ylim([0,5000])
+    plt.xlim([0,trials])
+    plt.xticks(fontsize=14)
+    plt.yticks(fontsize=14)
+    plt.ylabel('RT (#sampples)', fontsize=16)
+    plt.xlabel('miniblock', fontsize=16)
+    plt.savefig('Dir_gridworld_RT_stats_'+name_str+str(repetitions)+'repetitions_mean_sd.svg', dpi=600)
+    plt.savefig('Dir_gridworld_RT_stats_'+name_str+str(repetitions)+'repetitions_mean_sd.png', dpi=600)
+    plt.show()
+    
+    plt.figure()
+    sns.lineplot(data=DataFrame, x='trial', y='correct', hue='tendency_h', style='tendency_h', estimator=np.nanmedian, linewidth=3, err_kws={'alpha':0.4}, ci=95, palette=palette)
+    #plt.legend()
+    plt.ylim([0,1])
+    plt.xlim([0,trials])
+    plt.xticks(fontsize=14)
+    plt.yticks(fontsize=14)
+    plt.ylabel('accuracy', fontsize=16)
+    plt.xlabel('miniblock', fontsize=16)
+    plt.savefig('Dir_gridworld_correct_stats_'+name_str+str(repetitions)+'repetitions_median.svg', dpi=600)
+    plt.savefig('Dir_gridworld_correct_stats_'+name_str+str(repetitions)+'repetitions_median.png', dpi=600)
+    plt.show()
+    
+    plt.figure()
+    sns.lineplot(data=DataFrame, x='trial', y='correct', hue='tendency_h', style='tendency_h', estimator=np.nanmean, linewidth=3, err_kws={'alpha':0.4}, ci=95, palette=palette)
+    #plt.legend()
+    plt.ylim([0,1])
+    plt.xlim([0,trials])
+    plt.xticks(fontsize=14)
+    plt.yticks(fontsize=14)
+    plt.ylabel('accuracy', fontsize=16)
+    plt.xlabel('miniblock', fontsize=16)
+    plt.savefig('Dir_gridworld_correct_stats_'+name_str+str(repetitions)+'repetitions_mean.svg', dpi=600)
+    plt.savefig('Dir_gridworld_correct_stats_'+name_str+str(repetitions)+'repetitions_mean.png', dpi=600)
+    plt.show()
+    
+    plt.figure()
+    sns.lineplot(data=DataFrame, x='trial', y='correct', hue='tendency_h', style='tendency_h', estimator=np.nanmedian, linewidth=3, err_kws={'alpha':0.4}, ci=95, palette=palette)
+    #plt.legend()
+    #plt.ylim([0,5000])
+    plt.xlim([0,10])
+    plt.xticks(fontsize=14)
+    plt.yticks(fontsize=14)
+    plt.ylabel('accuracy', fontsize=16)
+    plt.xlabel('miniblock', fontsize=16)
+    plt.savefig('Dir_gridworld_correct_zoom_begin_'+name_str+str(repetitions)+'repetitions_median.svg', dpi=600)
+    plt.savefig('Dir_gridworld_correct_zoom_begin_'+name_str+str(repetitions)+'repetitions_median.png', dpi=600)
+    plt.show()
+    
+    plt.figure()
+    sns.lineplot(data=DataFrame, x='trial', y='correct', hue='tendency_h', style='tendency_h', estimator=np.nanmean, linewidth=3, err_kws={'alpha':0.4}, ci=95, palette=palette)
+    #plt.legend()
+    #plt.ylim([0,5000])
+    plt.xlim([0,10])
+    plt.xticks(fontsize=14)
+    plt.yticks(fontsize=14)
+    plt.ylabel('accuracy', fontsize=16)
+    plt.xlabel('miniblock', fontsize=16)
+    plt.savefig('Dir_gridworld_correct_zoom_begin_'+name_str+str(repetitions)+'repetitions_mean.svg', dpi=600)
+    plt.savefig('Dir_gridworld_correct_zoom_begin_'+name_str+str(repetitions)+'repetitions_mean.png', dpi=600)
+    plt.show()
+    
+    plt.figure()
+    sns.lineplot(data=DataFrame, x='trial', y='correct', hue='tendency_h', style='tendency_h', estimator=np.nanmedian, linewidth=3, err_kws={'alpha':0.4}, ci=95, palette=palette)
+    #plt.legend()
+    plt.ylim([0,0.5])
+    plt.xlim([trials//2,trials//2+10])
+    plt.xticks(fontsize=14)
+    plt.yticks(fontsize=14)
+    plt.ylabel('accuracy', fontsize=16)
+    plt.xlabel('miniblock', fontsize=16)
+    plt.savefig('Dir_gridworld_correct_zoom_middle_'+name_str+str(repetitions)+'repetitions_median.svg', dpi=600)
+    plt.savefig('Dir_gridworld_correct_zoom_middle_'+name_str+str(repetitions)+'repetitions_median.png', dpi=600)
+    plt.show()
+    
+    plt.figure(figsize=(3,5))
+    sns.lineplot(data=DataFrame, x='trial', y='correct', hue='tendency_h', style='tendency_h', estimator=np.nanmean, linewidth=5, err_kws={'alpha':0.4}, ci=95, palette=palette)
+    #plt.legend()
+    plt.ylim([0,0.5])
+    plt.xlim([trials//2-1,trials//2+10])
+    plt.xticks([100,105,110], fontsize=14)
+    plt.yticks(fontsize=14)
+    plt.ylabel('accuracy', fontsize=16)
+    plt.xlabel('miniblock', fontsize=16)
+    plt.savefig('Dir_gridworld_correct_zoom_middle_'+name_str+str(repetitions)+'repetitions_mean.svg', dpi=600)
+    plt.savefig('Dir_gridworld_correct_zoom_middle_'+name_str+str(repetitions)+'repetitions_mean.png', dpi=600)
+    plt.show()
+    
+    # plt.figure()
+    # sns.lineplot(data=DataFrame, x='trial', y='num_chosen', hue='tendency_h', style='tendency_h', estimator=np.nanmedian, linewidth=3, err_kws={'alpha':0.4}, ci=95, palette=palette)
+    # #plt.legend()
+    # plt.ylim([0,10])
+    # plt.xlim([0,trials])
+    # plt.xticks(fontsize=14)
+    # plt.yticks(fontsize=14)
+    # plt.ylabel('num_chosen', fontsize=16)
+    # plt.xlabel('miniblock', fontsize=16)
+    # plt.savefig('Dir_gridworld_chosen_stats_'+name_str+str(repetitions)+'repetitions_median.svg', dpi=600)
+    # plt.savefig('Dir_gridworld_chosen_stats_'+name_str+str(repetitions)+'repetitions_median.png', dpi=600)
+    # plt.show()
+    
+    # plt.figure()
+    # sns.lineplot(data=DataFrame, x='trial', y='num_chosen', hue='tendency_h', style='tendency_h', estimator=np.nanmean, linewidth=3, err_kws={'alpha':0.4}, ci=95, palette=palette)
+    # #plt.legend()
+    # plt.ylim([0,10])
+    # plt.xlim([0,trials])
+    # plt.xticks(fontsize=14)
+    # plt.yticks(fontsize=14)
+    # plt.ylabel('num_chosen', fontsize=16)
+    # plt.xlabel('miniblock', fontsize=16)
+    # plt.savefig('Dir_gridworld_chosen_stats_'+name_str+str(repetitions)+'repetitions_mean.svg', dpi=600)
+    # plt.savefig('Dir_gridworld_chosen_stats_'+name_str+str(repetitions)+'repetitions_mean.png', dpi=600)
+    # plt.show()
+    
+    # plt.figure()
+    # sns.lineplot(data=DataFrame, x='trial', y='max_num', hue='tendency_h', style='tendency_h', estimator=np.nanmedian, linewidth=3, err_kws={'alpha':0.4}, ci=95, palette=palette)
+    # #plt.legend()
+    # plt.ylim([0,10])
+    # plt.xlim([0,trials])
+    # plt.xticks(fontsize=14)
+    # plt.yticks(fontsize=14)
+    # plt.ylabel('max_num', fontsize=16)
+    # plt.xlabel('miniblock', fontsize=16)
+    # plt.savefig('Dir_gridworld_num_stats_'+name_str+str(repetitions)+'repetitions_median.svg', dpi=600)
+    # plt.savefig('Dir_gridworld_num_stats_'+name_str+str(repetitions)+'repetitions_median.png', dpi=600)
+    # plt.show()
+    
+    # plt.figure()
+    # sns.lineplot(data=DataFrame, x='trial', y='max_num', hue='tendency_h', style='tendency_h', estimator=np.nanmean, linewidth=3, err_kws={'alpha':0.4}, ci=95, palette=palette)
+    # #plt.legend()
+    # plt.ylim([0,10])
+    # plt.xlim([0,trials])
+    # plt.xticks(fontsize=14)
+    # plt.yticks(fontsize=14)
+    # plt.ylabel('max_num', fontsize=16)
+    # plt.xlabel('miniblock', fontsize=16)
+    # plt.savefig('Dir_gridworld_num_stats_'+name_str+str(repetitions)+'repetitions_mean.svg', dpi=600)
+    # plt.savefig('Dir_gridworld_num_stats_'+name_str+str(repetitions)+'repetitions_mean.png', dpi=600)
+    # plt.show()
 
-qs = [0.97, 0.97]
-# num_threads = 11
-# pool = Pool(num_threads)
-# worlds = []
-RTs = np.zeros((repetitions*trials*len(tendencies)))
-for n,pars in enumerate(par_list):
-    h = pars[-1]
-    q = qs[n]
-    for i in range(repetitions):
-        # worlds.append(run_agent(pars+[q]))
-        # w = worlds[-1]
-        w = run_agent(pars+[q])
-        RTs[i*trials+n*(repetitions*trials):(i+1)*trials+n*(repetitions*trials)] = w.agent.action_selection.RT[:,0].copy()
-        if i == repetitions-1:
-            if context:
-                plt.figure()
-                plt.plot(w.agent.posterior_context[:,0,:])
-                #plt.plot(w.agent.posterior_context[:,0,g2])
-                plt.show()
-            plt.figure()
-            rew_prob = np.einsum('tsc,tc->ts', w.agent.posterior_dirichlet_rew[:,0,1,:,:],w.agent.posterior_context[:,0])
-            rew_prob /= rew_prob.sum(axis=1)[:,None]
-            plt.plot(rew_prob)
-            plt.ylim([0, .75])
-            plt.show()
-            plt.figure()
-            plt.plot(np.einsum('tsc,tc->ts', w.agent.posterior_dirichlet_rew[:,0,1,:,:],w.agent.posterior_context[:,0]))
-            plt.ylim([0, 40])
-            plt.show()
-            plt.figure()
-            plt.plot(w.agent.action_selection.entropy_post[:,0])
-            plt.ylim([2.5,5])
-            plt.show()
-            plt.figure()
-            plt.plot(w.agent.action_selection.entropy_like[:,0])
-            plt.ylim([2.5,5])
-            plt.show()
-            plt.figure()
-            plt.plot(w.agent.action_selection.entropy_prior[:,0])
-            plt.ylim([2.5,5])
-            plt.show()
-            plt.figure()
-            plt.figure()
-            plt.plot(w.agent.action_selection.DKL_post[:,0])
-            plt.show()
-            plt.figure()
-            plt.plot(w.agent.action_selection.DKL_prior[:,0])
-            plt.show()
-            posterior_policies = np.einsum('tpc,tc->tp', w.agent.posterior_policies[:,0], w.agent.posterior_context[:,0])
-            k=6
-            ind = np.argpartition(posterior_policies, -k, axis=1)[:,-k:]
-            max_pol = np.array([posterior_policies[i,ind[i]] for i in range(trials)])
-            plt.figure()
-            plt.plot(max_pol)
-            plt.figure()
-            plt.figure()
-            plt.plot(posterior_policies.argmax(axis=1))
-            plt.show()
-            plt.figure()
-            plt.plot(w.agent.action_selection.RT[:,0], 'x')
-            plt.show()
-            like = np.einsum('tpc,tc->tp', w.agent.likelihood[:,0], w.agent.posterior_context[:,0])
-            prior = np.einsum('tpc,tc->tp', w.agent.prior_policies[:], w.agent.posterior_context[:,0])
-            for i in [20,40,100,trials-1]:
-                plt.figure()
-                plt.plot(np.sort(like[i]), linewidth=3, label='likelihood')
-                plt.plot(np.sort(prior[i]), linewidth=3, label='prior')
-                plt.title("trial "+str(i))
-                plt.ylim([0,0.25])
-                plt.xlim([0,len(prior[i])])
-                plt.xlabel('policy', fontsize=16)
-                plt.ylabel('probability', fontsize=16)
-                plt.legend()
-                plt.savefig('underlying_prior_like_trial_'+str(i)+'_h_'+str(h)+'.svg')
-                plt.show()
-            # for i in [trials-1]:
-            #     plt.figure()
-            #     plt.plot(np.sort(prior[i]))
-            #     plt.title("trial "+str(i))
-            #     plt.ylim([0,1])
-            #     plt.show()
-        w = 0
-        gc.collect()
-
-
-runs = np.tile(np.tile(np.arange(repetitions), (trials, 1)).reshape(-1, order='f'),len(tendencies))
-times = np.tile(np.arange(trials), repetitions*len(tendencies))
-tend_idx = np.array(['h = '+str(1./tendencies[i//(repetitions*trials)]) for i in range(repetitions*trials*len(tendencies))])
-DataFrame = pd.DataFrame({'trial': times, 'run': runs,'tendency h':tend_idx, 'RT': RTs})
-
-# plt.figure()
-# sns.lineplot(data=DataFrame, x='trial', y='RT', style='tendency h', estimator=np.nanmean, linewidth=2, err_kws={'alpha':0.4}, ci=99)
-# #plt.legend()
-# plt.xlim([0,trials])
-# plt.ylim([0,0.5*np.amax(RTs)])#0.75*
-# plt.ylabel('RT (#sampples)')
-# plt.savefig('Dir_gridworld_RT_stats_context_'+str(repetitions)+'repetitions.svg', dpi=600)
-# plt.show()
-
-plt.figure()
-palette = [(38/255,99/255,141/255),(54/255, 142/255, 201/255)]#[(30/255,82/255,225/255),(30/255, 164/255, 255/255)]#[(31/255,119/255,180/255),(79/255, 128/255, 23/255)]
-sns.lineplot(data=DataFrame, x='trial', y='RT', hue='tendency h', style='tendency h', estimator=np.nanmedian, linewidth=2, err_kws={'alpha':0.4}, ci=99, palette=palette)
-#plt.legend()
-plt.ylim([0,np.amax(RTs)])
-plt.xlim([0,trials])
-plt.ylabel('RT (#sampples)')
-plt.savefig('Dir_gridworld_RT_stats_'+name_str+str(repetitions)+'repetitions_median.svg', dpi=600)
-plt.show()
-
-plt.figure()
-palette = [(38/255,99/255,141/255),(54/255, 142/255, 201/255)]#[(31/255,119/255,180/255),(79/255, 128/255, 23/255)]
-sns.lineplot(data=DataFrame, x='trial', y='RT', hue='tendency h', style='tendency h', estimator=np.nanmean, linewidth=2, err_kws={'alpha':0.4}, ci=99, palette=palette)
-#plt.legend()
-plt.ylim([0,np.amax(RTs)])
-plt.xlim([0,trials])
-plt.ylabel('RT (#sampples)')
-plt.savefig('Dir_gridworld_RT_stats_'+name_str+str(repetitions)+'repetitions_mean.svg', dpi=600)
-plt.show()
+    
 
 
 def run_action_selection(post, prior, like, trials = trials, crit_factor = 0.4, calc_dkl = False):
@@ -709,6 +990,20 @@ def run_action_selection(post, prior, like, trials = trials, crit_factor = 0.4, 
         return ac_sel.RT.squeeze(), ac_sel.DKL_post.squeeze(), ac_sel.DKL_prior.squeeze()
     else:
         return ac_sel.RT.squeeze()
+    
+
+repetitions = 5
+
+run_gridworld_simulations(repetitions)
+
+DataFrame, name_str = load_gridworld_simulations(repetitions)
+
+plot_analyses(DataFrame, name_str)
+
+print(DataFrame.query('tendency_h == 1.0 and trial >= 100 and trial <105')['correct'].mean())
+print(DataFrame.query('tendency_h == 0.001 and trial >= 100 and trial <105')['correct'].mean())
+
+    
 """
 reload data
 """

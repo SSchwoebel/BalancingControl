@@ -12,6 +12,7 @@ import action_selection as asl
 import seaborn as sns
 import pandas as pd
 from scipy.stats import entropy
+from scipy.stats.mstats import normaltest
 #sns.set_style("whitegrid", {"axes.edgecolor": "0.15"})#, "axes.spines.top": "False", "axes.spines.right": "False"})
 #plt.style.use('seaborn-darkgrid')
 plt.style.use('seaborn-whitegrid')
@@ -45,6 +46,8 @@ plt.plot(range(1,npi+1), flat, label='flat', linewidth=3)
 plt.ylim([0,0.25])
 plt.legend()
 plt.xlim([1,npi])
+plt.xticks(fontsize=14)
+plt.yticks(fontsize=14)
 plt.xlabel('policy', fontsize=16)
 plt.ylabel('probability', fontsize=16)
 plt.savefig('underlying_prior_like_for_distributions.svg')
@@ -63,7 +66,7 @@ def run_action_selection(post, prior, like, trials = 100, crit_factor = 0.5, cal
         return ac_sel.RT.squeeze()
 
 # set up number of trials
-trials = 1000
+trials = 100
 
 # conflict
 prior = np.array(conflict)
@@ -107,6 +110,11 @@ def plot_RT_distributions(num_tests, trials, test_vals, crit_factor=0.4):
     for i, test in enumerate(tests):
         post, prior, like = test_vals[i]
         RT[i] = run_action_selection(post, prior, like, trials, crit_factor=crit_factor)
+        is_normal = normaltest(RT[i])
+        is_lognormal = normaltest(np.log(RT[i]))
+        print(crit_factor, test)
+        print("is normal?", is_normal)
+        print("is log normal?", is_lognormal)
     RT = pd.DataFrame(data=RT.T, columns=tests)
 
     #plt.figure()
@@ -165,7 +173,10 @@ def plot_common_histogram(factors, trials):
     #     sns.histplot(f[['conflict', 'agreement']], alpha=0.5, bins=100, binrange=[min_RT,max_RT],edgecolor='black', common_bins=True)#
     plt.xlim(0,1000)
     plt.ylim([0,trials+100])
-    plt.xlabel('RT (#samples)')
+    plt.xticks(fontsize=14)
+    plt.yticks(fontsize=14)
+    plt.xlabel('RT (#samples)', fontsize=16)
+    plt.ylabel('Count', fontsize=16)
     plt.savefig('RT_tests_histogram_conflict_agreement_all_'+str(npi)+'npi_'+str(trials)+'trials.svg',dpi=600)
     plt.show()
 
@@ -173,7 +184,10 @@ def plot_common_histogram(factors, trials):
     sns.histplot(frame[["goal", "habit"]], alpha=0.5, bins=bins, binrange=[min_RT,max_RT],edgecolor='black')#, common_bins=False)#
     plt.xlim(0,1000)
     plt.ylim([0,trials+100])
-    plt.xlabel('RT (#samples)')
+    plt.xticks(fontsize=14)
+    plt.yticks(fontsize=14)
+    plt.xlabel('RT (#samples)', fontsize=16)
+    plt.ylabel('Count', fontsize=16)
     plt.savefig('RT_tests_histogram_goal_habit_all_'+str(npi)+'npi_'+str(trials)+'trials.svg',dpi=600)
     plt.show()
 
@@ -181,7 +195,10 @@ def plot_common_histogram(factors, trials):
     sns.histplot(frame, alpha=0.6, bins=bins, binrange=[min_RT,max_RT],edgecolor='black')#, common_bins=False)#
     plt.xlim(0,1000)
     plt.ylim([0,trials+100])
-    plt.xlabel('RT (#samples)')
+    plt.xticks(fontsize=14)
+    plt.yticks(fontsize=14)
+    plt.xlabel('RT (#samples)', fontsize=16)
+    plt.ylabel('Count', fontsize=16)
     plt.savefig('RT_tests_histogram_all_all_'+str(npi)+'npi_'+str(trials)+'trials.svg',dpi=600)
     plt.show()
 
@@ -206,6 +223,10 @@ def evaluate_DKL(num_tests, trials, conflict):
     plt.figure()
     sns.lineplot(data=DKL_df, x='factor', y='DKL', style='type', ci=95, linewidth=2)
     plt.xlim([factors[0], factors[-1]])
+    plt.xticks(fontsize=14)
+    plt.yticks(fontsize=14)
+    plt.xlabel('factor $f$', fontsize=16)
+    plt.ylabel('$D_{KL}$', fontsize=16)
     #plt.ylim([0,1.7])
     plt.savefig('dkl_threshold_factor_'+str(npi)+'npi_'+str(trials)+'trials.svg', dpi=600)
     plt.show()
@@ -256,7 +277,7 @@ def RT_of_like_entropy(trials):
 # plt.title('mean RT as a function of likelihood entropy')
 # plt.show()
 
-evaluate_DKL(num_tests, trials, test_vals[0])
+#evaluate_DKL(num_tests, trials, test_vals[0])
 
 factors = [0.1,0.3,0.5]
 for f in factors:

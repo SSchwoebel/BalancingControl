@@ -159,10 +159,11 @@ def run_agent(par_list, trials, T, ns, na, nr, nc, f, contexts, states, flankers
     """
 
     # perception
-    bayes_prc = prc.FlankerPerception(A, B, C_agent, transition_matrix_context, 
+    bayes_prc = prc.HierarchicalPerception(A, B, C_agent, transition_matrix_context, 
                                       state_prior, utility, prior_pi, alphas, 
                                       C_alphas, T=T, generative_model_context=D, 
-                                      pol_lambda=pol_lambda, r_lambda=r_lambda)
+                                      pol_lambda=pol_lambda, r_lambda=r_lambda,
+                                        non_decaying=4)
 
     # agent
     bayes_pln = agt.BayesianPlanner(bayes_prc, ac_sel, pol,
@@ -233,7 +234,7 @@ def run_flanker_simulations(repetitions, folder):
                     prefix += "beta_"
                 else:
                     prefix += ""
-                run_name = "flanker_"+prefix+"h"+str(int(tendency))+"_t"+str(trans)+"_u"+str(unc)+"_f"+str(f)+"_ut"+str(u)+".json"
+                run_name = "flanker_"+prefix+"h"+str(int(tendency))+"_t"+str(trans)+"_u"+str(unc)+"_f"+str(f)+"_ut"+str(u)+"_test.json"
                 fname = os.path.join(folder, run_name)
                 
                 jsonpickle_numpy.register_handlers()
@@ -320,7 +321,7 @@ def analyze_flanker_simulations(folder):
     tendencies = [1,10,100, 250]#[1,10,25,50,75,100, 250,1000]#1,10,100,
     probs = [90,95,99]
     uncertainties = [0,0.1,0.2,0.3,0.5,0.7,1,5,10]#,15,20]
-    run_name = "flanker_alpha_h"+str(int(tendencies[0]))+"_t"+str(probs[0])+"_u"+str(uncertainties[0])+"_f4_ut0.99.json"
+    run_name = "flanker_alpha_h"+str(int(tendencies[0]))+"_t"+str(probs[0])+"_u"+str(uncertainties[0])+"_f3.5_ut0.99_test.json"
     fname = os.path.join(folder, run_name)
 
     jsonpickle_numpy.register_handlers()
@@ -345,10 +346,10 @@ def analyze_flanker_simulations(folder):
     unc_arr  = np.zeros(repetitions*trials*num_types)
     binned_RT = np.zeros(repetitions*trials*num_types)
     prev_congruent = np.zeros(repetitions*trials*num_types) - 1
-    non_dec_time = 150
+    non_dec_time = 100
 
     bin_size = 250
-    t_s = 1./6.
+    t_s = 0.2
 
     sim_type = 0
     for tendency in tendencies:#,3,5,10,30,50,100]: #1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
@@ -356,7 +357,7 @@ def analyze_flanker_simulations(folder):
             for unc in uncertainties:
                 print(tendency, trans, unc)
 
-                run_name = "flanker_alpha_h"+str(int(tendency))+"_t"+str(trans)+"_u"+str(unc)+"_f3.5_ut0.99.json"
+                run_name = "flanker_alpha_h"+str(int(tendency))+"_t"+str(trans)+"_u"+str(unc)+"_f3.5_ut0.99_test.json"
                 fname = os.path.join(folder, run_name)
 
                 jsonpickle_numpy.register_handlers()
@@ -404,7 +405,7 @@ def analyze_flanker_simulations(folder):
     cutoff = non_dec_time + 500#5000#2*500
     plt.figure()
     plt.title("tendency "+str(tendency)+", trans "+str(trans))
-    sns.lineplot(x='uncertainty', y='RT', data=data.query('tendencies==@tendency and trans_probs==@trans and uncertainty<25 and binned_RT<=@cutoff'), style='congruent', ci = 95, estimator=np.nanmean, linewidth=3)
+    sns.lineplot(x='uncertainty', y='RT', data=data.query('tendencies==@tendency and trans_probs==@trans and uncertainty<1.1 and binned_RT<=@cutoff'), style='congruent', ci = 95, estimator=np.nanmean, linewidth=3)
     #plt.ylim([200,1000])
     plt.gca().invert_xaxis()
     plt.show()
@@ -416,6 +417,7 @@ def analyze_flanker_simulations(folder):
     #plt.gca().invert_xaxis()
     plt.show()
 
+    # accuracy
     plt.figure()
     #plt.title("tendency "+str(tendency)+", trans "+str(trans)+", unc "+str(unc))
     sns.lineplot(x='binned_RT', y='correct', data=data.query('tendencies==@tendency and trans_probs==@trans and uncertainty==@unc and binned_RT<=@cutoff'), style='congruent', ci = 95, estimator=np.nanmean, linewidth=3)
@@ -443,11 +445,13 @@ def analyze_flanker_simulations(folder):
     plt.savefig("RT_histogram.svg")
     plt.show()
 
+    # gratton
     plt.figure(figsize=(4,5))
+    palette = [(0,0,0), (0,0,0)]
     #plt.title("tendency "+str(tendency)+", trans "+str(trans)+", unc "+str(unc))
-    sns.lineplot(x='prev_cong', y='RT', data=data.query('tendencies==@tendency and trans_probs==@trans and uncertainty==@unc and trial_num>0'), style='congruent', ci = 95, estimator=np.nanmean, linewidth=3, markers=True, markersize=12)
+    sns.lineplot(x='prev_cong', y='RT', data=data.query('tendencies==@tendency and trans_probs==@trans and uncertainty==@unc and trial_num>0'), style='congruent', hue='congruent', ci = 95, estimator=np.nanmean, linewidth=3, markers=True, markersize=12, palette=palette)
     #plt.ylim([200,1000])
-    plt.xticks([0,1], labels=["con", "inc"], fontsize=16)
+    plt.xticks([0,1], labels=["CON", "INC"], fontsize=16)
     plt.yticks(fontsize=16)
     plt.xlim([-0.25,1.25])
     plt.ylim([200,700])
@@ -483,16 +487,16 @@ def main():
     if not os.path.isdir(folder):
         os.mkdir(folder)
 
-    repetitions = 50
+    repetitions = 15
 
     """
     run simulations
     """
     # runs simulations with varying habitual tendency and reward probability
     # results are stored in data folder
-    #run_flanker_simulations(repetitions, folder)
+    run_flanker_simulations(repetitions, folder)
 
-    data, bin_size = analyze_flanker_simulations(folder)
+    #data, bin_size = analyze_flanker_simulations(folder)
     return data, bin_size
 
 

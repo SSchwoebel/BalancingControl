@@ -6,7 +6,7 @@ import numpy as np
 class GridWorld(object):
 
     def __init__(self, Omega, Theta, Rho,
-                 trials = 1, T = 10, initial_state = 1):
+                 trials = 1, T = 10, initial_state = 2):
 
         #set probability distribution used for generating observations
         self.Omega = Omega.copy()
