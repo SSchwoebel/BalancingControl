@@ -1,6 +1,12 @@
 """This module contains various experimental environments used for testing
 human behavior."""
-import numpy as np
+arr_type = "torch"
+if arr_type == "numpy":
+    import numpy as ar
+    array = ar.array
+else:
+    import torch as ar
+    array = ar.tensor
 
 
 class GridWorld(object):
@@ -9,16 +15,16 @@ class GridWorld(object):
                  trials = 1, T = 10, initial_state = 2):
 
         #set probability distribution used for generating observations
-        self.Omega = Omega.copy()
+        self.Omega = Omega
 
         #set probability distribution used for generating rewards
-        self.Rho = Rho.copy()
+        self.Rho = Rho
 
         #set probability distribution used for generating state transitions
-        self.Theta = Theta.copy()
+        self.Theta = Theta
 
         #set container that keeps track the evolution of the hidden states
-        self.hidden_states = np.zeros((trials, T), dtype = int)
+        self.hidden_states = ar.zeros((trials, T), dtype = int)
 
         #set intial state
         self.initial_state = initial_state
@@ -33,7 +39,7 @@ class GridWorld(object):
 
     def generate_observations(self, tau, t):
         #generate one sample from multinomial distribution
-        o = np.random.multinomial(1, self.Omega[:, self.hidden_states[tau, t]]).argmax()
+        o = ar.random.multinomial(1, self.Omega[:, self.hidden_states[tau, t]]).argmax()
         return o
 
 
@@ -41,12 +47,12 @@ class GridWorld(object):
 
         current_state = self.hidden_states[tau, t-1]
 
-        self.hidden_states[tau, t] = np.random.choice(self.Theta.shape[0],
+        self.hidden_states[tau, t] = ar.random.choice(self.Theta.shape[0],
                           p = self.Theta[:, current_state, int(response)])
 
     def generate_rewards(self, tau, t):
         #generate one sample from multinomial distribution
-        r = np.random.choice(self.Rho.shape[0], p = self.Rho[:, self.hidden_states[tau, t]])
+        r = ar.random.choice(self.Rho.shape[0], p = self.Rho[:, self.hidden_states[tau, t]])
         return r
 
 """
@@ -64,8 +70,8 @@ class FakeGridWorld(object):
         self.Theta = Theta.copy()
 
         #set container that keeps track the evolution of the hidden states
-        self.hidden_states = np.zeros((trials, T), dtype = int)
-        self.hidden_states[:] = np.array([hidden_states for i in range(trials)])
+        self.hidden_states = ar.zeros((trials, T), dtype = int)
+        self.hidden_states[:] = ar.array([hidden_states for i in range(trials)])
 
     def set_initial_states(self, tau):
         #start in lower corner
@@ -76,7 +82,7 @@ class FakeGridWorld(object):
 
     def generate_observations(self, tau, t):
         #generate one sample from multinomial distribution
-        o = np.random.multinomial(1, self.Omega[:, self.hidden_states[tau, t]]).argmax()
+        o = ar.random.multinomial(1, self.Omega[:, self.hidden_states[tau, t]]).argmax()
         return o
 
 
@@ -84,7 +90,7 @@ class FakeGridWorld(object):
 
         current_state = self.hidden_states[tau, t-1]
 
-        self.hidden_states[tau, t] = np.random.choice(self.Theta.shape[0],
+        self.hidden_states[tau, t] = ar.random.choice(self.Theta.shape[0],
                           p = self.Theta[:, current_state, int(response)])
 
 
@@ -94,22 +100,22 @@ class MultiArmedBandid(object):
                  trials = 1, T = 10):
 
         #set probability distribution used for generating observations
-        self.Omega = Omega.copy()
+        self.Omega = Omega
 
         #set probability distribution used for generating rewards
-#        self.Rho = np.zeros((trials, Rho.shape[0], Rho.shape[1]))
+#        self.Rho = ar.zeros((trials, Rho.shape[0], Rho.shape[1]))
 #        self.Rho[0] = Rho.copy()
-        self.Rho = Rho.copy()
+        self.Rho = Rho
 
         #set probability distribution used for generating state transitions
-        self.Theta = Theta.copy()
+        self.Theta = Theta
 
         self.nh = Theta.shape[0]
 
-#        self.changes = np.array([0.01, -0.01])
+#        self.changes = ar.array([0.01, -0.01])
 
         #set container that keeps track the evolution of the hidden states
-        self.hidden_states = np.zeros((trials, T), dtype = int)
+        self.hidden_states = ar.zeros((trials, T), dtype = int)
 
         self.trials = trials
 
@@ -123,7 +129,7 @@ class MultiArmedBandid(object):
 
     def generate_observations(self, tau, t):
         #generate one sample from multinomial distribution
-        o = np.random.multinomial(1, self.Omega[:, self.hidden_states[tau, t]]).argmax()
+        o = ar.multinomial(self.Omega[:, self.hidden_states[tau, t]],1)
         return o
 
 
@@ -131,16 +137,15 @@ class MultiArmedBandid(object):
 
         current_state = self.hidden_states[tau, t-1]
 
-        self.hidden_states[tau, t] = np.random.choice(self.Theta.shape[0],
-                          p = self.Theta[:, current_state, int(response)])
+        self.hidden_states[tau, t] = ar.multinomial(self.Theta[:, current_state, int(response)],1)
 
     def generate_rewards(self, tau, t):
         #generate one sample from multinomial distribution
-        r = np.random.choice(self.Rho.shape[1], p = self.Rho[tau, :, self.hidden_states[tau, t]])
+        r = ar.multinomial(self.Rho[tau, :, self.hidden_states[tau, t]],1)
 
 #        if tau < self.trials-1:
 #            #change Rho slowly
-#            change = np.random.choice(self.changes, size=self.nh-1)
+#            change = ar.random.choice(self.changes, size=self.nh-1)
 #            self.Rho[tau+1,0,1:] = self.Rho[tau,0,1:] + change
 #            self.Rho[tau+1,1,1:] = self.Rho[tau,1,1:] - change
 #            self.Rho[tau+1][self.Rho[tau+1] > 1.] = 1.
@@ -158,7 +163,7 @@ class TaskSwitching(object):
         self.Omega = Omega.copy()
 
         #set probability distribution used for generating rewards
-#        self.Rho = np.zeros((trials, Rho.shape[0], Rho.shape[1]))
+#        self.Rho = ar.zeros((trials, Rho.shape[0], Rho.shape[1]))
 #        self.Rho[0] = Rho.copy()
         self.Rho = Rho.copy()
 
@@ -169,12 +174,12 @@ class TaskSwitching(object):
         
         self.Chi = Chi.copy()
 
-#        self.changes = np.array([0.01, -0.01])
+#        self.changes = ar.array([0.01, -0.01])
 
         assert(len(start_states==trials))
 
         #set container that keeps track the evolution of the hidden states
-        self.hidden_states = np.zeros((trials, T), dtype = int)
+        self.hidden_states = ar.zeros((trials, T), dtype = int)
         self.hidden_states[:,0] = start_states
         
         self.contexts = contexts.copy().astype(int)
@@ -199,7 +204,7 @@ class TaskSwitching(object):
 
     def generate_observations(self, tau, t):
         #generate one sample from multinomial distribution
-        o = np.random.multinomial(1, self.Omega[:, self.hidden_states[tau, t]]).argmax()
+        o = ar.random.multinomial(1, self.Omega[:, self.hidden_states[tau, t]]).argmax()
         return o
 
 
@@ -208,16 +213,16 @@ class TaskSwitching(object):
         current_state = self.hidden_states[tau, t-1]
         current_context = self.contexts[tau]
 
-        self.hidden_states[tau, t] = np.random.choice(self.Theta.shape[0],
+        self.hidden_states[tau, t] = ar.random.choice(self.Theta.shape[0],
                           p = self.Theta[:, current_state, int(response), current_context])
 
     def generate_rewards(self, tau, t):
         #generate one sample from multinomial distribution
-        r = np.random.choice(self.Rho.shape[1], p = self.Rho[tau, :, self.hidden_states[tau, t]])
+        r = ar.random.choice(self.Rho.shape[1], p = self.Rho[tau, :, self.hidden_states[tau, t]])
 
 #        if tau < self.trials-1:
 #            #change Rho slowly
-#            change = np.random.choice(self.changes, size=self.nh-1)
+#            change = ar.random.choice(self.changes, size=self.nh-1)
 #            self.Rho[tau+1,0,1:] = self.Rho[tau,0,1:] + change
 #            self.Rho[tau+1,1,1:] = self.Rho[tau,1,1:] - change
 #            self.Rho[tau+1][self.Rho[tau+1] > 1.] = 1.
@@ -227,7 +232,7 @@ class TaskSwitching(object):
     
     def generate_context_obs(self, tau):
         
-        c = np.random.choice(self.Chi.shape[0], p=self.Chi[self.contexts[tau]])
+        c = ar.random.choice(self.Chi.shape[0], p=self.Chi[self.contexts[tau]])
         return c
     
 
@@ -240,7 +245,7 @@ class Flanker(object):
         self.Omega = Omega.copy()
 
         #set probability distribution used for generating rewards
-#        self.Rho = np.zeros((trials, Rho.shape[0], Rho.shape[1]))
+#        self.Rho = ar.zeros((trials, Rho.shape[0], Rho.shape[1]))
 #        self.Rho[0] = Rho.copy()
         self.Rho = Rho.copy()
 
@@ -251,12 +256,12 @@ class Flanker(object):
         
         self.Chi = Chi.copy()
 
-#        self.changes = np.array([0.01, -0.01])
+#        self.changes = ar.array([0.01, -0.01])
 
         assert(len(start_states==trials))
 
         #set container that keeps track the evolution of the hidden states
-        self.hidden_states = np.zeros((trials, T), dtype = int)
+        self.hidden_states = ar.zeros((trials, T), dtype = int)
         self.hidden_states[:,0] = start_states
         
         self.contexts = contexts.copy().astype(int)
@@ -281,7 +286,7 @@ class Flanker(object):
 
     def generate_observations(self, tau, t):
         #generate one sample from multinomial distribution
-        o = np.random.multinomial(1, self.Omega[:, self.hidden_states[tau, t]]).argmax()
+        o = ar.random.multinomial(1, self.Omega[:, self.hidden_states[tau, t]]).argmax()
         return o
 
 
@@ -290,16 +295,16 @@ class Flanker(object):
         current_state = self.hidden_states[tau, t-1]
         current_context = self.contexts[tau]
 
-        self.hidden_states[tau, t] = np.random.choice(self.Theta.shape[0],
+        self.hidden_states[tau, t] = ar.random.choice(self.Theta.shape[0],
                           p = self.Theta[:, current_state, int(response), current_context])
 
     def generate_rewards(self, tau, t):
         #generate one sample from multinomial distribution
-        r = np.random.choice(self.Rho.shape[1], p = self.Rho[tau, :, self.hidden_states[tau, t]])
+        r = ar.random.choice(self.Rho.shape[1], p = self.Rho[tau, :, self.hidden_states[tau, t]])
 
 #        if tau < self.trials-1:
 #            #change Rho slowly
-#            change = np.random.choice(self.changes, size=self.nh-1)
+#            change = ar.random.choice(self.changes, size=self.nh-1)
 #            self.Rho[tau+1,0,1:] = self.Rho[tau,0,1:] + change
 #            self.Rho[tau+1,1,1:] = self.Rho[tau,1,1:] - change
 #            self.Rho[tau+1][self.Rho[tau+1] > 1.] = 1.
@@ -309,7 +314,7 @@ class Flanker(object):
     
     def generate_context_obs(self, tau):
         
-        c = np.random.choice(self.Chi.shape[0], p=self.Chi[self.contexts[tau]])
+        c = ar.random.choice(self.Chi.shape[0], p=self.Chi[self.contexts[tau]])
         return c
 
 
@@ -322,7 +327,7 @@ class TMaze(object):
         self.Omega = Omega.copy()
 
         #set probability distribution used for generating rewards
-#        self.Rho = np.zeros((trials, Rho.shape[0], Rho.shape[1]))
+#        self.Rho = ar.zeros((trials, Rho.shape[0], Rho.shape[1]))
 #        self.Rho[0] = Rho.copy()
         self.Rho = Rho.copy()
 
@@ -331,10 +336,10 @@ class TMaze(object):
 
         self.nh = Theta.shape[0]
 
-#        self.changes = np.array([0.01, -0.01])
+#        self.changes = ar.array([0.01, -0.01])
 
         #set container that keeps track the evolution of the hidden states
-        self.hidden_states = np.zeros((trials, T), dtype = int)
+        self.hidden_states = ar.zeros((trials, T), dtype = int)
 
         self.trials = trials
 
@@ -348,7 +353,7 @@ class TMaze(object):
 
     def generate_observations(self, tau, t):
         #generate one sample from multinomial distribution
-        o = np.random.multinomial(1, self.Omega[:, self.hidden_states[tau, t]]).argmax()
+        o = ar.random.multinomial(1, self.Omega[:, self.hidden_states[tau, t]]).argmax()
         return o
 
 
@@ -356,12 +361,12 @@ class TMaze(object):
 
         current_state = self.hidden_states[tau, t-1]
 
-        self.hidden_states[tau, t] = np.random.choice(self.Theta.shape[0],
+        self.hidden_states[tau, t] = ar.random.choice(self.Theta.shape[0],
                           p = self.Theta[:, current_state, int(response)])
 
     def generate_rewards(self, tau, t):
         #generate one sample from multinomial distribution
-        r = np.random.choice(self.Rho.shape[1], p = self.Rho[tau, :, self.hidden_states[tau, t]])
+        r = ar.random.choice(self.Rho.shape[1], p = self.Rho[tau, :, self.hidden_states[tau, t]])
 
         return r
 
@@ -372,21 +377,21 @@ class TwoStep(object):
                  trials = 1, T = 10):
 
         #set probability distribution used for generating observations
-        self.Omega = Omega.copy()
+        self.Omega = Omega
 
         #set probability distribution used for generating rewards
-        self.Rho = np.zeros((trials, Rho.shape[0], Rho.shape[1]))
-        self.Rho[0] = Rho.copy()
+        self.Rho = ar.zeros((trials, Rho.shape[0], Rho.shape[1]))
+        self.Rho[0] = Rho
 
         #set probability distribution used for generating state transitions
-        self.Theta = Theta.copy()
+        self.Theta = Theta
 
         self.nh = Theta.shape[0]
 
-        self.changes = np.array([0.01, -0.01])
+        self.changes = ar.array([0.01, -0.01])
 
         #set container that keeps track the evolution of the hidden states
-        self.hidden_states = np.zeros((trials, T), dtype = int)
+        self.hidden_states = ar.zeros((trials, T), dtype = int)
 
         self.trials = trials
         self.T = T
@@ -401,7 +406,7 @@ class TwoStep(object):
 
     def generate_observations(self, tau, t):
         #generate one sample from multinomial distribution
-        o = np.random.multinomial(1, self.Omega[:, self.hidden_states[tau, t]]).argmax()
+        o = ar.random.multinomial(1, self.Omega[:, self.hidden_states[tau, t]]).argmax()
         return o
 
 
@@ -409,17 +414,17 @@ class TwoStep(object):
 
         current_state = self.hidden_states[tau, t-1]
 
-        self.hidden_states[tau, t] = np.random.choice(self.Theta.shape[0],
+        self.hidden_states[tau, t] = ar.random.choice(self.Theta.shape[0],
                           p = self.Theta[:, current_state, int(response)])
 
     def generate_rewards(self, tau, t):
         #generate one sample from multinomial distribution
-        r = np.random.choice(self.Rho.shape[1], p = self.Rho[tau, :, self.hidden_states[tau, t]])
+        r = ar.random.choice(self.Rho.shape[1], p = self.Rho[tau, :, self.hidden_states[tau, t]])
 
         if (tau < self.trials-1) and t == self.T-1:
             #change Rho slowly
             self.Rho[tau+1] = self.Rho[tau]
-            change = np.random.choice(self.changes, size=self.nh - 3)
+            change = ar.random.choice(self.changes, size=self.nh - 3)
             self.Rho[tau+1,0,3:] = self.Rho[tau+1,0,3:] + change
             self.Rho[tau+1,1,3:] = self.Rho[tau+1,1,3:] - change
             self.Rho[tau+1,:,3:][self.Rho[tau+1,:,3:] > 1.] = 1.

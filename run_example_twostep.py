@@ -6,7 +6,13 @@ Created on Thu May 11 17:56:24 2017
 @author: sarah
 """
 
-import numpy as np
+arr_type = "torch"
+if arr_type == "numpy":
+    import numpy as ar
+    array = ar.array
+else:
+    import torch as ar
+    array = ar.tensor
 
 #from plotting import *
 from misc import *
@@ -31,7 +37,7 @@ import scipy as sc
 import scipy.signal as ss
 import bottleneck as bn
 import gc
-np.set_printoptions(threshold = 100000, precision = 5)
+#ar.set_printoptions(threshold = 100000, precision = 5)
 
 
 """
@@ -74,17 +80,17 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
 
 
     #generating probability of observations in each state
-    A = np.eye(no)
+    A = ar.eye(no)
 
 
     #state transition generative probability (matrix)
-    B = np.zeros((ns, ns, na))
+    B = ar.zeros((ns, ns, na))
     b1 = 0.7
     nb1 = 1.-b1
     b2 = 0.7
     nb2 = 1.-b2
 
-    B[:,:,0] = np.array([[  0,  0,  0,  0,  0,  0,  0,],
+    B[:,:,0] = array([[  0,  0,  0,  0,  0,  0,  0,],
                          [ b1,  0,  0,  0,  0,  0,  0,],
                          [nb1,  0,  0,  0,  0,  0,  0,],
                          [  0,  1,  0,  1,  0,  0,  0,],
@@ -92,7 +98,7 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
                          [  0,  0,  0,  0,  0,  1,  0,],
                          [  0,  0,  0,  0,  0,  0,  1,],])
 
-    B[:,:,1] = np.array([[  0,  0,  0,  0,  0,  0,  0,],
+    B[:,:,1] = array([[  0,  0,  0,  0,  0,  0,  0,],
                          [nb2,  0,  0,  0,  0,  0,  0,],
                          [ b2,  0,  0,  0,  0,  0,  0,],
                          [  0,  0,  0,  1,  0,  0,  0,],
@@ -102,19 +108,19 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
 
     # create reward generation
 #
-#    C = np.zeros((utility.shape[0], ns))
+#    C = ar.zeros((utility.shape[0], ns))
 #
-#    vals = np.array([0., 1./5., 0.95, 1./5., 1/5., 1./5.])
+#    vals = array([0., 1./5., 0.95, 1./5., 1/5., 1./5.])
 #
 #    for i in range(ns):
 #        C[:,i] = [1-vals[i],vals[i]]
 #
-#    changes = np.array([0.01, -0.01])
+#    changes = array([0.01, -0.01])
 #    Rho = generate_bandit_timeseries(C, nb, trials, changes)
 
     # agent's beliefs about reward generation
 
-    C_alphas = np.zeros((nr, ns, nc)) + learn_rew
+    C_alphas = ar.zeros((nr, ns, nc)) + learn_rew
     C_alphas[0,:3,:] = 100
     for i in range(1,nr):
         C_alphas[i,0,:] = 1
@@ -124,14 +130,15 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
 #        C_alphas[0,c+1,c] = 1
     #C_alphas[:,13] = [100, 1]
 
-    C_agent = np.zeros((nr, ns, nc))
-    for c in range(nc):
-        C_agent[:,:,c] = np.array([(C_alphas[:,i,c])/(C_alphas[:,i,c]).sum() for i in range(ns)]).T
-    #np.array([np.random.dirichlet(C_alphas[:,i]) for i in range(ns)]).T
+    #C_agent = ar.zeros((nr, ns, nc))
+    # for c in range(nc):
+    #     C_agent[:,:,c] = array([(C_alphas[:,i,c])/(C_alphas[:,i,c]).sum() for i in range(ns)]).T
+    C_agent = C_alphas[:,:,:] / C_alphas[:,:,:].sum(axis=0)[None,:,:]
+    #array([ar.random.dirichlet(C_alphas[:,i]) for i in range(ns)]).T
 
     # context transition matrix
 
-    transition_matrix_context = np.ones(1)
+    transition_matrix_context = ar.ones(1)
 
     """
     create environment (grid world)
@@ -144,16 +151,16 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
     create policies
     """
 
-    pol = np.array(list(itertools.product(list(range(na)), repeat=T-1)))
+    pol = array(list(itertools.product(list(range(na)), repeat=T-1)))
 
     #pol = pol[-2:]
     npi = pol.shape[0]
 
     # prior over policies
 
-    prior_pi = np.ones(npi)/npi #np.zeros(npi) + 1e-3/(npi-1)
+    prior_pi = ar.ones(npi)/npi #ar.zeros(npi) + 1e-3/(npi-1)
     #prior_pi[170] = 1. - 1e-3
-    alphas = np.zeros((npi, nc)) + learn_pol
+    alphas = ar.zeros((npi, nc)) + learn_pol
 #    for i in range(nb):
 #        alphas[i+1,i] = 100
     #alphas[170] = 100
@@ -164,7 +171,7 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
     set state prior (where agent thinks it starts)
     """
 
-    state_prior = np.zeros((ns))
+    state_prior = ar.zeros((ns))
 
     state_prior[0] = 1.
 
@@ -176,7 +183,7 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
 
         sel = 'avg'
 
-        ac_sel = asl.MCMCSelector(trials = trials, T = T,
+        ac_sel = asl.AveragedSelector(trials = trials, T = T,
                                       number_of_actions = na)
     else:
 
@@ -189,7 +196,7 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
 #                                        number_of_policies = npi,
 #                                        number_of_actions = na)
 
-    prior_context = np.array([1.])
+    prior_context = array([1.])
 
 #    prior_context[0] = 1.
 
@@ -204,7 +211,11 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
         pol_par = alphas
 
         # perception
-        bayes_prc = prc.TwoStepPerception(A, B, C_agent, transition_matrix_context, state_prior, utility, prior_pi, pol_par, C_alphas, T=T)
+        bayes_prc = prc.HierarchicalPerception(A, B, C_agent, transition_matrix_context, 
+                                               state_prior, utility, prior_pi, 
+                                               pol_par, C_alphas, T=T,
+                                               pol_lambda=0.3, r_lambda=0.6,
+                                               non_decaying=3, dec_temp=4.)
 
         bayes_pln = agt.BayesianPlanner(bayes_prc, ac_sel, pol,
                           trials = trials, T = T,
@@ -213,6 +224,7 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
                           number_of_states = ns,
                           prior_context = prior_context,
                           learn_habit = learn_habit,
+                          learn_rew = True,
                           #save_everything = True,
                           number_of_policies = npi,
                           number_of_rewards = nr)
@@ -266,19 +278,19 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
 #    plt.show()
 #
 #
-#    rewarded = np.where(w.rewards[:trials-1,-1] == 1)[0]
-#    unrewarded = np.where(w.rewards[:trials-1,-1] == 0)[0]
+#    rewarded = ar.where(w.rewards[:trials-1,-1] == 1)[0]
+#    unrewarded = ar.where(w.rewards[:trials-1,-1] == 0)[0]
 #
-#    rare = np.append(np.where(w.environment.hidden_states[np.where(w.actions[:,0] == 0)[0]] == 2)[0],
-#                     np.where(w.environment.hidden_states[np.where(w.actions[:,0] == 1)[0]] == 1)[0])
+#    rare = ar.append(ar.where(w.environment.hidden_states[ar.where(w.actions[:,0] == 0)[0]] == 2)[0],
+#                     ar.where(w.environment.hidden_states[ar.where(w.actions[:,0] == 1)[0]] == 1)[0])
 #
-#    common = np.append(np.where(w.environment.hidden_states[np.where(w.actions[:,0] == 0)[0]] == 1)[0],
-#                     np.where(w.environment.hidden_states[np.where(w.actions[:,0] == 1)[0]] == 2)[0])
+#    common = ar.append(ar.where(w.environment.hidden_states[ar.where(w.actions[:,0] == 0)[0]] == 1)[0],
+#                     ar.where(w.environment.hidden_states[ar.where(w.actions[:,0] == 1)[0]] == 2)[0])
 #
 #    names = ["rewarded common", "rewarded rare", "unrewarded common", "unrewarded rare"]
 #
-#    index_list = [np.intersect1d(rewarded, common), np.intersect1d(rewarded, rare),
-#                 np.intersect1d(unrewarded, common), np.intersect1d(unrewarded, rare)]
+#    index_list = [ar.intersect1d(rewarded, common), ar.intersect1d(rewarded, rare),
+#                 ar.intersect1d(unrewarded, common), ar.intersect1d(unrewarded, rare)]
 #
 #    stayed_list = [((w.actions[index_list[i],0] - w.actions[index_list[i]+1,0])==0).sum()/len(index_list[i]) for i in range(4)]
 #
@@ -301,18 +313,18 @@ utility = []
 #ut = [0.5, 0.6, 0.7, 0.8, 0.9, 1. - 1e-5]
 #ut = [0.95, 0.96, 0.98, 0.99]
 #ut = [0.985]
-ut = [1.]
+ut = [0.999]
 for u in ut:
-    utility.append(np.zeros(nr))
+    utility.append(ar.zeros(nr))
     for i in range(1,nr):
         utility[-1][i] = u/(nr-1)#u/nr*i
     utility[-1][0] = (1.-u)
 
 changes = []
 
-C = np.zeros((nr, ns))
+C = ar.zeros((nr, ns))
 
-Rho = np.zeros((trials, C.shape[0], C.shape[1]))
+Rho = ar.zeros((trials, C.shape[0], C.shape[1]))
 n_training = 1
 #for i in range(4):
 #    Rho[trials*i//4:trials*(i+1)//4] = generate_bandit_timeseries_training(trials//4, nr, ns, nb//2, n_training, (i%2)*2)#generate_bandit_timeseries_change(C, nb, trials, changes)
@@ -338,7 +350,7 @@ n_training = 1
 #Rho[:trials//2] = generate_bandit_timeseries_training(trials//2, nr, ns, nb, n_training)
 #Rho[trials//2:] = generate_bandit_timeseries_slowchange(trials//2, nr, ns, nb)
 
-repetitions = 2
+repetitions = 10
 
 #learn_rew = 21
 
@@ -355,10 +367,10 @@ indices = []
 
 recalc_rho = False
 
-for tendency in [1000]:#[1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
+for tendency in [1]:#[1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
     print(tendency)
 
-    init = np.array([0.6, 0.4, 0.6, 0.4])
+    init = array([0.6, 0.4, 0.6, 0.4])
 
     Rho_fname = 'twostep_rho.json'
 
@@ -374,13 +386,16 @@ for tendency in [1000]:#[1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
     else:
         with open(fname, 'r') as infile:
             data = json.load(infile)
-        Rho[:] = pickle.decode(data)
+        if arr_type == "numpy":
+            Rho[:] = pickle.decode(data)
+        else:
+            Rho[:] = ar.from_numpy(pickle.decode(data))
 
     plt.figure(figsize=(10,5))
     for i in range(4):
         plt.plot(Rho[:,1,3+i], label="$p_{}$".format(i+1), linewidth=4)
     plt.ylim([0,1])
-    plt.yticks(np.arange(0,1.1,0.2),fontsize=18)
+    plt.yticks(ar.arange(0,1.1,0.2),fontsize=18)
     plt.ylabel("reward probability", fontsize=20)
     plt.xlim([-0.1, trials+0.1])
     plt.xticks(range(0,trials+1,50),fontsize=18)
@@ -392,7 +407,7 @@ for tendency in [1000]:#[1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
     worlds = []
     l = []
     learn_pol = tendency
-    learn_habit = False
+    learn_habit = True
     l.append([learn_pol, avg, Rho, learn_habit])
 
     par_list = []
@@ -407,29 +422,57 @@ for tendency in [1000]:#[1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
 
         w = worlds[-1]
 
-        rewarded = np.where(w.rewards[:trials-1,-1] == 1)[0]
+        # rewarded = ar.where(w.rewards[:trials-1,-1] == 1)[0]
 
-        unrewarded = np.where(w.rewards[:trials-1,-1] == 0)[0]
+        # unrewarded = ar.where(w.rewards[:trials-1,-1] == 0)[0]
+        
+        rewarded = w.rewards[:trials-1,-1] == 1
 
-        rare = np.append(np.where(np.logical_and(w.environment.hidden_states[:,1]==2, w.actions[:,0] == 0) == True)[0],
-                         np.where(np.logical_and(w.environment.hidden_states[:,1]==1, w.actions[:,0] == 1) == True)[0])
-        rare.sort()
+        unrewarded = rewarded==False#w.rewards[:trials-1,-1] == 0
 
-        common = np.append(np.where(np.logical_and(w.environment.hidden_states[:,1]==2, w.actions[:,0] == 1) == True)[0],
-                           np.where(np.logical_and(w.environment.hidden_states[:,1]==1, w.actions[:,0] == 0) == True)[0])
-        common.sort()
+        # TODO: go back to ar.logical_and when on pytorch version 1.5
+        # rare = ar.cat((ar.where(own_logical_and(w.environment.hidden_states[:,1]==2, w.actions[:,0] == 0) == True)[0],
+        #                  ar.where(own_logical_and(w.environment.hidden_states[:,1]==1, w.actions[:,0] == 1) == True)[0]))
+        # rare.sort()
+
+        # common = ar.cat((ar.where(own_logical_and(w.environment.hidden_states[:,1]==2, w.actions[:,0] == 1) == True)[0],
+        #                    ar.where(own_logical_and(w.environment.hidden_states[:,1]==1, w.actions[:,0] == 0) == True)[0]))
+        # common.sort()
+        
+        rare = own_logical_or(own_logical_and(w.environment.hidden_states[:trials-1,1]==2, w.actions[:trials-1,0] == 0),
+                       own_logical_and(w.environment.hidden_states[:trials-1,1]==1, w.actions[:trials-1,0] == 1))
+
+        common = rare==False#own_logical_or(own_logical_and(w.environment.hidden_states[:trials-1,1]==2, w.actions[:trials-1,0] == 1),
+                 #        own_logical_and(w.environment.hidden_states[:trials-1,1]==1, w.actions[:trials-1,0] == 0))
 
         names = ["rewarded common", "rewarded rare", "unrewarded common", "unrewarded rare"]
 
-        index_list = [np.intersect1d(rewarded, common), np.intersect1d(rewarded, rare),
-                     np.intersect1d(unrewarded, common), np.intersect1d(unrewarded, rare)]
+        # index_list = [ar.intersect1d(rewarded, common), ar.intersect1d(rewarded, rare),
+        #              ar.intersect1d(unrewarded, common), ar.intersect1d(unrewarded, rare)]
+        
+        rewarded_common = ar.where(own_logical_and(rewarded,common) == True)[0]
+        rewarded_rare = ar.where(own_logical_and(rewarded,rare) == True)[0]
+        unrewarded_common = ar.where(own_logical_and(unrewarded,common) == True)[0]
+        unrewarded_rare = ar.where(own_logical_and(unrewarded,rare) == True)[0]
+        print(unrewarded_rare.shape)
+        
+        index_list = [rewarded_common, rewarded_rare,
+                     unrewarded_common, unrewarded_rare]
+        print(index_list)
+        
         indices.append(index_list)
+        for i in range(4):
+            count = 0
+            for ind in index_list[i]:
+                count+= int(w.actions[ind,0]==w.actions[ind,0])
+            print(i,count)
 
-        stayed_list = [((w.actions[index_list[i],0] - w.actions[index_list[i]+1,0])==0).sum()/len(index_list[i]) for i in range(4)]
+        stayed_list = [(w.actions[index_list[i],0] == w.actions[index_list[i]+1,0]).sum()/float(len(index_list[i])) for i in range(4)]
 
+        print(stayed_list)
         stayed.append(stayed_list)
 
-    stayed = np.array(stayed)
+    stayed = array(stayed)
 
 #    stayed_rew = ((w.actions[rewarded,0] - w.actions[rewarded+1,0]) == 0).sum()/len(rewarded)
 #
@@ -459,12 +502,13 @@ for tendency in [1000]:#[1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
 
     #print(gc.get_count())
 
+print(stayed)
 
 plt.figure()
 g = sns.barplot(data=stayed)
 g.set_xticklabels(names, rotation=45, horizontalalignment='right', fontsize=16)
 plt.ylim([0,1])
-plt.yticks(np.arange(0,1.1,0.2),fontsize=16)
+plt.yticks(ar.arange(0,1.1,0.2),fontsize=16)
 plt.ylabel("reward probability", fontsize=18)
 if learn_habit:
     plt.title("habit and goal-directed", fontsize=18)
@@ -477,20 +521,20 @@ plt.show()
 
 print(sc.stats.ttest_ind(stayed[:,1], stayed[:,2]))
 
-index = np.argmax(stayed[:,1] - stayed[:,2])
+index = ar.argmax(stayed[:,1] - stayed[:,2])
 w = worlds[index]
 index_list = indices[index]
 
 print(stayed[index,1], stayed[index,2])
 
-post_actions = np.array([w.agent.posterior_policies[:,0,j*2,0] + w.agent.posterior_policies[:,0,j*2+1,0] for j in range(2)]).T
-prior_policies = w.agent.posterior_dirichlet_pol[:,:,0] / w.agent.posterior_dirichlet_pol[:,:,0].sum(axis=1)[:,np.newaxis]
-norm_like = w.agent.likelihood[:,0,:,0] / w.agent.likelihood[:,0,:,0].sum(axis=1)[:,np.newaxis]
-like_actions = np.array([norm_like[:,j*2] + norm_like[:,j*2+1] for j in range(2)]).T
+post_actions = array([w.agent.posterior_policies[:,0,j*2,0] + w.agent.posterior_policies[:,0,j*2+1,0] for j in range(2)]).T
+prior_policies = w.agent.posterior_dirichlet_pol[:,:,0] / w.agent.posterior_dirichlet_pol[:,:,0].sum(axis=1)[:,ar.newaxis]
+norm_like = w.agent.likelihood[:,0,:,0] / w.agent.likelihood[:,0,:,0].sum(axis=1)[:,ar.newaxis]
+like_actions = array([norm_like[:,j*2] + norm_like[:,j*2+1] for j in range(2)]).T
 
 def calc_measures(indices):
 
-    post_actions = np.array([w.agent.posterior_policies[:,0,j*2,0] + w.agent.posterior_policies[:,0,j*2+1,0] for j in range(2)]).T
+    post_actions = array([w.agent.posterior_policies[:,0,j*2,0] + w.agent.posterior_policies[:,0,j*2+1,0] for j in range(2)]).T
     post_chosen = post_actions[(indices,w.actions[indices,0])]
     avg_post = post_chosen.sum() / len(post_chosen)
     next_post = post_actions[(indices+1,w.actions[indices,0])]
@@ -498,7 +542,7 @@ def calc_measures(indices):
     print("post", posterior_diff.mean())
 
     avg_next_post = next_post.sum() / len(next_post)
-    prior_actions = np.array([prior_policies[:,j*2] + prior_policies[:,j*2+1] for j in range(2)]).T
+    prior_actions = array([prior_policies[:,j*2] + prior_policies[:,j*2+1] for j in range(2)]).T
     prior_chosen = prior_actions[(indices,w.actions[indices,0])]
     avg_prior = prior_chosen.sum() / len(prior_chosen)
     next_prior = prior_actions[(indices+1,w.actions[indices,0])]
@@ -506,8 +550,8 @@ def calc_measures(indices):
     prior_diff = prior_chosen - next_prior
     print("prior", prior_diff.mean())
 
-    norm_like = w.agent.likelihood[:,0,:,0] / w.agent.likelihood[:,0,:,0].sum(axis=1)[:,np.newaxis]
-    like_actions = np.array([norm_like[:,j*2] + norm_like[:,j*2+1] for j in range(2)]).T
+    norm_like = w.agent.likelihood[:,0,:,0] / w.agent.likelihood[:,0,:,0].sum(axis=1)[:,ar.newaxis]
+    like_actions = array([norm_like[:,j*2] + norm_like[:,j*2+1] for j in range(2)]).T
     like_chosen = like_actions[(indices,w.actions[indices,0])]
     avg_like = like_chosen.sum() / len(like_chosen)
     next_like_chosen = like_actions[(indices+1,w.actions[indices,0])]
@@ -516,9 +560,9 @@ def calc_measures(indices):
     print("like", like_diff.mean())
 
 
-plt.figure()
-plt.plot(w.agent.action_selection.RT[:,0])
-plt.show()
+# plt.figure()
+# plt.plot(w.agent.action_selection.RT[:,0])
+# plt.show()
 """
 reload data
 """

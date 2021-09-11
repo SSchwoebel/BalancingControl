@@ -4,7 +4,13 @@ actions generated during a single experiment. To initiate it one needs to
 provide the environment class and the agent class that will be used for the
 experiment.
 """
-import numpy as np
+arr_type = "torch"
+if arr_type == "numpy":
+    import numpy as ar
+    array = ar.array
+else:
+    import torch as ar
+    array = ar.tensor
 from misc import ln
 
 class World(object):
@@ -20,13 +26,13 @@ class World(object):
         self.free_parameters = {}
 
         #container for observations
-        self.observations = np.zeros((self.trials, self.T), dtype = int)
+        self.observations = ar.zeros((self.trials, self.T), dtype = int)
 
         #container for agents actions
-        self.actions = np.zeros((self.trials, self.T), dtype = int)
+        self.actions = ar.zeros((self.trials, self.T), dtype = int)
 
         #container for rewards
-        self.rewards = np.zeros((self.trials, self.T), dtype = int)
+        self.rewards = ar.zeros((self.trials, self.T), dtype = int)
 
     def simulate_experiment(self, curr_trials=None):
         """This methods evolves all the states of the world by iterating
@@ -44,7 +50,7 @@ class World(object):
     def estimate_par_evidence(self, params, method='MLE'):
 
 
-        val = np.zeros(params.shape[0])
+        val = ar.zeros(params.shape[0])
         for i, par in enumerate(params):
             if method == 'MLE':
                 val[i] = self.__get_log_likelihood(par)
@@ -74,8 +80,8 @@ class World(object):
         self.agent.reset_beliefs(self.actions)
         self.__update_model()
 
-        p1 = np.tile(np.arange(self.trials), (self.T, 1)).T
-        p2 = np.tile(np.arange(self.T), (self.trials, 1))
+        p1 = ar.tile(ar.arange(self.trials), (self.T, 1)).T
+        p2 = ar.tile(ar.arange(self.T), (self.trials, 1))
         p3 = self.actions.astype(int)
 
         return ln(self.agent.asl.control_probability[p1, p2, p3]).sum()
@@ -85,8 +91,8 @@ class World(object):
         self.agent.reset_beliefs(self.actions)
         self.__update_model()
 
-        p1 = np.tile(np.arange(self.trials), (self.T, 1)).T
-        p2 = np.tile(np.arange(self.T), (self.trials, 1))
+        p1 = ar.tile(ar.arange(self.trials), (self.T, 1)).T
+        p2 = ar.tile(ar.arange(self.T), (self.trials, 1))
         p3 = self.actions.astype(int)
 
         ll = ln(self.agent.asl.control_probability[p1, p2, p3]).sum()
@@ -163,13 +169,13 @@ class World_old(object):
         self.free_parameters = {}
 
         #container for observations
-        self.observations = np.zeros((self.trials, self.T), dtype = int)
+        self.observations = ar.zeros((self.trials, self.T), dtype = int)
 
         #container for agents actions
-        self.actions = np.zeros((self.trials, self.T), dtype = int)
+        self.actions = ar.zeros((self.trials, self.T), dtype = int)
 
         #container for rewards
-        self.rewards = np.zeros((self.trials, self.T), dtype = int)
+        self.rewards = ar.zeros((self.trials, self.T), dtype = int)
 
     def simulate_experiment(self, curr_trials=None):
         """This methods evolves all the states of the world by iterating
@@ -187,7 +193,7 @@ class World_old(object):
     def estimate_par_evidence(self, params, method='MLE'):
 
 
-        val = np.zeros(params.shape[0])
+        val = ar.zeros(params.shape[0])
         for i, par in enumerate(params):
             if method == 'MLE':
                 val[i] = self.__get_log_likelihood(par)
@@ -217,8 +223,8 @@ class World_old(object):
         self.agent.reset_beliefs(self.actions)
         self.__update_model()
 
-        p1 = np.tile(np.arange(self.trials), (self.T, 1)).T
-        p2 = np.tile(np.arange(self.T), (self.trials, 1))
+        p1 = ar.tile(ar.arange(self.trials), (self.T, 1)).T
+        p2 = ar.tile(ar.arange(self.T), (self.trials, 1))
         p3 = self.actions.astype(int)
 
         return ln(self.agent.asl.control_probability[p1, p2, p3]).sum()
@@ -228,8 +234,8 @@ class World_old(object):
         self.agent.reset_beliefs(self.actions)
         self.__update_model()
 
-        p1 = np.tile(np.arange(self.trials), (self.T, 1)).T
-        p2 = np.tile(np.arange(self.T), (self.trials, 1))
+        p1 = ar.tile(ar.arange(self.trials), (self.T, 1)).T
+        p2 = ar.tile(ar.arange(self.T), (self.trials, 1))
         p3 = self.actions.astype(int)
 
         ll = ln(self.agent.asl.control_probability[p1, p2, p3]).sum()
@@ -312,8 +318,8 @@ class FakeWorld(object):
 
         self.log_prior = log_prior
 
-        self.like_actions = np.zeros((trials,T-1))
-        self.like_rewards = np.zeros((trials,T-1))
+        self.like_actions = ar.zeros((trials,T-1))
+        self.like_rewards = ar.zeros((trials,T-1))
 
     def __simulate_agent(self):
         """This methods evolves all the states of the world by iterating
@@ -337,8 +343,8 @@ class FakeWorld(object):
         determine the set of parameter values that are most likely to cause
         the meassured behavior.
         """
-        self.like_actions = np.zeros((self.trials,self.T-1))
-        self.like_rewards = np.zeros((self.trials,self.T-1))
+        self.like_actions = ar.zeros((self.trials,self.T-1))
+        self.like_rewards = ar.zeros((self.trials,self.T-1))
         self.agent.reset(params, fixed)
 
         self.__simulate_agent()
@@ -356,8 +362,8 @@ class FakeWorld(object):
 
         self.__simulate_agent()
 
-        p1 = np.tile(np.arange(self.trials), (self.T-1, 1)).T
-        p2 = np.tile(np.arange(self.T-1), (self.trials, 1))
+        p1 = ar.tile(ar.arange(self.trials), (self.T-1, 1)).T
+        p2 = ar.tile(ar.arange(self.T-1), (self.trials, 1))
         p3 = self.actions.astype(int)
         #self.agent.log_probability
         ll = self.agent.log_probability#ln(self.agent.posterior_actions[p1, p2, p3].prod())
