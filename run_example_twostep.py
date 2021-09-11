@@ -454,22 +454,12 @@ for tendency in [1]:#[1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
         rewarded_rare = ar.where(own_logical_and(rewarded,rare) == True)[0]
         unrewarded_common = ar.where(own_logical_and(unrewarded,common) == True)[0]
         unrewarded_rare = ar.where(own_logical_and(unrewarded,rare) == True)[0]
-        print(unrewarded_rare.shape)
         
         index_list = [rewarded_common, rewarded_rare,
                      unrewarded_common, unrewarded_rare]
-        print(index_list)
-        
-        indices.append(index_list)
-        for i in range(4):
-            count = 0
-            for ind in index_list[i]:
-                count+= int(w.actions[ind,0]==w.actions[ind,0])
-            print(i,count)
 
         stayed_list = [(w.actions[index_list[i],0] == w.actions[index_list[i]+1,0]).sum()/float(len(index_list[i])) for i in range(4)]
 
-        print(stayed_list)
         stayed.append(stayed_list)
 
     stayed = array(stayed)
@@ -502,8 +492,6 @@ for tendency in [1]:#[1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
 
     #print(gc.get_count())
 
-print(stayed)
-
 plt.figure()
 g = sns.barplot(data=stayed)
 g.set_xticklabels(names, rotation=45, horizontalalignment='right', fontsize=16)
@@ -518,46 +506,6 @@ else:
     plt.savefig("pure_goal.svg",dpi=300)
 plt.ylabel("stay probability")
 plt.show()
-
-print(sc.stats.ttest_ind(stayed[:,1], stayed[:,2]))
-
-index = ar.argmax(stayed[:,1] - stayed[:,2])
-w = worlds[index]
-index_list = indices[index]
-
-print(stayed[index,1], stayed[index,2])
-
-post_actions = array([w.agent.posterior_policies[:,0,j*2,0] + w.agent.posterior_policies[:,0,j*2+1,0] for j in range(2)]).T
-prior_policies = w.agent.posterior_dirichlet_pol[:,:,0] / w.agent.posterior_dirichlet_pol[:,:,0].sum(axis=1)[:,ar.newaxis]
-norm_like = w.agent.likelihood[:,0,:,0] / w.agent.likelihood[:,0,:,0].sum(axis=1)[:,ar.newaxis]
-like_actions = array([norm_like[:,j*2] + norm_like[:,j*2+1] for j in range(2)]).T
-
-def calc_measures(indices):
-
-    post_actions = array([w.agent.posterior_policies[:,0,j*2,0] + w.agent.posterior_policies[:,0,j*2+1,0] for j in range(2)]).T
-    post_chosen = post_actions[(indices,w.actions[indices,0])]
-    avg_post = post_chosen.sum() / len(post_chosen)
-    next_post = post_actions[(indices+1,w.actions[indices,0])]
-    posterior_diff = post_chosen - next_post
-    print("post", posterior_diff.mean())
-
-    avg_next_post = next_post.sum() / len(next_post)
-    prior_actions = array([prior_policies[:,j*2] + prior_policies[:,j*2+1] for j in range(2)]).T
-    prior_chosen = prior_actions[(indices,w.actions[indices,0])]
-    avg_prior = prior_chosen.sum() / len(prior_chosen)
-    next_prior = prior_actions[(indices+1,w.actions[indices,0])]
-    avg_next_prior = next_prior.sum() / len(next_prior)
-    prior_diff = prior_chosen - next_prior
-    print("prior", prior_diff.mean())
-
-    norm_like = w.agent.likelihood[:,0,:,0] / w.agent.likelihood[:,0,:,0].sum(axis=1)[:,ar.newaxis]
-    like_actions = array([norm_like[:,j*2] + norm_like[:,j*2+1] for j in range(2)]).T
-    like_chosen = like_actions[(indices,w.actions[indices,0])]
-    avg_like = like_chosen.sum() / len(like_chosen)
-    next_like_chosen = like_actions[(indices+1,w.actions[indices,0])]
-    avg_next_like = next_like_chosen.sum() / len(next_like_chosen)
-    like_diff = like_chosen - next_like_chosen
-    print("like", like_diff.mean())
 
 
 # plt.figure()
