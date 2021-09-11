@@ -16,10 +16,13 @@ class HierarchicalPerception(object):
                  dirichlet_pol_params = None,
                  dirichlet_rew_params = None,
                  generative_model_context = None,
-                 T=5, pol_lambda=0, r_lambda=0, non_decaying=0):
+                 T=5, pol_lambda=0, r_lambda=0, non_decaying=0, dec_temp=1.):
 
         self.generative_model_observations = generative_model_observations.copy()
-        self.generative_model_states = generative_model_states.copy()
+        if len(generative_model_states.shape) <= 3:
+            self.generative_model_states = generative_model_states.copy()[:,:,:,None]
+        else:
+            self.generative_model_states = generative_model_states.copy()
         self.generative_model_rewards = generative_model_rewards.copy()
         self.transition_matrix_context = transition_matrix_context.copy()
         self.prior_rewards = prior_rewards.copy()
@@ -31,6 +34,7 @@ class HierarchicalPerception(object):
         self.pol_lambda = pol_lambda
         self.r_lambda = r_lambda
         self.non_decaying = non_decaying
+        self.dec_temp = dec_temp
 
         if len(generative_model_rewards.shape) > 2:
             self.infer_context = True
@@ -161,8 +165,8 @@ class HierarchicalPerception(object):
 
         #print((prior_policies>1e-4).sum())
         likelihood = self.fwd_norms.prod(axis=0)
+        posterior = np.power(likelihood, self.dec_temp) * self.prior_policies
         likelihood /= likelihood.sum(axis=0)[np.newaxis,:]
-        posterior = likelihood * self.prior_policies
         posterior/= posterior.sum(axis=0)[np.newaxis,:]
         posterior = np.nan_to_num(posterior)
 

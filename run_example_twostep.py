@@ -176,7 +176,7 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
 
         sel = 'avg'
 
-        ac_sel = asl.MCMCSelector(trials = trials, T = T,
+        ac_sel = asl.AveragedSelector(trials = trials, T = T,
                                       number_of_actions = na)
     else:
 
@@ -204,7 +204,11 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
         pol_par = alphas
 
         # perception
-        bayes_prc = prc.TwoStepPerception(A, B, C_agent, transition_matrix_context, state_prior, utility, prior_pi, pol_par, C_alphas, T=T)
+        bayes_prc = prc.HierarchicalPerception(A, B, C_agent, transition_matrix_context, 
+                                          state_prior, utility, prior_pi, 
+                                          pol_par, C_alphas, T=T,
+                                          pol_lambda=0.3, r_lambda=0.6,
+                                          non_decaying=3, dec_temp=4.)
 
         bayes_pln = agt.BayesianPlanner(bayes_prc, ac_sel, pol,
                           trials = trials, T = T,
@@ -213,6 +217,7 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
                           number_of_states = ns,
                           prior_context = prior_context,
                           learn_habit = learn_habit,
+                          learn_rew=True,
                           #save_everything = True,
                           number_of_policies = npi,
                           number_of_rewards = nr)
@@ -338,7 +343,7 @@ n_training = 1
 #Rho[:trials//2] = generate_bandit_timeseries_training(trials//2, nr, ns, nb, n_training)
 #Rho[trials//2:] = generate_bandit_timeseries_slowchange(trials//2, nr, ns, nb)
 
-repetitions = 2
+repetitions = 10
 
 #learn_rew = 21
 
@@ -355,7 +360,7 @@ indices = []
 
 recalc_rho = False
 
-for tendency in [1000]:#[1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
+for tendency in [1]:#[1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
     print(tendency)
 
     init = np.array([0.6, 0.4, 0.6, 0.4])
@@ -392,7 +397,7 @@ for tendency in [1000]:#[1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
     worlds = []
     l = []
     learn_pol = tendency
-    learn_habit = False
+    learn_habit = True
     l.append([learn_pol, avg, Rho, learn_habit])
 
     par_list = []
@@ -470,7 +475,7 @@ if learn_habit:
     plt.title("habit and goal-directed", fontsize=18)
     plt.savefig("habit_and_goal.svg",dpi=300)
 else:
-    plt.title("purely goal-drected", fontsize=18)
+    plt.title("purely goal-directed", fontsize=18)
     plt.savefig("pure_goal.svg",dpi=300)
 plt.ylabel("stay probability")
 plt.show()
@@ -516,9 +521,9 @@ def calc_measures(indices):
     print("like", like_diff.mean())
 
 
-plt.figure()
-plt.plot(w.agent.action_selection.RT[:,0])
-plt.show()
+# plt.figure()
+# plt.plot(w.agent.action_selection.RT[:,0])
+# plt.show()
 """
 reload data
 """
