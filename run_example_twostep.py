@@ -13,6 +13,8 @@ if arr_type == "numpy":
 else:
     import torch as ar
     array = ar.tensor
+    
+import numpy as np
 
 #from plotting import *
 from misc import *
@@ -71,7 +73,7 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
     #state_unc: state transition uncertainty condition
     #goal_pol: evaluate only policies that lead to the goal
     #utility: goal prior, preference p(o)
-    learn_pol, avg, Rho, learn_habit, utility = par_list
+    learn_pol, avg, Rho, learn_habit, pol_lambda, r_lambda, dec_temp, utility = par_list
     learn_rew = 1
 
     """
@@ -214,8 +216,8 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
         bayes_prc = prc.HierarchicalPerception(A, B, C_agent, transition_matrix_context, 
                                                state_prior, utility, prior_pi, 
                                                pol_par, C_alphas, T=T,
-                                               pol_lambda=0.3, r_lambda=0.6,
-                                               non_decaying=3, dec_temp=4.)
+                                               pol_lambda=pol_lambda, r_lambda=r_lambda,
+                                               non_decaying=3, dec_temp=dec_temp)
 
         bayes_pln = agt.BayesianPlanner(bayes_prc, ac_sel, pol,
                           trials = trials, T = T,
@@ -350,7 +352,7 @@ n_training = 1
 #Rho[:trials//2] = generate_bandit_timeseries_training(trials//2, nr, ns, nb, n_training)
 #Rho[trials//2:] = generate_bandit_timeseries_slowchange(trials//2, nr, ns, nb)
 
-repetitions = 10
+repetitions = 5
 
 #learn_rew = 21
 
@@ -362,150 +364,157 @@ sigma = 0.001
 
 folder = 'data'
 
-stayed = []
-indices = []
-
 recalc_rho = False
 
-for tendency in [1]:#[1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
-    print(tendency)
+for pl in [0.1,0.3,0.5,0.7,0.9]:
+    for rl in [0.1,0.3,0.5,0.7,0.9]:
+        for dt in [1.,3.,5.,7.,9.]:
+            
+            stayed = []
+            indices = []
+            for tendency in [1]:#[1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
+                print(pl, rl, dt, tendency)
+            
+                init = array([0.6, 0.4, 0.6, 0.4])
+            
+                Rho_fname = 'twostep_rho.json'
+            
+                jsonpickle_numpy.register_handlers()
+            
+                fname = os.path.join(folder, Rho_fname)
+            
+                if Rho_fname not in os.listdir(folder) or recalc_rho==True:
+                    Rho[:] = generate_randomwalk(trials, nr, ns, nb, sigma, init)
+                    pickled = pickle.encode(Rho)
+                    with open(fname, 'w') as outfile:
+                        json.dump(pickled, outfile)
+                else:
+                    with open(fname, 'r') as infile:
+                        data = json.load(infile)
+                    if arr_type == "numpy":
+                        Rho[:] = pickle.decode(data)
+                    else:
+                        Rho[:] = ar.from_numpy(pickle.decode(data))
+            
+                plt.figure(figsize=(10,5))
+                for i in range(4):
+                    plt.plot(Rho[:,1,3+i], label="$p_{}$".format(i+1), linewidth=4)
+                plt.ylim([0,1])
+                plt.yticks(ar.arange(0,1.1,0.2),fontsize=18)
+                plt.ylabel("reward probability", fontsize=20)
+                plt.xlim([-0.1, trials+0.1])
+                plt.xticks(range(0,trials+1,50),fontsize=18)
+                plt.xlabel("trials", fontsize=20)
+                plt.legend(fontsize=18, bbox_to_anchor=(1.04,1))
+                plt.savefig("twostep_prob.svg",dpi=300)
+                plt.show()
+            
+                worlds = []
+                l = []
+                learn_pol = tendency
+                learn_habit = True
+                pol_lambda = pl#0.3
+                r_lambda = rl#0.6
+                dec_temp = dt#4.
+                l.append([learn_pol, avg, Rho, learn_habit, pol_lambda, r_lambda, dec_temp])
+            
+                par_list = []
+            
+                for p in itertools.product(l, utility):
+                    par_list.append(p[0]+[p[1]])
+            
+                par_list = par_list*repetitions
+            
+                for i, pars in enumerate(par_list):
+                    worlds.append(run_agent(pars))
+            
+                    w = worlds[-1]
+            
+                    # rewarded = ar.where(w.rewards[:trials-1,-1] == 1)[0]
+            
+                    # unrewarded = ar.where(w.rewards[:trials-1,-1] == 0)[0]
+                    
+                    rewarded = w.rewards[:trials-1,-1] == 1
+            
+                    unrewarded = rewarded==False#w.rewards[:trials-1,-1] == 0
+            
+                    # TODO: go back to ar.logical_and when on pytorch version 1.5
+                    # rare = ar.cat((ar.where(own_logical_and(w.environment.hidden_states[:,1]==2, w.actions[:,0] == 0) == True)[0],
+                    #                  ar.where(own_logical_and(w.environment.hidden_states[:,1]==1, w.actions[:,0] == 1) == True)[0]))
+                    # rare.sort()
+            
+                    # common = ar.cat((ar.where(own_logical_and(w.environment.hidden_states[:,1]==2, w.actions[:,0] == 1) == True)[0],
+                    #                    ar.where(own_logical_and(w.environment.hidden_states[:,1]==1, w.actions[:,0] == 0) == True)[0]))
+                    # common.sort()
+                    
+                    rare = own_logical_or(own_logical_and(w.environment.hidden_states[:trials-1,1]==2, w.actions[:trials-1,0] == 0),
+                                   own_logical_and(w.environment.hidden_states[:trials-1,1]==1, w.actions[:trials-1,0] == 1))
+            
+                    common = rare==False#own_logical_or(own_logical_and(w.environment.hidden_states[:trials-1,1]==2, w.actions[:trials-1,0] == 1),
+                             #        own_logical_and(w.environment.hidden_states[:trials-1,1]==1, w.actions[:trials-1,0] == 0))
+            
+                    names = ["rewarded common", "rewarded rare", "unrewarded common", "unrewarded rare"]
+            
+                    # index_list = [ar.intersect1d(rewarded, common), ar.intersect1d(rewarded, rare),
+                    #              ar.intersect1d(unrewarded, common), ar.intersect1d(unrewarded, rare)]
+                    
+                    rewarded_common = ar.where(own_logical_and(rewarded,common) == True)[0]
+                    rewarded_rare = ar.where(own_logical_and(rewarded,rare) == True)[0]
+                    unrewarded_common = ar.where(own_logical_and(unrewarded,common) == True)[0]
+                    unrewarded_rare = ar.where(own_logical_and(unrewarded,rare) == True)[0]
+                    
+                    index_list = [rewarded_common, rewarded_rare,
+                                 unrewarded_common, unrewarded_rare]
+            
+                    stayed_list = [(w.actions[index_list[i],0] == w.actions[index_list[i]+1,0]).sum()/float(len(index_list[i])) for i in range(4)]
+            
+                    stayed.append(stayed_list)
 
-    init = array([0.6, 0.4, 0.6, 0.4])
-
-    Rho_fname = 'twostep_rho.json'
-
-    jsonpickle_numpy.register_handlers()
-
-    fname = os.path.join(folder, Rho_fname)
-
-    if Rho_fname not in os.listdir(folder) or recalc_rho==True:
-        Rho[:] = generate_randomwalk(trials, nr, ns, nb, sigma, init)
-        pickled = pickle.encode(Rho)
-        with open(fname, 'w') as outfile:
-            json.dump(pickled, outfile)
-    else:
-        with open(fname, 'r') as infile:
-            data = json.load(infile)
-        if arr_type == "numpy":
-            Rho[:] = pickle.decode(data)
-        else:
-            Rho[:] = ar.from_numpy(pickle.decode(data))
-
-    plt.figure(figsize=(10,5))
-    for i in range(4):
-        plt.plot(Rho[:,1,3+i], label="$p_{}$".format(i+1), linewidth=4)
-    plt.ylim([0,1])
-    plt.yticks(ar.arange(0,1.1,0.2),fontsize=18)
-    plt.ylabel("reward probability", fontsize=20)
-    plt.xlim([-0.1, trials+0.1])
-    plt.xticks(range(0,trials+1,50),fontsize=18)
-    plt.xlabel("trials", fontsize=20)
-    plt.legend(fontsize=18, bbox_to_anchor=(1.04,1))
-    plt.savefig("twostep_prob.svg",dpi=300)
-    plt.show()
-
-    worlds = []
-    l = []
-    learn_pol = tendency
-    learn_habit = True
-    l.append([learn_pol, avg, Rho, learn_habit])
-
-    par_list = []
-
-    for p in itertools.product(l, utility):
-        par_list.append(p[0]+[p[1]])
-
-    par_list = par_list*repetitions
-
-    for i, pars in enumerate(par_list):
-        worlds.append(run_agent(pars))
-
-        w = worlds[-1]
-
-        # rewarded = ar.where(w.rewards[:trials-1,-1] == 1)[0]
-
-        # unrewarded = ar.where(w.rewards[:trials-1,-1] == 0)[0]
-        
-        rewarded = w.rewards[:trials-1,-1] == 1
-
-        unrewarded = rewarded==False#w.rewards[:trials-1,-1] == 0
-
-        # TODO: go back to ar.logical_and when on pytorch version 1.5
-        # rare = ar.cat((ar.where(own_logical_and(w.environment.hidden_states[:,1]==2, w.actions[:,0] == 0) == True)[0],
-        #                  ar.where(own_logical_and(w.environment.hidden_states[:,1]==1, w.actions[:,0] == 1) == True)[0]))
-        # rare.sort()
-
-        # common = ar.cat((ar.where(own_logical_and(w.environment.hidden_states[:,1]==2, w.actions[:,0] == 1) == True)[0],
-        #                    ar.where(own_logical_and(w.environment.hidden_states[:,1]==1, w.actions[:,0] == 0) == True)[0]))
-        # common.sort()
-        
-        rare = own_logical_or(own_logical_and(w.environment.hidden_states[:trials-1,1]==2, w.actions[:trials-1,0] == 0),
-                       own_logical_and(w.environment.hidden_states[:trials-1,1]==1, w.actions[:trials-1,0] == 1))
-
-        common = rare==False#own_logical_or(own_logical_and(w.environment.hidden_states[:trials-1,1]==2, w.actions[:trials-1,0] == 1),
-                 #        own_logical_and(w.environment.hidden_states[:trials-1,1]==1, w.actions[:trials-1,0] == 0))
-
-        names = ["rewarded common", "rewarded rare", "unrewarded common", "unrewarded rare"]
-
-        # index_list = [ar.intersect1d(rewarded, common), ar.intersect1d(rewarded, rare),
-        #              ar.intersect1d(unrewarded, common), ar.intersect1d(unrewarded, rare)]
-        
-        rewarded_common = ar.where(own_logical_and(rewarded,common) == True)[0]
-        rewarded_rare = ar.where(own_logical_and(rewarded,rare) == True)[0]
-        unrewarded_common = ar.where(own_logical_and(unrewarded,common) == True)[0]
-        unrewarded_rare = ar.where(own_logical_and(unrewarded,rare) == True)[0]
-        
-        index_list = [rewarded_common, rewarded_rare,
-                     unrewarded_common, unrewarded_rare]
-
-        stayed_list = [(w.actions[index_list[i],0] == w.actions[index_list[i]+1,0]).sum()/float(len(index_list[i])) for i in range(4)]
-
-        stayed.append(stayed_list)
-
-    stayed = array(stayed)
+                    run_name = "twostage_agent"+str(i)+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend1.json"
+                    fname = os.path.join(folder, run_name)
+                    
+                    actions = w.actions.numpy()
+                    observations = w.observations.numpy()
+                    rewards = w.rewards.numpy()
+                    data = {"actions": actions, "observations": observations, "rewards": rewards}
+    
+                    jsonpickle_numpy.register_handlers()
+                    pickled = pickle.encode(data)
+                    with open(fname, 'w') as outfile:
+                        json.dump(pickled, outfile)
+            
+                stayed = array(stayed)
+                
+                plt.figure()
+                g = sns.barplot(data=stayed)
+                g.set_xticklabels(names, rotation=45, horizontalalignment='right', fontsize=16)
+                plt.ylim([0,1])
+                plt.yticks(ar.arange(0,1.1,0.2),fontsize=16)
+                if learn_habit:
+                    plt.title("habit and goal-directed", fontsize=18)
+                    plt.savefig("habit_and_goal.svg",dpi=300)
+                else:
+                    plt.title("purely goal-drected", fontsize=18)
+                    plt.savefig("pure_goal.svg",dpi=300)
+                plt.ylabel("stay probability")
+                plt.show()
 
 #    stayed_rew = ((w.actions[rewarded,0] - w.actions[rewarded+1,0]) == 0).sum()/len(rewarded)
 #
 #    stayed_unrew = ((w.actions[unrewarded,0] - w.actions[unrewarded+1,0]) == 0).sum()/len(unrewarded)
 
+                #print(gc.get_count())
+            
+                pickled = 0
+                #worlds = 0
+            
+                #print(gc.get_count())
+            
+                gc.collect()
+            
+                #print(gc.get_count())
 
-    #run_name = prefix+"_h"+str(int(learn_pol))+"_t"+"opt"+"_r"+str(learn_rew)+"_p"+str(prob)+"_train"+str(trials_training)+".json"
-    #run_name = prefix+"_h"+str(int(learn_pol))+"_t"+str(trans)+"_r"+str(learn_rew)+"_p"+str(prob)+"_train"+str(trials_training)+".json"
 
-    #run_name = "test_"+prefix+"_h"+str(int(learn_pol))+"_t"+str(trans)+"_r"+str(learn_rew)+"_p"+str(prob)+".json"
-    #run_name = prefix+"_h"+str(int(learn_pol))+"_t"+str(trans)+"_r"+str(learn_rew)+".json"
-    #fname = os.path.join(folder, run_name)
-
-#                jsonpickle_numpy.register_handlers()
-#                pickled = pickle.encode(worlds)
-#                with open(fname, 'w') as outfile:
-#                    json.dump(pickled, outfile)
-
-    #print(gc.get_count())
-
-    pickled = 0
-    #worlds = 0
-
-    #print(gc.get_count())
-
-    gc.collect()
-
-    #print(gc.get_count())
-
-plt.figure()
-g = sns.barplot(data=stayed)
-g.set_xticklabels(names, rotation=45, horizontalalignment='right', fontsize=16)
-plt.ylim([0,1])
-plt.yticks(ar.arange(0,1.1,0.2),fontsize=16)
-plt.ylabel("reward probability", fontsize=18)
-if learn_habit:
-    plt.title("habit and goal-directed", fontsize=18)
-    plt.savefig("habit_and_goal.svg",dpi=300)
-else:
-    plt.title("purely goal-drected", fontsize=18)
-    plt.savefig("pure_goal.svg",dpi=300)
-plt.ylabel("stay probability")
-plt.show()
 
 
 # plt.figure()

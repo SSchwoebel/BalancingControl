@@ -169,8 +169,8 @@ class BayesianPlanner(object):
         # print("post", self.posterior_context[tau, t])
 
         if t < self.T-1:
-            post_pol = ar.matmul(self.posterior_policies[tau, t], self.posterior_context[tau, t])
-            self.posterior_actions[tau, t] = self.estimate_action_probability(tau, t, post_pol)
+            #post_pol = ar.matmul(self.posterior_policies[tau, t], self.posterior_context[tau, t])
+            self.posterior_actions[tau, t] = self.estimate_action_probability(tau, t)
 
         if t == self.T-1 and self.learn_habit:
             self.posterior_dirichlet_pol[tau], self.prior_policies[tau] = self.perception.update_beliefs_dirichlet_pol_params(tau, t, \
@@ -217,8 +217,12 @@ class BayesianPlanner(object):
         return self.actions[tau, t]
 
 
-    def estimate_action_probability(self, tau, t, posterior_policies):
+    def estimate_action_probability(self, tau, t):
 
+        # TODO: should this be t=0 or t=t?
+        posterior_policies = ar.einsum('pc,c->p', self.posterior_policies[tau, t], self.posterior_context[tau, t])
+        posterior_policies /= posterior_policies.sum()
+        
         #estimate action probability
         control_prob = ar.zeros(self.na)
         for a in range(self.na):
@@ -226,6 +230,15 @@ class BayesianPlanner(object):
 
 
         return control_prob
+    
+    def set_parameters(self, **kwargs):
+        
+        if 'pol_lambda' in kwargs.keys():
+            self.perception.pol_lambda = kwargs['pol_lambda']
+        if 'r_lambda' in kwargs.keys():
+            self.perception.r_lambda = kwargs['r_lambda']
+        if 'dec_temp' in kwargs.keys():
+            self.perception.dec_temp = kwargs['dec_temp']
 
 
 class BayesianPlanner_old(object):

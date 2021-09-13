@@ -304,7 +304,7 @@ class AveragedSelector(object):
         self.estimate_action_probability(tau, t, posterior_policies, actions)
 
         #generate the desired response from action probability
-        u = ar.multinomial(self.control_probability[tau, t],1)
+        u = ar.distributions.Categorical(self.control_probability[tau, t]).sample()
 
         return u
 
