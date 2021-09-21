@@ -34,6 +34,7 @@ class BayesianPlanner(object):
         self.nr = number_of_rewards
 
         self.T = T
+        self.trials = trials
 
         if policies is not None:
             self.policies = policies
@@ -82,30 +83,37 @@ class BayesianPlanner(object):
         self.prior_policies[:] = prior_policies[None,:,:]
         self.posterior_actions = ar.zeros((trials, T-1, self.na))
         self.posterior_rewards = ar.zeros((trials, T, self.nr))
+        self.control_probs  = ar.zeros((trials, T, self.na))
         self.log_probability = 0
         if hasattr(self.perception, 'generative_model_context'):
             self.context_obs = ar.zeros(trials, dtype=int)
 
 
-    def reset(self, params, fixed):
+    def reset(self):
 
-        self.actions[:] = 0
-        self.posterior_states[:] = 0
-        self.posterior_policies[:] = 0
-        self.posterior_dirichlet_pol[:] = 0
-        self.posterior_dirichlet_rew[:] =0
-        self.observations[:] = 0
-        self.rewards[:] = 0
+        self.actions = ar.zeros((self.trials, self.T), dtype = int)
+        self.posterior_states = ar.zeros((self.trials, self.T, self.nh, self.T, self.npi, self.nc))
+        self.posterior_policies = ar.zeros((self.trials, self.T, self.npi, self.nc))
+        self.posterior_dirichlet_pol = ar.zeros((self.trials, self.npi, self.nc))
+        self.posterior_dirichlet_rew = ar.zeros((self.trials, self.T, self.nr, self.nh, self.nc))
+        self.observations = ar.zeros((self.trials, self.T), dtype = int)
+        self.rewards = ar.zeros((self.trials, self.T), dtype = int)
+        self.posterior_context = ar.ones((self.trials, self.T, self.nc))
         self.posterior_context[:,:,:] = self.prior_context[None,None,:]
-        self.likelihood[:] = 0
-        self.posterior_actions[:] = 0
-        self.posterior_rewards[:] = 0
+        self.likelihood = ar.zeros((self.trials, self.T, self.npi, self.nc))
+        self.prior_policies = ar.zeros((self.trials, self.npi, self.nc)) + 1/self.npi
+        self.posterior_actions = ar.zeros((self.trials, self.T-1, self.na))
+        self.posterior_rewards = ar.zeros((self.trials, self.T, self.nr))
+        self.control_probs  = ar.zeros((self.trials, self.T, self.na))
         self.log_probability = 0
+        if hasattr(self.perception, 'generative_model_context'):
+            self.context_obs = ar.zeros(self.trials, dtype=int)
 
-        self.perception.reset(params, fixed)
+        self.perception.reset()
 
 
     def update_beliefs(self, tau, t, observation, reward, response, context=None):
+        
         self.observations[tau,t] = observation
         self.rewards[tau,t] = reward
         if context is not None:
@@ -131,11 +139,14 @@ class BayesianPlanner(object):
                                          tau, t,
                                          observation,
                                          reward,
-                                         self.policies,
+                                         #self.policies,
                                          self.possible_polcies)
 
         #update beliefs about policies
-        self.posterior_policies[tau, t], self.likelihood[tau,t] = self.perception.update_beliefs_policies(tau, t)
+        post, like = self.perception.update_beliefs_policies(tau, t) #self.posterior_policies[tau, t], self.likelihood[tau,t]
+        if t < self.T-1:
+            self.estimate_action_probability(tau, t, post)
+        self.posterior_policies[tau, t], self.likelihood[tau,t] - post, like
 
         if tau == 0:
             prior_context = self.prior_context
@@ -168,9 +179,9 @@ class BayesianPlanner(object):
         # print("prior", prior_context)
         # print("post", self.posterior_context[tau, t])
 
-        if t < self.T-1:
-            #post_pol = ar.matmul(self.posterior_policies[tau, t], self.posterior_context[tau, t])
-            self.posterior_actions[tau, t] = self.estimate_action_probability(tau, t)
+        # if t < self.T-1:
+        #     #post_pol = ar.matmul(self.posterior_policies[tau, t], self.posterior_context[tau, t])
+        #     self.posterior_actions[tau, t] = self.estimate_action_probability(tau, t)
 
         if t == self.T-1 and self.learn_habit:
             self.posterior_dirichlet_pol[tau], self.prior_policies[tau] = self.perception.update_beliefs_dirichlet_pol_params(tau, t, \
@@ -217,19 +228,19 @@ class BayesianPlanner(object):
         return self.actions[tau, t]
 
 
-    def estimate_action_probability(self, tau, t):
+    def estimate_action_probability(self, tau, t, post):
 
         # TODO: should this be t=0 or t=t?
-        posterior_policies = ar.einsum('pc,c->p', self.posterior_policies[tau, t], self.posterior_context[tau, t])
-        posterior_policies /= posterior_policies.sum()
+        # TODO attention this now only works for one context...
+        posterior_policies = post[:,0]#self.posterior_policies[tau, t, :, 0]#ar.einsum('pc,c->p', self.posterior_policies[tau, t], self.posterior_context[tau, t])
+        #posterior_policies /= posterior_policies.sum()
         
         #estimate action probability
-        control_prob = ar.zeros(self.na)
+        #control_prob = ar.zeros(self.na)
         for a in range(self.na):
-            control_prob[a] = posterior_policies[self.policies[:,t] == a].sum()
+            self.posterior_actions[tau,t,a] = posterior_policies[self.policies[:,t] == a].sum()
 
-
-        return control_prob
+        #return self.control_probs[tau,t]
     
     def set_parameters(self, **kwargs):
         

@@ -33,13 +33,13 @@ import scipy.signal as ss
 import bottleneck as bn
 import gc
 
-
+#ar.autograd.set_detect_anomaly(True)
 ###################################
 """load data"""
 
 i = 0
 pl = 0.1
-rl = 0.9
+rl = 0.5
 dt = 1.
 
 folder = "data"
@@ -52,7 +52,12 @@ jsonpickle_numpy.register_handlers()
 with open(fname, 'r') as infile:
     loaded = json.load(infile)
 
-data = pickle.decode(loaded)
+data_load = pickle.decode(loaded)
+
+data = {}
+data["actions"] = ar.tensor(data_load["actions"])
+data["rewards"] = ar.tensor(data_load["rewards"])
+data["observations"] = ar.tensor(data_load["observations"])
 
 
 ###################################
@@ -84,6 +89,8 @@ for u in ut:
     for i in range(1,nr):
         utility[-1][i] = u/(nr-1)#u/nr*i
     utility[-1][0] = (1.-u)
+    
+utility = utility[-1]
 
 """
 create matrices
@@ -193,12 +200,12 @@ pol_par = alphas
 
 # perception
 bayes_prc = prc.HierarchicalPerception(A, B, C_agent, transition_matrix_context, 
-                                       state_prior, utility, prior_pi, 
+                                       state_prior, utility, prior_pi, pol,
                                        pol_par, C_alphas, T=T,
                                        pol_lambda=0, r_lambda=0,
                                        non_decaying=3, dec_temp=1)
 
-bayes_pln = agt.BayesianPlanner(bayes_prc, [], pol,
+agent = agt.BayesianPlanner(bayes_prc, [], pol,
                   trials = trials, T = T,
                   prior_states = state_prior,
                   prior_policies = prior_pi,
@@ -213,3 +220,7 @@ bayes_pln = agt.BayesianPlanner(bayes_prc, [], pol,
 
 ###################################
 """run inference"""
+
+inferrer = inf.SingleInference(agent, data)
+
+loss = inferrer.infer_posterior()

@@ -214,7 +214,7 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
 
         # perception
         bayes_prc = prc.HierarchicalPerception(A, B, C_agent, transition_matrix_context, 
-                                               state_prior, utility, prior_pi, 
+                                               state_prior, utility, prior_pi, pol,
                                                pol_par, C_alphas, T=T,
                                                pol_lambda=pol_lambda, r_lambda=r_lambda,
                                                non_decaying=3, dec_temp=dec_temp)
@@ -368,7 +368,8 @@ recalc_rho = False
 
 for pl in [0.1,0.3,0.5,0.7,0.9]:
     for rl in [0.1,0.3,0.5,0.7,0.9]:
-        for dt in [1.,3.,5.,7.,9.]:
+        # TODO: wht does dt=9 not work?? gives control prob of nan
+        for dt in [1.,3.,5.,7.]:
             
             stayed = []
             indices = []
