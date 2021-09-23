@@ -10,6 +10,7 @@ else:
 import numpy as np
 import scipy.special as scs
 from misc import D_KL_nd_dirichlet, D_KL_dirichlet_categorical
+from opt_einsum import contract
 
 
 class FittingPerception(object):
@@ -68,6 +69,9 @@ class FittingPerception(object):
         self.posterior_states = []
         self.posterior_policies = []
         self.posterior_actions = []
+        
+        self.big_trans_matrix = ar.stack([ar.stack([generative_model_states[:,:,policies[pi,t]] for pi in range(self.npi)]) for t in range(self.T-1)]).T
+        #print(self.big_trans_matrix.shape)
         
     def reset(self):
         
@@ -129,66 +133,126 @@ class FittingPerception(object):
         
         generative_model_rewards = self.generative_model_rewards[-1]
         
-        obs_messages = ar.zeros((self.nh, self.T)) + 1/self.nh
+        #obs_messages = ar.zeros((self.nh, self.T)) + 1/self.nh
 
-        rew_messages = ar.zeros((self.nh, self.T))
-        rew_messages[:] = self.prior_rewards.matmul(generative_model_rewards)[:,None]
+        # rew_messages = ar.zeros((self.nh, self.T))
+        # rew_messages[:] = self.prior_rewards.matmul(generative_model_rewards)[:,None]
         
-        for i in range(t):
-            tp = -t-1+i
-            observation = self.observations[tp]
-            obs_messages[:,i] = self.generative_model_observations[observation]
+        prev_obs = [self.generative_model_observations[o] for o in self.observations[-t-1:]]
+        obs = prev_obs + [ar.zeros((self.nh))+1./self.nh]*(self.T-t-1)
+        obs_messages = ar.stack(obs).T
+        
+        prev_rew = [generative_model_rewards[r] for r in self.rewards[-t-1:]]
+        rew = prev_rew + [self.prior_rewards.matmul(generative_model_rewards)]*(self.T-t-1)
+        rew_messages = ar.stack(rew).T
+        
+        # for i in range(t):
+        #     tp = -t-1+i
+            # observation = self.observations[tp]
+            # obs_messages[:,i] = self.generative_model_observations[observation]
             
-            reward = self.rewards[tp]
-            rew_messages[:,i] = generative_model_rewards[reward]
+            # reward = self.rewards[tp]
+            # rew_messages[:,i] = generative_model_rewards[reward]
         
         self.obs_messages.append(obs_messages)
         self.rew_messages.append(rew_messages)
             
     def update_messages(self, tau, t, possible_policies):
         
-        bwd_messages = ar.zeros((self.nh, self.T, self.npi))
-        bwd_messages[:,-1,:] = 1./self.nh
-        fwd_messages = ar.zeros((self.nh, self.T, self.npi))
-        fwd_messages[:,0,:] = self.prior_states[:,None]
-        fwd_norms = ar.zeros((self.T+1, self.npi))
-        fwd_norms[0,:] = 1.
+        # bwd_messages = ar.zeros((self.nh, self.T,self.npi)) #+ 1./self.nh
+        # bwd_messages[:,-1,:] = 1./self.nh
+        bwd = [ar.zeros((self.nh, self.npi))+1./self.nh]
+        # fwd_messages = ar.zeros((self.nh, self.T, self.npi))
+        # fwd_messages[:,0,:] = self.prior_states[:,None]
+        fwd = [ar.zeros((self.nh, self.npi))+self.prior_states[:,None]]
+        # fwd_norms = ar.zeros((self.T+1, self.npi))
+        # fwd_norms[0,:] = 1.
+        fwd_norm = [ar.ones(self.npi)]
         
         self.make_current_messages(tau,t)
         
         obs_messages = self.obs_messages[-1]
         rew_messages = self.rew_messages[-1]
-        
-        for pi, cs in enumerate(self.policies):
-            if self.prior_policies[-1][pi] > 1e-15 and pi in possible_policies:
                 
-                for i, u in enumerate(ar.flip(cs[:], [0])):
-                    bwd_messages[:,-2-i,pi] = bwd_messages[:,-1-i,pi]*\
-                                                obs_messages[:,t-i]*\
-                                                rew_messages[:, t-i]
-                    bwd_messages[:,-2-i,pi] = bwd_messages[:,-1-i,pi]\
-                         .matmul(self.generative_model_states[:,:,u])
-     
-                    norm = bwd_messages[:,-2-i,pi].sum()
-                    if norm > 0:
-                        bwd_messages[:,-2-i, pi] /= norm
-     
-                for i, u in enumerate(cs[:]):
-                    fwd_messages[:, 1+i, pi] = fwd_messages[:,i, pi]*\
-                                                 obs_messages[:, i]*\
-                                                 rew_messages[:, i]
-                    fwd_messages[:, 1+i, pi] = self.generative_model_states[:,:,u].\
-                                                 matmul(fwd_messages[:, 1+i, pi])
-                    fwd_norms[1+i,pi] = fwd_messages[:,1+i,pi].sum()
-                    if fwd_norms[1+i, pi] > 0: #???? Shouldn't this not happen?
-                        fwd_messages[:,1+i, pi] /= fwd_messages[:,1+i,pi].sum()
+        for i in range(self.T-2,-1,-1):
+            tmp = ar.einsum('hp,shp,h,h->sp',bwd[-1],self.big_trans_matrix[...,i],obs_messages[:,i+1],rew_messages[:,i+1])
+            bwd.append(tmp)
+            #bwd_messages[:,i,:] = ar.einsum('hp,shp,h,h->sp',bwd_messages[:,i+1,:],self.big_trans_matrix[...,i],obs_messages[:,i+1],rew_messages[:,i+1])
+            # bwd_messages[:,-2-i,pi] = bwd_messages[:,-1-i,pi]*\
+            #                             obs_messages[:,t-i]*\
+            #                             rew_messages[:, t-i]
+            # bwd_messages[:,-2-i,pi] = bwd_messages[:,-2-i,pi]\
+            #      .matmul(self.generative_model_states[:,:,u])
+            #bwd_messages[:,i,:] = test[-1]
+            norm = bwd[-1].sum(axis=0)
+            mask = norm > 0
+            bwd[-1][:,mask] /= norm[None,mask]
+            # norm = bwd_messages[:,i,:].sum(axis=0)
+            # mask = norm > 0
+            # bwd_messages[:,i,:][:,mask] /= norm[None,mask]
+            
+        bwd.reverse()
+        bwd_messages = ar.stack(bwd).permute(1,0,2)
+            
+        #     norm = bwd_messages[-1].sum(axis=0)
+        #     mask = norm > 0
+        #     bwd_messages[-1][:,mask] /= norm[None,mask]
+            
+        # bwd_messages = ar.stack(bwd_messages).permute((1,0,2))
+ 
+        for i in range(self.T-1):
+            tmp = ar.einsum('sp,shp,s,s->hp',fwd[-1],self.big_trans_matrix[...,i],obs_messages[:,i],rew_messages[:,i])
+            fwd.append(tmp)
+            # fwd_messages[:, 1+i, pi] = fwd_messages[:,i, pi]*\
+            #                              obs_messages[:, i]*\
+            #                              rew_messages[:, i]
+            # fwd_messages[:, 1+i, pi] = self.generative_model_states[:,:,u].\
+            #                              matmul(fwd_messages[:, 1+i, pi])
+            norm = fwd[-1].sum(axis=0)
+            mask = norm > 0
+            fwd[-1][:,mask] /= norm[None,mask]
+            fwd_norm.append(ar.zeros(self.npi))
+            fwd_norm[-1][possible_policies] = norm[possible_policies]
+            # if fwd_norms[1+i, pi] > 0: #???? Shouldn't this not happen?
+            #     fwd_messages[:,1+i, pi] /= fwd_messages[:,1+i,pi].sum()
                                                      
-            else:
-                fwd_messages[:,:,pi] = 0#1./self.nh
+            # else:
+            #     fwd_messages[:,:,pi] = 0#1./self.nh
+            
+        fwd_messages = ar.stack(fwd).permute(1,0,2)
+        
+        # for pi, cs in enumerate(self.policies):
+        #     if self.prior_policies[-1][pi] > 1e-15 and pi in possible_policies:
+                
+        #         for i, u in enumerate(ar.flip(cs[:], [0])):
+        #             bwd_messages[:,-2-i,pi] = bwd_messages[:,-1-i,pi]*\
+        #                                         obs_messages[:,t-i]*\
+        #                                         rew_messages[:, t-i]
+        #             bwd_messages[:,-2-i,pi] = bwd_messages[:,-2-i,pi]\
+        #                  .matmul(self.generative_model_states[:,:,u])
+     
+        #             norm = bwd_messages[:,-2-i,pi].sum()
+        #             if norm > 0:
+        #                 bwd_messages[:,-2-i, pi] /= norm
+     
+        #         for i, u in enumerate(cs[:]):
+        #             fwd_messages[:, 1+i, pi] = fwd_messages[:,i, pi]*\
+        #                                          obs_messages[:, i]*\
+        #                                          rew_messages[:, i]
+        #             fwd_messages[:, 1+i, pi] = self.generative_model_states[:,:,u].\
+        #                                          matmul(fwd_messages[:, 1+i, pi])
+        #             fwd_norms[1+i,pi] = fwd_messages[:,1+i,pi].sum()
+        #             if fwd_norms[1+i, pi] > 0: #???? Shouldn't this not happen?
+        #                 fwd_messages[:,1+i, pi] /= fwd_messages[:,1+i,pi].sum()
+                                                     
+        #     else:
+        #         fwd_messages[:,:,pi] = 0#1./self.nh
                 
         posterior = fwd_messages*bwd_messages*obs_messages[:,:,None]*rew_messages[:,:,None]
         norm = posterior.sum(axis = 0)
-        fwd_norms[-1] = norm[-1]
+        #fwd_norms[-1] = norm[-1]
+        fwd_norm.append(norm[-1])
+        fwd_norms = ar.stack(fwd_norm)
         # print(tau,t,self.fwd_norms[tau,t])
         non_zero = norm > 0
         posterior[:,non_zero] /= norm[non_zero]

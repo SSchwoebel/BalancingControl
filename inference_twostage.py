@@ -112,8 +112,8 @@ class SingleInference(object):
         
         
     def infer_posterior(self,
-                        iter_steps=10000,
-                        num_particles=100,
+                        iter_steps=100,
+                        num_particles=2,
                         optim_kwargs={'lr': .01}):
         """Perform SVI over free model parameters.
         """

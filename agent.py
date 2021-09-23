@@ -82,20 +82,14 @@ class FittingAgent(object):
     def reset(self):
 
         self.actions = ar.zeros((self.trials, self.T), dtype = int)
-        self.posterior_states = ar.zeros((self.trials, self.T, self.nh, self.T, self.npi))
-        self.posterior_policies = ar.zeros((self.trials, self.T, self.npi))
-        self.posterior_dirichlet_pol = ar.zeros((self.trials, self.npi))
-        self.posterior_dirichlet_rew = ar.zeros((self.trials, self.T, self.nr, self.nh))
         self.observations = ar.zeros((self.trials, self.T), dtype = int)
         self.rewards = ar.zeros((self.trials, self.T), dtype = int)
-        self.likelihood = ar.zeros((self.trials, self.T, self.npi))
-        self.prior_policies = ar.zeros((self.trials, self.npi)) + 1/self.npi
         self.posterior_actions = ar.zeros((self.trials, self.T-1, self.na))
         self.posterior_rewards = ar.zeros((self.trials, self.T, self.nr))
         self.control_probs  = ar.zeros((self.trials, self.T, self.na))
         self.log_probability = 0
         if hasattr(self.perception, 'generative_model_context'):
-            self.context_obs = ar.zeros(self.trials, dtype=int)
+            self.context_obs = ar.zeros(trials, dtype=int)
 
         self.perception.reset()
 
