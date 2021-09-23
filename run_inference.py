@@ -38,9 +38,9 @@ import gc
 """load data"""
 
 i = 0
-pl = 0.1
-rl = 0.5
-dt = 1.
+pl = 0.3
+rl = 0.6
+dt = 4.
 
 folder = "data"
 
@@ -71,7 +71,6 @@ no = ns #number of observations
 na = 2 #number of actions
 npi = na**(T-1)
 nr = 2
-nc = 1
 
 learn_pol=1
 learn_habit=True
@@ -138,10 +137,10 @@ B[:,:,1] = array([[  0,  0,  0,  0,  0,  0,  0,],
 
 # agent's beliefs about reward generation
 
-C_alphas = ar.zeros((nr, ns, nc)) + learn_rew
-C_alphas[0,:3,:] = 100
+C_alphas = ar.zeros((nr, ns)) + learn_rew
+C_alphas[0,:3] = 100
 for i in range(1,nr):
-    C_alphas[i,0,:] = 1
+    C_alphas[i,0] = 1
 #    C_alphas[0,1:,:] = 100
 #    for c in range(nb):
 #        C_alphas[1,c+1,c] = 100
@@ -151,7 +150,7 @@ for i in range(1,nr):
 #C_agent = ar.zeros((nr, ns, nc))
 # for c in range(nc):
 #     C_agent[:,:,c] = array([(C_alphas[:,i,c])/(C_alphas[:,i,c]).sum() for i in range(ns)]).T
-C_agent = C_alphas[:,:,:] / C_alphas[:,:,:].sum(axis=0)[None,:,:]
+C_agent = C_alphas[:,:] / C_alphas[:,:].sum(axis=0)[None,:]
 #array([ar.random.dirichlet(C_alphas[:,i]) for i in range(ns)]).T
 
 # context transition matrix
@@ -172,11 +171,11 @@ npi = pol.shape[0]
 
 prior_pi = ar.ones(npi)/npi #ar.zeros(npi) + 1e-3/(npi-1)
 #prior_pi[170] = 1. - 1e-3
-alphas = ar.zeros((npi, nc)) + learn_pol
+alphas = ar.zeros((npi)) + learn_pol
 #    for i in range(nb):
 #        alphas[i+1,i] = 100
 #alphas[170] = 100
-prior_pi = alphas / alphas.sum(axis=0)
+prior_pi = alphas / alphas.sum()
 
 
 """
@@ -199,13 +198,13 @@ set up agent
 pol_par = alphas
 
 # perception
-bayes_prc = prc.HierarchicalPerception(A, B, C_agent, transition_matrix_context, 
+bayes_prc = prc.FittingPerception(A, B, C_agent, transition_matrix_context, 
                                        state_prior, utility, prior_pi, pol,
-                                       pol_par, C_alphas, T=T,
+                                       pol_par, C_alphas, T=T, trials=trials,
                                        pol_lambda=0, r_lambda=0,
                                        non_decaying=3, dec_temp=1)
 
-agent = agt.BayesianPlanner(bayes_prc, [], pol,
+agent = agt.FittingAgent(bayes_prc, [], pol,
                   trials = trials, T = T,
                   prior_states = state_prior,
                   prior_policies = prior_pi,

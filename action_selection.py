@@ -309,7 +309,6 @@ class AveragedSelector(object):
         return u
 
     def estimate_action_probability(self, tau, t, posterior_policies, actions, *args):
-
         #estimate action probability
         control_prob = ar.zeros(self.na)
         for a in range(self.na):

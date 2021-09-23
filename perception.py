@@ -6,8 +6,292 @@ if arr_type == "numpy":
 else:
     import torch as ar
     array = ar.tensor
+    
+import numpy as np
 import scipy.special as scs
 from misc import D_KL_nd_dirichlet, D_KL_dirichlet_categorical
+
+
+class FittingPerception(object):
+    def __init__(self,
+                 generative_model_observations,
+                 generative_model_states,
+                 generative_model_rewards,
+                 transition_matrix_context,
+                 prior_states,
+                 prior_rewards,
+                 prior_policies,
+                 policies,
+                 dirichlet_pol_params = None,
+                 dirichlet_rew_params = None,
+                 generative_model_context = None,
+                 T=5, trials=10, pol_lambda=0, r_lambda=0, non_decaying=0,
+                 dec_temp=1.):
+        
+        self.generative_model_observations = generative_model_observations
+        self.generative_model_states = generative_model_states
+        self.prior_rewards = prior_rewards
+        self.prior_states = prior_states
+        self.T = T
+        self.trials = trials
+        self.nh = prior_states.shape[0]
+        self.pol_lambda = pol_lambda
+        self.r_lambda = r_lambda
+        self.non_decaying = non_decaying
+        self.dec_temp = dec_temp
+        self.policies = policies
+        self.npi = policies.shape[0]
+        self.actions = ar.unique(policies)
+        self.na = len(self.actions)
+        self.dirichlet_rew_params_init = dirichlet_rew_params
+        self.dirichlet_pol_params_init = dirichlet_pol_params
+        
+        self.dirichlet_rew_params = [self.dirichlet_rew_params_init]
+        self.dirichlet_pol_params = [self.dirichlet_pol_params_init]
+        
+        self.prior_policies_init = self.dirichlet_pol_params_init / self.dirichlet_pol_params_init.sum()
+        self.prior_policies = [self.prior_policies_init]
+        
+        self.generative_model_rewards_init = self.dirichlet_rew_params_init / self.dirichlet_rew_params_init.sum(axis=0)[None,...]
+        self.generative_model_rewards = [self.generative_model_rewards_init]
+        
+        self.observations = []
+        self.rewards = []
+        
+        #self.instantiate_messages()
+        self.bwd_messages = []
+        self.fwd_messages = []
+        self.obs_messages = []
+        self.rew_messages = []
+        self.fwd_norms = []
+        
+        self.posterior_states = []
+        self.posterior_policies = []
+        self.posterior_actions = []
+        
+    def reset(self):
+        
+        self.dirichlet_rew_params = [self.dirichlet_rew_params_init]
+        self.dirichlet_pol_params = [self.dirichlet_pol_params_init]
+        
+        self.prior_policies = [self.prior_policies_init]
+        
+        self.generative_model_rewards = [self.generative_model_rewards_init]
+        
+        self.observations = []
+        self.rewards = []
+        
+        #self.instantiate_messages()
+        self.bwd_messages = []
+        self.fwd_messages = []
+        self.obs_messages = []
+        self.rew_messages = []
+        self.fwd_norms = []
+        
+        self.posterior_states = []
+        self.posterior_policies = []
+        self.posterior_actions = []
+        
+        
+    # def instantiate_messages(self):
+        
+    #     self.bwd_messages_init = ar.zeros((self.nh, self.T, self.npi))
+    #     self.bwd_messages_init[:,-1,:] = 1./self.nh
+    #     self.fwd_messages_init = ar.zeros((self.nh, self.T, self.npi))
+    #     self.fwd_messages_init[:,0,:] = self.prior_states[:,None]
+    #     self.fwd_norms_init = ar.zeros((self.T+1, self.npi))
+    #     self.fwd_norms_init[0,:] = 1.
+        
+    #     self.obs_messages_init = ar.zeros((self.nh, self.T)) + 1/self.nh
+
+    #     self.rew_messages_init = ar.zeros((self.nh, self.T))
+    #     self.rew_messages_init[:] = self.prior_rewards.matmul(self.generative_model_rewards_init)[:,None]
+        
+    #     for pi, cstates in enumerate(self.policies):
+    #         for t, u in enumerate(ar.flip(cstates, [0])):
+    #             tp = self.T - 2 - t
+    #             self.bwd_messages_init[:,tp,pi] = (self.bwd_messages_init[:,tp+1,pi]*\
+    #                                         self.obs_messages_init[:,tp+1]*\
+    #                                         self.rew_messages_init[:,tp+1])
+    #             bwd_message = (self.bwd_messages_init[:,tp,pi]\
+    #                 .matmul(self.generative_model_states[:,:,u]))
+    #             bwd_message /= bwd_message.sum()
+    #             self.bwd_messages_init[:,tp,pi] = bwd_message
+        
+    #     self.bwd_messages = [self.bwd_messages_init]
+    #     self.fwd_messages = [self.fwd_messages_init]
+    #     self.fwd_norms = [self.fwd_norms_init]
+    #     self.obs_messages = [self.obs_messages_init]
+    #     self.rew_messages = [self.rew_messages_init]
+        
+        
+    def make_current_messages(self, tau, t):
+        
+        generative_model_rewards = self.generative_model_rewards[-1]
+        
+        obs_messages = ar.zeros((self.nh, self.T)) + 1/self.nh
+
+        rew_messages = ar.zeros((self.nh, self.T))
+        rew_messages[:] = self.prior_rewards.matmul(generative_model_rewards)[:,None]
+        
+        for i in range(t):
+            tp = -t-1+i
+            observation = self.observations[tp]
+            obs_messages[:,i] = self.generative_model_observations[observation]
+            
+            reward = self.rewards[tp]
+            rew_messages[:,i] = generative_model_rewards[reward]
+        
+        self.obs_messages.append(obs_messages)
+        self.rew_messages.append(rew_messages)
+            
+    def update_messages(self, tau, t, possible_policies):
+        
+        bwd_messages = ar.zeros((self.nh, self.T, self.npi))
+        bwd_messages[:,-1,:] = 1./self.nh
+        fwd_messages = ar.zeros((self.nh, self.T, self.npi))
+        fwd_messages[:,0,:] = self.prior_states[:,None]
+        fwd_norms = ar.zeros((self.T+1, self.npi))
+        fwd_norms[0,:] = 1.
+        
+        self.make_current_messages(tau,t)
+        
+        obs_messages = self.obs_messages[-1]
+        rew_messages = self.rew_messages[-1]
+        
+        for pi, cs in enumerate(self.policies):
+            if self.prior_policies[-1][pi] > 1e-15 and pi in possible_policies:
+                
+                for i, u in enumerate(ar.flip(cs[:], [0])):
+                    bwd_messages[:,-2-i,pi] = bwd_messages[:,-1-i,pi]*\
+                                                obs_messages[:,t-i]*\
+                                                rew_messages[:, t-i]
+                    bwd_messages[:,-2-i,pi] = bwd_messages[:,-1-i,pi]\
+                         .matmul(self.generative_model_states[:,:,u])
+     
+                    norm = bwd_messages[:,-2-i,pi].sum()
+                    if norm > 0:
+                        bwd_messages[:,-2-i, pi] /= norm
+     
+                for i, u in enumerate(cs[:]):
+                    fwd_messages[:, 1+i, pi] = fwd_messages[:,i, pi]*\
+                                                 obs_messages[:, i]*\
+                                                 rew_messages[:, i]
+                    fwd_messages[:, 1+i, pi] = self.generative_model_states[:,:,u].\
+                                                 matmul(fwd_messages[:, 1+i, pi])
+                    fwd_norms[1+i,pi] = fwd_messages[:,1+i,pi].sum()
+                    if fwd_norms[1+i, pi] > 0: #???? Shouldn't this not happen?
+                        fwd_messages[:,1+i, pi] /= fwd_messages[:,1+i,pi].sum()
+                                                     
+            else:
+                fwd_messages[:,:,pi] = 0#1./self.nh
+                
+        posterior = fwd_messages*bwd_messages*obs_messages[:,:,None]*rew_messages[:,:,None]
+        norm = posterior.sum(axis = 0)
+        fwd_norms[-1] = norm[-1]
+        # print(tau,t,self.fwd_norms[tau,t])
+        non_zero = norm > 0
+        posterior[:,non_zero] /= norm[non_zero]
+            
+        self.bwd_messages.append(bwd_messages)
+        self.fwd_messages.append(fwd_messages)
+        self.fwd_norms.append(fwd_norms)
+        self.posterior_states.append(posterior)
+        
+        return posterior
+
+    def update_beliefs_states(self, tau, t, observation, reward, possible_policies):
+        #estimate expected state distribution
+        # if t == 0:
+        #     self.instantiate_messages(policies)
+        self.observations.append(observation)
+        self.rewards.append(reward)
+            
+        self.update_messages(tau, t, possible_policies)
+        
+        #return posterior#ar.nan_to_num(posterior)
+    
+    def update_beliefs_policies(self, tau, t):
+
+        #print((prior_policies>1e-4).sum())
+        
+        likelihood = (self.fwd_norms[-1]+1e-10).prod(axis=0)
+        norm = likelihood.sum()
+        # print("like", likelihood)
+        # Fe = ar.log((self.fwd_norms[-1]+1e-10).prod(axis=0))
+        # softplus = ar.nn.Softplus(beta=self.dec_temp)
+        # likelihood = softplus(Fe)
+        # posterior_policies = likelihood * self.prior_policies[-1] / (likelihood * self.prior_policies[-1]).sum(axis=0)
+        likelihood = ar.pow(likelihood/norm,self.dec_temp) #* ar.pow(norm,self.dec_temp)
+        # print("softmax", likelihood)
+        # print("norm1", ar.pow(norm,self.dec_temp))
+        posterior_policies = likelihood * self.prior_policies[-1] / (likelihood * self.prior_policies[-1]).sum(axis=0)
+        # print("unnorm", likelihood * self.prior_policies[-1])
+        # print("norm", (likelihood * self.prior_policies[-1]).sum(axis=0))
+        # print("post", posterior_policies)
+        #likelihood /= likelihood.sum(axis=0)[None,:]
+        #posterior/= posterior.sum(axis=0)[None,:]
+        #posterior = ar.nan_to_num(posterior)
+        #posterior = softmax(ln(self.fwd_norms).sum(axis = 0)+ln(self.prior_policies))
+
+        #ar.testing.assert_allclose(post, posterior)
+        
+        self.posterior_policies.append(posterior_policies)
+        
+        if t<self.T-1:
+            posterior_actions = ar.zeros((self.na))
+            for a in range(self.na):
+                posterior_actions[a] = posterior_policies[self.policies[:,t] == a].sum()
+                
+            self.posterior_actions.append(posterior_actions)
+
+        #return posterior, likelihood
+    
+    
+    def update_beliefs_dirichlet_pol_params(self, tau, t):
+        assert(t == self.T-1)
+        chosen_pol = ar.argmax(self.posterior_policies[-1], axis=0)
+#        self.dirichlet_pol_params[chosen_pol,:] += posterior_context.sum(axis=0)/posterior_context.sum()
+        dirichlet_pol_params = (1-self.pol_lambda) * self.dirichlet_pol_params[-1] + 1 - (1-self.pol_lambda)
+        dirichlet_pol_params[chosen_pol] += 1#posterior_context
+        
+        prior_policies = dirichlet_pol_params / dirichlet_pol_params.sum()#ar.exp(scs.digamma(self.dirichlet_pol_params) - scs.digamma(self.dirichlet_pol_params.sum(axis=0))[None,:])
+        #prior_policies /= prior_policies.sum(axis=0)[None,:]
+        
+        self.dirichlet_pol_params.append(dirichlet_pol_params)
+        self.prior_policies.append(prior_policies)
+
+        #return dirichlet_pol_params, prior_policies
+
+    def update_beliefs_dirichlet_rew_params(self, tau, t, reward):
+        posterior_states = self.posterior_states[-1]
+        posterior_policies = self.posterior_policies[-1]
+        states = (posterior_states[:,t,:] * posterior_policies[None,:]).sum(axis=1)
+        # c = ar.argmax(posterior_context)
+        # self.dirichlet_rew_params[reward,:,c] += states[:,c]
+        
+#         self.dirichlet_rew_params[tau,t,:,self.non_decaying:,:] = (1-self.r_lambda) * self.dirichlet_rew_params[tau,t,:,self.non_decaying:,:] +1 - (1-self.r_lambda)
+#         self.dirichlet_rew_params[tau,t,reward,:,:] += states * posterior_context[None,:]
+#         for c in range(self.nc):
+#             for state in range(self.nh):
+#                 #self.generative_model_rewards[:,state,c] = self.dirichlet_rew_params[:,state,c] / self.dirichlet_rew_params[:,state,c].sum()
+#                 self.generative_model_rewards[tau,t,:,state,c] = self.dirichlet_rew_params[tau,t,:,state,c]#\
+#                 # ar.exp(scs.digamma(self.dirichlet_rew_params[:,state,c])\
+#                 #         -scs.digamma(self.dirichlet_rew_params[:,state,c].sum()))
+#                 self.generative_model_rewards[tau,t,:,state,c] /= self.generative_model_rewards[tau,t,:,state,c].sum()
+#             self.rew_messages[tau,t+1:,:,t+1:,c] = self.prior_rewards.matmul(self.generative_model_rewards[tau,t,:,:,c])[None,:,None]
+        
+        dirichlet_rew_params = self.dirichlet_rew_params_init.clone()#.detach()
+        # dirichlet_rew_params = ar.ones_like(self.dirichlet_rew_params_init)#self.dirichlet_rew_params_init.clone()
+        # dirichlet_rew_params[:,:self.non_decaying] = self.dirichlet_rew_params[-1][:,:self.non_decaying]
+        dirichlet_rew_params[:,self.non_decaying:] = (1-self.r_lambda) * self.dirichlet_rew_params[-1][:,self.non_decaying:] +1 - (1-self.r_lambda)
+        dirichlet_rew_params[reward,:] += states #* posterior_context[None,:]
+        
+        generative_model_rewards = dirichlet_rew_params / dirichlet_rew_params.sum(axis=0)[None,...]
+        self.dirichlet_rew_params.append(dirichlet_rew_params)
+        self.generative_model_rewards.append(generative_model_rewards)
+            
+        #return dirichlet_rew_params
 
 
 class HierarchicalPerception(object):
@@ -62,7 +346,7 @@ class HierarchicalPerception(object):
             self.generative_model_rewards[:] = self.generative_model_rewards[None,None,:,:,None]
         if dirichlet_pol_params is not None:
             dims = list(dirichlet_pol_params.shape)
-            dims = [self.trials, self.T] + dims
+            dims = [self.trials] + dims
             self.dirichlet_pol_params = ar.zeros(dims)
             self.dirichlet_pol_params[:] = dirichlet_pol_params[None,None,...]
         if dirichlet_rew_params is not None:
@@ -86,14 +370,14 @@ class HierarchicalPerception(object):
 
     def reset(self):
 
-        self.generative_model_rewards = ar.zeros_like(self.generative_model_rewards)
-        self.dirichlet_rew_params = ar.ones_like(self.dirichlet_rew_params)
+        self.generative_model_rewards[:] = self.generative_model_rewards[0,0].clone().detach()[None,None,...]
+        self.dirichlet_rew_params[:] = self.dirichlet_rew_params[0,0].clone().detach()[None,None,...]
         self.dirichlet_pol_params = ar.ones_like(self.dirichlet_pol_params)
         self.prior_policies = ar.ones_like(self.prior_policies) / self.npi
         
         for c in range(self.nc):
             for state in range(self.nh):
-                self.generative_model_rewards[:,:,:,state,c] = (self.dirichlet_rew_params[:,state,c] / self.dirichlet_rew_params[:,state,c].sum())[None,None,...]
+                self.generative_model_rewards[:,:,:,state,c] = (self.dirichlet_rew_params[0,0,:,state,c] / self.dirichlet_rew_params[0,0,:,state,c].sum())[None,None,...]
                 # self.generative_model_rewards[:,state,c] =\
                 # ar.exp(scs.digamma(self.dirichlet_rew_params[:,state,c])\
                 #        -scs.digamma(self.dirichlet_rew_params[:,state,c].sum()))
@@ -122,7 +406,7 @@ class HierarchicalPerception(object):
             for pi, cstates in enumerate(self.policies):
                 for t, u in enumerate(ar.flip(cstates, [0])):
                     tp = self.T - 2 - t
-                    self.bwd_messages[:,:,:,tp,pi,c] = (self.bwd_messages[0,0,:,tp+1,pi,c]*\
+                    self.bwd_messages[0,0,:,tp,pi,c] = (self.bwd_messages[0,0,:,tp+1,pi,c]*\
                                                 self.obs_messages[0,0,:, tp+1,c]*\
                                                 self.rew_messages[0,0,:, tp+1,c])[None,None,...]
                     bwd_message = (self.bwd_messages[0,0,:,tp,pi,c]\
@@ -131,30 +415,31 @@ class HierarchicalPerception(object):
                     self.bwd_messages[:,:,:,tp, pi,c] = bwd_message[None,None,...]
 
     def update_messages(self, tau, t, pi, cs, c=0):
+        #print(tau,t)
         if t > 0:
-            for i, u in enumerate(ar.flip(cs[:t], [0])):
-                self.bwd_messages[tau,t,:,t-1-i,pi,c] = self.bwd_messages[tau,t,:,t-i,pi,c]*\
-                                                self.obs_messages[tau,t,:,t-i,c]*\
-                                                self.rew_messages[tau,t,:, t-i,c]
-                self.bwd_messages[tau,t,:,t-1-i,pi,c] = self.bwd_messages[tau,t,:,t-1-i,pi,c]\
+            for i, u in enumerate(ar.flip(cs[:], [0])):
+                self.bwd_messages[tau,t,:,self.T-2-i,pi,c] = self.bwd_messages[tau,t,:,self.T-1-i,pi,c]*\
+                                                self.obs_messages[tau,t,:,self.T-1-i,c]*\
+                                                self.rew_messages[tau,t,:, self.T-1-i,c]
+                self.bwd_messages[tau,t,:,self.T-2-i,pi,c] = self.bwd_messages[tau,t,:,self.T-2-i,pi,c]\
                     .matmul(self.generative_model_states[:,:,u,c])
 
-                norm = self.bwd_messages[tau,t,:,t-1-i,pi,c].sum()
+                norm = self.bwd_messages[tau,t,:,self.T-2-i,pi,c].sum()
                 if norm > 0:
-                    self.bwd_messages[tau,t,:,t-1-i, pi,c] /= norm
+                    self.bwd_messages[tau,t,:,self.T-2-i, pi,c] /= norm
 
-        if len(cs[t:]) > 0:
-           for i, u in enumerate(cs[t:]):
-               self.fwd_messages[tau,t,:, t+1+i, pi,c] = self.fwd_messages[tau,t,:,t+i, pi,c]*\
-                                                self.obs_messages[tau,t,:, t+i,c]*\
-                                                self.rew_messages[tau,t,:, t+i,c]
+        if len(cs[:]) > 0:
+           for i, u in enumerate(cs[:]):
+               self.fwd_messages[tau,t,:, 1+i, pi,c] = (self.fwd_messages[tau,t,:,i, pi,c]*\
+                                                self.obs_messages[tau,t,:, i,c]*\
+                                                self.rew_messages[tau,t,:, i,c])
 
-               self.fwd_messages[tau,t,:, t+1+i, pi,c] = \
-                                                self.generative_model_states[:,:,u,c].\
-                                                matmul(self.fwd_messages[tau,t,:, t+1+i, pi,c])
-               self.fwd_norms[tau,t,t+1+i,pi,c] = self.fwd_messages[tau,t,:,t+1+i,pi,c].sum()
-               if self.fwd_norms[tau,t,t+1+i, pi,c] > 0: #???? Shouldn't this not happen?
-                   self.fwd_messages[tau,t,:,t+1+i, pi,c] /= self.fwd_norms[tau,t,t+1+i,pi,c]
+               self.fwd_messages[tau,t,:, 1+i, pi,c] = \
+                                                (self.generative_model_states[:,:,u,c].\
+                                                matmul(self.fwd_messages[tau,t,:, 1+i, pi,c]))
+               self.fwd_norms[tau,t,1+i,pi,c] = self.fwd_messages[tau,t,:,1+i,pi,c].sum()
+               if self.fwd_norms[tau,t,1+i, pi,c] > 0: #???? Shouldn't this not happen?
+                   self.fwd_messages[tau,t,:,1+i, pi,c] /= self.fwd_norms[tau,t,1+i,pi,c]
 
     def reset_preferences(self, t, new_preference, policies):
 
@@ -177,9 +462,12 @@ class HierarchicalPerception(object):
         # if t == 0:
         #     self.instantiate_messages(policies)
 
-        self.obs_messages[tau,t:,:,t,:] = self.generative_model_observations[observation][None,:,None]
-
-        self.rew_messages[tau,t:,:,t,:] = self.generative_model_rewards[tau,t,reward]
+        if t>0:
+            self.obs_messages[tau,t,:,:t,:] = self.obs_messages[tau,t-1,:,:t,:].clone()
+            self.rew_messages[tau,t,:,:t,:] = self.rew_messages[tau,t-1,:,:t,:].clone()
+            
+        self.obs_messages[tau,t,:,t,:] = self.generative_model_observations[observation][:,None]
+        self.rew_messages[tau,t,:,t,:] = self.generative_model_rewards[tau,t,reward]
 
         for c in range(self.nc):
             for pi, cs in enumerate(self.policies):
@@ -188,10 +476,15 @@ class HierarchicalPerception(object):
                 else:
                     self.fwd_messages[tau,t,:,:,pi,c] = 0#1./self.nh
 
+        # print(tau,t,self.fwd_messages[tau,t])
+        # print(tau,t,self.bwd_messages[tau,t])
+        # print(tau,t,self.obs_messages[tau,t])
+        # print(tau,t,self.rew_messages[tau,t])
         #estimate posterior state distribution
         posterior = self.fwd_messages[tau,t]*self.bwd_messages[tau,t]*self.obs_messages[tau,t,:,:,None,:]*self.rew_messages[tau,t,:,:,None,:]
         norm = posterior.sum(axis = 0)
         self.fwd_norms[tau,t,-1] = norm[-1]
+        # print(tau,t,self.fwd_norms[tau,t])
         non_zero = norm > 0
         posterior[:,non_zero] /= norm[non_zero]
         return posterior#ar.nan_to_num(posterior)
@@ -200,7 +493,7 @@ class HierarchicalPerception(object):
 
         #print((prior_policies>1e-4).sum())
         likelihood = self.fwd_norms[tau,t].prod(axis=0)
-        posterior = ar.pow(likelihood,self.dec_temp) * self.prior_policies[tau,t] #/ (ar.pow(likelihood,self.dec_temp) * self.prior_policies).sum(axis=0)[None,:]
+        posterior = ar.pow(likelihood,self.dec_temp) * self.prior_policies[tau] / (ar.pow(likelihood,self.dec_temp) * self.prior_policies[tau]).sum(axis=0)[None,:]
         #likelihood /= likelihood.sum(axis=0)[None,:]
         #posterior/= posterior.sum(axis=0)[None,:]
         #posterior = ar.nan_to_num(posterior)
@@ -283,43 +576,67 @@ class HierarchicalPerception(object):
         assert(t == self.T-1)
         chosen_pol = ar.argmax(posterior_policies, axis=0)
 #        self.dirichlet_pol_params[chosen_pol,:] += posterior_context.sum(axis=0)/posterior_context.sum()
-        self.dirichlet_pol_params[tau] = (1-self.pol_lambda) * self.dirichlet_pol_params[tau] + 1 - (1-self.pol_lambda)
-        self.dirichlet_pol_params[tau,chosen_pol,:] += posterior_context
-        self.prior_policies[tau,:] = self.dirichlet_pol_params[tau]#ar.exp(scs.digamma(self.dirichlet_pol_params) - scs.digamma(self.dirichlet_pol_params.sum(axis=0))[None,:])
-        self.prior_policies[tau] /= self.prior_policies[tau].sum(axis=0)[None,:]
         if tau < self.trials-1:
-            self.dirichlet_pol_params[tau+1] = self.dirichlet_pol_params[tau]
-
-        return self.dirichlet_pol_params[tau,t], self.prior_policies[tau,t]
+            self.dirichlet_pol_params[tau+1] = (1-self.pol_lambda) * self.dirichlet_pol_params[tau] + 1 - (1-self.pol_lambda)
+            self.dirichlet_pol_params[tau+1,chosen_pol,:] += posterior_context
+            self.prior_policies[tau+1] = self.dirichlet_pol_params[tau+1].clone()#ar.exp(scs.digamma(self.dirichlet_pol_params) - scs.digamma(self.dirichlet_pol_params.sum(axis=0))[None,:])
+            self.prior_policies[tau+1] /= self.prior_policies[tau+1].sum(axis=0)[None,:]
+            # if tau < self.trials-1:
+            #     self.dirichlet_pol_params[tau+1] = self.dirichlet_pol_params[tau]
+    
+            return self.dirichlet_pol_params[tau+1], self.prior_policies[tau+1]
+    
+        else:
+            return self.dirichlet_pol_params[tau], self.prior_policies[tau]
 
     def update_beliefs_dirichlet_rew_params(self, tau, t, reward, posterior_states, posterior_policies, posterior_context = [1]):
         states = (posterior_states[:,t,:,:] * posterior_policies[None,:,:]).sum(axis=1)
         # c = ar.argmax(posterior_context)
         # self.dirichlet_rew_params[reward,:,c] += states[:,c]
-            
-        self.dirichlet_rew_params[tau,t,:,self.non_decaying:,:] = (1-self.r_lambda) * self.dirichlet_rew_params[tau,t,:,self.non_decaying:,:] +1 - (1-self.r_lambda)
-        self.dirichlet_rew_params[tau,t,reward,:,:] += states * posterior_context[None,:]
+        
+#         self.dirichlet_rew_params[tau,t,:,self.non_decaying:,:] = (1-self.r_lambda) * self.dirichlet_rew_params[tau,t,:,self.non_decaying:,:] +1 - (1-self.r_lambda)
+#         self.dirichlet_rew_params[tau,t,reward,:,:] += states * posterior_context[None,:]
+#         for c in range(self.nc):
+#             for state in range(self.nh):
+#                 #self.generative_model_rewards[:,state,c] = self.dirichlet_rew_params[:,state,c] / self.dirichlet_rew_params[:,state,c].sum()
+#                 self.generative_model_rewards[tau,t,:,state,c] = self.dirichlet_rew_params[tau,t,:,state,c]#\
+#                 # ar.exp(scs.digamma(self.dirichlet_rew_params[:,state,c])\
+#                 #         -scs.digamma(self.dirichlet_rew_params[:,state,c].sum()))
+#                 self.generative_model_rewards[tau,t,:,state,c] /= self.generative_model_rewards[tau,t,:,state,c].sum()
+#             self.rew_messages[tau,t+1:,:,t+1:,c] = self.prior_rewards.matmul(self.generative_model_rewards[tau,t,:,:,c])[None,:,None]
+        
+        dirichlet_rew_params = self.dirichlet_rew_params[tau,t,:,:,:].clone()
+        dirichlet_rew_params[:,self.non_decaying:,:] = (1-self.r_lambda) * dirichlet_rew_params[:,self.non_decaying:,:] +1 - (1-self.r_lambda)
+        dirichlet_rew_params[reward,:,:] += states * posterior_context[None,:]
+        generative_model_rewards = dirichlet_rew_params.clone()
+        rew_messages = ar.zeros_like(self.rew_messages[tau,t])
         for c in range(self.nc):
             for state in range(self.nh):
                 #self.generative_model_rewards[:,state,c] = self.dirichlet_rew_params[:,state,c] / self.dirichlet_rew_params[:,state,c].sum()
-                self.generative_model_rewards[tau,t,:,state,c] = self.dirichlet_rew_params[tau,t,:,state,c]#\
+                #generative_model_rewards[tau,t,:,state,c] = dirichlet_rew_params[:,state,c]#\
                 # ar.exp(scs.digamma(self.dirichlet_rew_params[:,state,c])\
                 #         -scs.digamma(self.dirichlet_rew_params[:,state,c].sum()))
-                self.generative_model_rewards[tau,t,:,state,c] /= self.generative_model_rewards[tau,t,:,state,c].sum()
-            self.rew_messages[tau,t+1:,:,t+1:,c] = self.prior_rewards.matmul(self.generative_model_rewards[tau,t,:,:,c])[None,:,None]
-#        for c in range(self.nc):
-#            for pi, cs in enumerate(policies):
-#                if self.prior_policies[pi,c] > 1e-15:
-#                    self.update_messages(t, pi, cs, c)
-#                else:
-#                    self.fwd_messages[:,:,pi,c] = 1./self.nh #0
+                generative_model_rewards[:,state,c] /= generative_model_rewards[:,state,c].sum()
+            rew_messages[:,:,c] = self.prior_rewards.matmul(generative_model_rewards[:,:,c])[:,None]
+        #rew_messages = ar.einsum('r,rsc->sc',self.prior_rewards,generative_model_rewards)
+            # rew_messages = self.prior_rewards.matmul(generative_model_rewards[:,:,c])
+            # self.rew_messages[tau,t+1:,:,t+1:,c] = self.prior_rewards.matmul(self.generative_model_rewards[tau,t,:,:,c])[None,:,None]
+        
+        # print(dirichlet_rew_params)
+        # print(generative_model_rewards)
+        # print(rew_messages)
 
+        #print(self.T)
         if t<self.T-1:
-            self.dirichlet_rew_params[tau,t+1] = self.dirichlet_rew_params[tau,t]
+            self.dirichlet_rew_params[tau,t+1] = dirichlet_rew_params
+            self.generative_model_rewards[tau,t+1] = generative_model_rewards
+            self.rew_messages[tau,t+1:,:,t+1:,:] = rew_messages[None,:,t+1:,:]
         elif tau<self.trials-1:
-            self.dirichlet_rew_params[tau+1,t] = self.dirichlet_rew_params[tau,t]
+            self.dirichlet_rew_params[tau+1,0] = dirichlet_rew_params
+            self.generative_model_rewards[tau+1,0] = generative_model_rewards
+            self.rew_messages[tau+1,0:,:,0:,:] = rew_messages[None,:,0:,:]
             
-        return self.dirichlet_rew_params[tau,t]
+        return dirichlet_rew_params
 
 
 

@@ -12,6 +12,202 @@ from perception import HierarchicalPerception
 from misc import ln, softmax, own_logical_and
 import scipy.special as scs
 
+class FittingAgent(object):
+
+    def __init__(self, perception, action_selection, policies,
+                 prior_states = None, prior_policies = None,
+                 prior_context = None,
+                 learn_habit = False,
+                 learn_rew = False,
+                 trials = 1, T = 10, number_of_states = 6,
+                 number_of_rewards = 2,
+                 number_of_policies = 10):
+
+        #set the modules of the agent
+        self.perception = perception
+        self.action_selection = action_selection
+
+        #set parameters of the agent
+        self.nh = number_of_states #number of states
+        self.npi = number_of_policies #number of policies
+        self.nr = number_of_rewards
+
+        self.T = T
+        self.trials = trials
+
+        if policies is not None:
+            self.policies = policies
+        else:
+            #make action sequences for each policy
+            self.policies = ar.eye(self.npi, dtype = int)
+
+        self.possible_polcies = self.policies.clone().detach()
+
+        self.actions = ar.unique(self.policies)
+        self.na = len(self.actions)
+
+        if prior_states is not None:
+            self.prior_states = prior_states
+        else:
+            self.prior_states = ar.ones(self.nh)
+            self.prior_states /= self.prior_states.sum()
+
+        if prior_context is not None:
+            self.prior_context = prior_context
+            self.nc = prior_context.shape[0]
+        else:
+            self.prior_context = ar.ones(1)
+            self.nc = 1
+
+        if prior_policies is not None:
+            self.prior_policies = prior_policies[:,None]#ar.tile(prior_policies, (1,self.nc)).T
+        else:
+            self.prior_policies = ar.ones((self.npi))/self.npi
+
+        self.learn_habit = learn_habit
+        self.learn_rew = learn_rew
+
+        #set various data structures
+        self.actions = ar.zeros((trials, T), dtype = int)
+        self.observations = ar.zeros((trials, T), dtype = int)
+        self.rewards = ar.zeros((trials, T), dtype = int)
+        self.posterior_actions = ar.zeros((trials, T-1, self.na))
+        self.posterior_rewards = ar.zeros((trials, T, self.nr))
+        self.control_probs  = ar.zeros((trials, T, self.na))
+        self.log_probability = 0
+        if hasattr(self.perception, 'generative_model_context'):
+            self.context_obs = ar.zeros(trials, dtype=int)
+
+
+    def reset(self):
+
+        self.actions = ar.zeros((self.trials, self.T), dtype = int)
+        self.posterior_states = ar.zeros((self.trials, self.T, self.nh, self.T, self.npi))
+        self.posterior_policies = ar.zeros((self.trials, self.T, self.npi))
+        self.posterior_dirichlet_pol = ar.zeros((self.trials, self.npi))
+        self.posterior_dirichlet_rew = ar.zeros((self.trials, self.T, self.nr, self.nh))
+        self.observations = ar.zeros((self.trials, self.T), dtype = int)
+        self.rewards = ar.zeros((self.trials, self.T), dtype = int)
+        self.likelihood = ar.zeros((self.trials, self.T, self.npi))
+        self.prior_policies = ar.zeros((self.trials, self.npi)) + 1/self.npi
+        self.posterior_actions = ar.zeros((self.trials, self.T-1, self.na))
+        self.posterior_rewards = ar.zeros((self.trials, self.T, self.nr))
+        self.control_probs  = ar.zeros((self.trials, self.T, self.na))
+        self.log_probability = 0
+        if hasattr(self.perception, 'generative_model_context'):
+            self.context_obs = ar.zeros(self.trials, dtype=int)
+
+        self.perception.reset()
+
+
+    def update_beliefs(self, tau, t, observation, reward, response, context=None):
+        
+        self.observations[tau,t] = observation
+        self.rewards[tau,t] = reward
+        if context is not None:
+            self.context_obs[tau] = context
+
+        if t == 0:
+            self.possible_polcies = ar.arange(0,self.npi,1, dtype=ar.long)
+        else:
+            #TODO!
+            # wow so inefficient. probably rather remove for fitting...
+            possible_policies = self.policies[:,t-1]==response
+            prev_pols = ar.zeros(self.npi, dtype=bool)
+            prev_pols[:] = False
+            prev_pols[self.possible_polcies] = True
+            new_pols = own_logical_and(possible_policies, prev_pols)
+            self.possible_polcies = ar.where(new_pols==True)[0]
+            
+            # TODO once 1D intersect exists
+            #self.possible_polcies = ar.intersect1d(self.possible_polcies, possible_policies)
+           #self.log_probability += ln(self.posterior_actions[tau,t-1,response])
+
+        self.perception.update_beliefs_states(
+                                         tau, t,
+                                         observation,
+                                         reward,
+                                         #self.policies,
+                                         self.possible_polcies)
+
+        #update beliefs about policies
+        self.perception.update_beliefs_policies(tau, t) #self.posterior_policies[tau, t], self.likelihood[tau,t]
+        # if tau == 0:
+        #     prior_context = self.prior_context
+        # else: #elif t == 0:
+        #     prior_context = ar.dot(self.perception.transition_matrix_context, self.posterior_context[tau-1, -1]).reshape((self.nc))
+#            else:
+#                prior_context = ar.dot(self.perception.transition_matrix_context, self.posterior_context[tau, t-1])
+
+        # print(tau,t)
+        # print("prior", prior_context)
+        # print("post", self.posterior_context[tau, t])
+
+        # if t < self.T-1:
+        #     #post_pol = ar.matmul(self.posterior_policies[tau, t], self.posterior_context[tau, t])
+        #     self.posterior_actions[tau, t] = self.estimate_action_probability(tau, t)
+
+        if t == self.T-1 and self.learn_habit:
+            self.perception.update_beliefs_dirichlet_pol_params(tau, t)
+
+        if False:
+            self.posterior_rewards[tau, t-1] = ar.einsum('rsc,spc,pc,c->r',
+                                                  self.perception.generative_model_rewards,
+                                                  self.posterior_states[tau,t,:,t],
+                                                  self.posterior_policies[tau,t])
+        #if reward > 0:
+        # check later if stuff still works!
+        if self.learn_rew:# and t>0:#==self.T-1:
+            self.perception.update_beliefs_dirichlet_rew_params(tau, t, \
+                                                            reward)
+
+    def generate_response(self, tau, t):
+
+        #get response probability
+        posterior_states = self.perception.posterior_states[-1]
+        posterior_policies = self.perception.posterior_policies[-1]#ar.einsum('pc,c->p', self.posterior_policies[tau, t], self.posterior_context[tau, 0])
+        posterior_policies /= posterior_policies.sum()
+        # avg_likelihood = self.likelihood[tau,t]#ar.einsum('pc,c->p', self.likelihood[tau,t], self.posterior_context[tau, 0])
+        # avg_likelihood /= avg_likelihood.sum()
+        # prior = self.prior_policies[tau-1]#ar.einsum('pc,c->p', self.prior_policies[tau-1], self.posterior_context[tau, 0])
+        # prior /= prior.sum()
+        #print(self.posterior_context[tau, t])
+        non_zero = posterior_policies > 0
+        controls = self.policies[:, t]#[non_zero]
+        actions = ar.unique(controls)
+        # posterior_policies = posterior_policies[non_zero]
+        # avg_likelihood = avg_likelihood[non_zero]
+        # prior = prior[non_zero]
+
+        self.actions[tau, t] = self.action_selection.select_desired_action(tau,
+                                        t, posterior_policies, controls, None, None)
+
+
+        return self.actions[tau, t]
+
+
+    def estimate_action_probability(self, tau, t, post):
+
+        # TODO: should this be t=0 or t=t?
+        # TODO attention this now only works for one context...
+        posterior_policies = post[:]#self.posterior_policies[tau, t, :, 0]#ar.einsum('pc,c->p', self.posterior_policies[tau, t], self.posterior_context[tau, t])
+        #posterior_policies /= posterior_policies.sum()
+        
+        #estimate action probability
+        #control_prob = ar.zeros(self.na)
+        for a in range(self.na):
+            self.posterior_actions[tau,t,a] = posterior_policies[self.policies[:,t] == a].sum()
+
+        #return self.control_probs[tau,t]
+    
+    def set_parameters(self, **kwargs):
+        
+        if 'pol_lambda' in kwargs.keys():
+            self.perception.pol_lambda = kwargs['pol_lambda']
+        if 'r_lambda' in kwargs.keys():
+            self.perception.r_lambda = kwargs['r_lambda']
+        if 'dec_temp' in kwargs.keys():
+            self.perception.dec_temp = kwargs['dec_temp']
 
 class BayesianPlanner(object):
 
@@ -146,7 +342,7 @@ class BayesianPlanner(object):
         post, like = self.perception.update_beliefs_policies(tau, t) #self.posterior_policies[tau, t], self.likelihood[tau,t]
         if t < self.T-1:
             self.estimate_action_probability(tau, t, post)
-        self.posterior_policies[tau, t], self.likelihood[tau,t] - post, like
+        self.posterior_policies[tau, t], self.likelihood[tau,t] = post, like
 
         if tau == 0:
             prior_context = self.prior_context

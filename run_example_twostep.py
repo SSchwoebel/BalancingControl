@@ -59,7 +59,6 @@ no = ns #number of observations
 na = 2 #number of actions
 npi = na**(T-1)
 nr = 2
-nc = 1
 
 proni = "/home/sarah/proni/sarah/"
 
@@ -122,10 +121,10 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
 
     # agent's beliefs about reward generation
 
-    C_alphas = ar.zeros((nr, ns, nc)) + learn_rew
-    C_alphas[0,:3,:] = 100
+    C_alphas = ar.zeros((nr, ns)) + learn_rew
+    C_alphas[0,:3] = 100
     for i in range(1,nr):
-        C_alphas[i,0,:] = 1
+        C_alphas[i,0] = 1
 #    C_alphas[0,1:,:] = 100
 #    for c in range(nb):
 #        C_alphas[1,c+1,c] = 100
@@ -135,7 +134,7 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
     #C_agent = ar.zeros((nr, ns, nc))
     # for c in range(nc):
     #     C_agent[:,:,c] = array([(C_alphas[:,i,c])/(C_alphas[:,i,c]).sum() for i in range(ns)]).T
-    C_agent = C_alphas[:,:,:] / C_alphas[:,:,:].sum(axis=0)[None,:,:]
+    C_agent = C_alphas[:,:] / C_alphas[:,:].sum(axis=0)[None,:]
     #array([ar.random.dirichlet(C_alphas[:,i]) for i in range(ns)]).T
 
     # context transition matrix
@@ -162,7 +161,7 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
 
     prior_pi = ar.ones(npi)/npi #ar.zeros(npi) + 1e-3/(npi-1)
     #prior_pi[170] = 1. - 1e-3
-    alphas = ar.zeros((npi, nc)) + learn_pol
+    alphas = ar.zeros((npi)) + learn_pol
 #    for i in range(nb):
 #        alphas[i+1,i] = 100
     #alphas[170] = 100
@@ -213,13 +212,13 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
         pol_par = alphas
 
         # perception
-        bayes_prc = prc.HierarchicalPerception(A, B, C_agent, transition_matrix_context, 
+        bayes_prc = prc.FittingPerception(A, B, C_agent, transition_matrix_context, 
                                                state_prior, utility, prior_pi, pol,
-                                               pol_par, C_alphas, T=T,
+                                               pol_par, C_alphas, T=T, trials=trials,
                                                pol_lambda=pol_lambda, r_lambda=r_lambda,
                                                non_decaying=3, dec_temp=dec_temp)
 
-        bayes_pln = agt.BayesianPlanner(bayes_prc, ac_sel, pol,
+        bayes_pln = agt.FittingAgent(bayes_prc, ac_sel, pol,
                           trials = trials, T = T,
                           prior_states = state_prior,
                           prior_policies = prior_pi,
@@ -366,10 +365,10 @@ folder = 'data'
 
 recalc_rho = False
 
-for pl in [0.1,0.3,0.5,0.7,0.9]:
-    for rl in [0.1,0.3,0.5,0.7,0.9]:
+for pl in [0.3]:#[0.1,0.3,0.5,0.7,0.9]:
+    for rl in [0.6]:#[0.1,0.3,0.5,0.7,0.9]:
         # TODO: wht does dt=9 not work?? gives control prob of nan
-        for dt in [1.,3.,5.,7.]:
+        for dt in [4.]:#[1.,3.,5.,7.]:
             
             stayed = []
             indices = []
