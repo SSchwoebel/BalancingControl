@@ -79,7 +79,7 @@ class FittingAgent(object):
             self.context_obs = ar.zeros(trials, dtype=int)
 
 
-    def reset(self):
+    def reset(self, param_dict):
 
         self.actions = ar.zeros((self.trials, self.T), dtype = int)
         self.observations = ar.zeros((self.trials, self.T), dtype = int)
@@ -91,11 +91,13 @@ class FittingAgent(object):
         if hasattr(self.perception, 'generative_model_context'):
             self.context_obs = ar.zeros(trials, dtype=int)
 
+        self.set_parameters(**param_dict)
         self.perception.reset()
 
 
     def update_beliefs(self, tau, t, observation, reward, response, context=None):
         
+        #print(observation)
         self.observations[tau,t] = observation
         self.rewards[tau,t] = reward
         if context is not None:

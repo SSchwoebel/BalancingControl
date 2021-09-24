@@ -38,9 +38,9 @@ import gc
 """load data"""
 
 i = 0
-pl = 0.3
-rl = 0.6
-dt = 4.
+pl = 0.9
+rl = 0.1
+dt =5.
 
 folder = "data"
 
@@ -63,7 +63,7 @@ data["observations"] = ar.tensor(data_load["observations"])
 ###################################
 """experiment parameters"""
 
-trials =  300#number of trials
+trials =  201#number of trials
 T = 3 #number of time steps in each trial
 nb = 4
 ns = 3+nb #number of states
@@ -72,7 +72,7 @@ na = 2 #number of actions
 npi = na**(T-1)
 nr = 2
 
-learn_pol=1
+learn_pol=1000
 learn_habit=True
 
 learn_rew = 1
@@ -222,4 +222,15 @@ agent = agt.FittingAgent(bayes_prc, [], pol,
 
 inferrer = inf.SingleInference(agent, data)
 
-loss = inferrer.infer_posterior()
+loss = inferrer.infer_posterior(iter_steps=200, num_particles=50)
+
+plt.figure()
+plt.title("ELBO")
+plt.plot(loss)
+plt.ylabel("ELBO")
+plt.xlabel("iteration")
+plt.show()
+
+inferrer.plot_posteriors()
+
+print("this is inference for pl =", pl, "rl =", rl, "dt =", dt)

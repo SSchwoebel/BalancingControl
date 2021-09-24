@@ -51,7 +51,7 @@ agent = 'bethe'
 save_data = False
 #equidistant numbers in log space
 numbers = [10, 17, 31, 56, 100, 177, 316, 562, 1000, 1778, 3162, 5623, 10000, 17782, 31622, 56234]
-trials =  300#number of trials
+trials =  201#number of trials
 T = 3 #number of time steps in each trial
 nb = 4
 ns = 3+nb #number of states
@@ -365,14 +365,14 @@ folder = 'data'
 
 recalc_rho = False
 
-for pl in [0.3]:#[0.1,0.3,0.5,0.7,0.9]:
-    for rl in [0.6]:#[0.1,0.3,0.5,0.7,0.9]:
+for pl in [0.5]:#[0.1,0.3,0.5,0.7,0.9]:
+    for rl in [0.5]:#[0.1,0.3,0.5,0.7,0.9]:
         # TODO: wht does dt=9 not work?? gives control prob of nan
-        for dt in [4.]:#[1.,3.,5.,7.]:
+        for dt in [5.]:#[1.,3.,5.,7.]:
             
             stayed = []
             indices = []
-            for tendency in [1]:#[1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
+            for tendency in [1000]:#[1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
                 print(pl, rl, dt, tendency)
             
                 init = array([0.6, 0.4, 0.6, 0.4])
@@ -392,9 +392,9 @@ for pl in [0.3]:#[0.1,0.3,0.5,0.7,0.9]:
                     with open(fname, 'r') as infile:
                         data = json.load(infile)
                     if arr_type == "numpy":
-                        Rho[:] = pickle.decode(data)
+                        Rho[:] = pickle.decode(data)[:trials]
                     else:
-                        Rho[:] = ar.from_numpy(pickle.decode(data))
+                        Rho[:] = ar.from_numpy(pickle.decode(data))[:trials]
             
                 plt.figure(figsize=(10,5))
                 for i in range(4):
@@ -413,9 +413,9 @@ for pl in [0.3]:#[0.1,0.3,0.5,0.7,0.9]:
                 l = []
                 learn_pol = tendency
                 learn_habit = True
-                pol_lambda = pl#0.3
-                r_lambda = rl#0.6
-                dec_temp = dt#4.
+                pol_lambda = ar.tensor([pl])#0.3
+                r_lambda = ar.tensor([rl])#0.6
+                dec_temp = ar.tensor([dt])#4.
                 l.append([learn_pol, avg, Rho, learn_habit, pol_lambda, r_lambda, dec_temp])
             
                 par_list = []
