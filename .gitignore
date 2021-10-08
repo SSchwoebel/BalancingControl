@@ -8,3 +8,6 @@ data/*
 *.gif
 *.json
 *.mp4
+*.csv
+LOSS_*
+Inferiert_*
