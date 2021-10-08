@@ -221,6 +221,8 @@ class SingleInference(object):
         xs = [x_lamb, x_lamb, x_dec_temp]
         ys = [y_lamb_pi, y_lamb_r, y_dec_temp]
         
+        
+        
         return xs, ys, param_dict
     
     
@@ -239,14 +241,14 @@ class SingleInference(object):
                    "decision temperature: $\\gamma$"]
         #xlims = {"lamb_pi": [0,1], "lamb_r": [0,1], "dec_temp": [0,10]}
         
-        for i in range(len(xs)):
-            plt.figure()
-            plt.title(names[i])
-            plt.plot(xs[i],ys[i])
-            plt.xlim([xs[i][0]-0.01,xs[i][-1]+0.01])
-            plt.xlabel(xlabels[i])
-            plt.show()
+        #for i in range(len(xs)):
+            #plt.figure()
+            #plt.title(names[i])
+            #plt.plot(xs[i],ys[i])
+            #plt.xlim([xs[i][0]-0.01,xs[i][-1]+0.01])
+            #plt.xlabel(xlabels[i])
+            #plt.show()
+            #plt.savefig("/tmp/hallo{}.png".format(i))
             
         print(param_dict)
-        
-        
+        return param_dict
