@@ -5,13 +5,65 @@ Created on Fri Oct  8 10:23:25 2021
 
 @author: baemm
 """
-"""Einlesen der Daten, Formen des Dataframes, Hinzufügen Header, Löschen des unnötigen"""
+#%%
+
 import os
 import csv
 import pandas as pd
 import numpy as np
 import matplotlib.pylab as plt
 import scipy.stats as sc
+import seaborn as sns
+from pandas.plotting import scatter_matrix
+
+def korr_plot(x,v1,v2):
+    """x = DataFrame; v1=Variablen String, v2=Variablen String
+    Rückgabe: Scatter, Scatter + Regressionline, Histogramme, Tabelle"""
+    
+#ergebnis.plot(x ='dt', y='Modus_dt', kind = 'scatter')	 
+    plt.figure()   
+    plt.title("Scatter")
+    plt.ylabel(v2)
+    plt.xlabel('real ' + v1)
+    plt.scatter(x[v1],x[v2])
+    plt.show()
+
+
+    corr, pvalue = sc.pearsonr(x[v1], x[v2])
+    print("Korrelationskoeffizient für "+v1+":", corr)
+    print("P-Value für "+v1+":",pvalue)
+    print("P-Value komplett für "+v1+":","{:0.30f}".format(pvalue))
+
+# creating X-Y Plots With a Regression Line
+# slope, intersept, and correlation coefficient calculation 
+    slope, intercept, r, p, stderr = sc.linregress(x[v1], x[v2])
+    line = f'Regression line: y={intercept:.2f}+{slope:.2f}x, r={r:.2f}'
+# plotting
+    fig, ax = plt.subplots(figsize = (14,8))
+    ax.plot(x[v1], x[v2], linewidth=0, marker='s', label='Data points')
+    ax.plot(x[v1], intercept + slope * x[v1], label=line)
+    ax.set_xlabel('real ' + v1)
+    ax.set_ylabel(v2)
+    ax.legend(facecolor='white')
+    plt.show()
+# Histogramm und Tabellen
+    plt.figure()
+    plt.title("Histogramm für " +v1)
+    plt.hist(x[v1])
+    plt.show()
+    
+    plt.figure()
+    plt.title("Histogramm für " +v2)
+    plt.hist(x[v2])
+    plt.show()
+    
+    Tabelle1 = x[v1].value_counts(sort=True)
+    Tabelle2 = x[v2].value_counts(sort=True)
+    print("Häufigkeit für real "+v1+" in Zahlen:\n\n", Tabelle1)
+    print("Häufigkeit für "+v2+" in Zahlen:\n\n", Tabelle2)
+
+#%%
+"""Einlesen der Daten, Formen des Dataframes und der fehlende Werte"""
 
 header = []
 daten = []
@@ -67,55 +119,30 @@ for i in range(0,a.size):
 Modus_dtt = (a - 1 ) / (b)
 ergebnis['Modus_dt'] = Modus_dtt
 
-
 #mean = a/b
 Mean_dtt  = (a/ b)
 ergebnis['Mean_dt'] = Mean_dtt
 
-"""Plotten + Korrelationen mit Pandas, SciPy- dt """
-
-#ergebnis.plot(x ='dt', y='Modus_dt', kind = 'scatter')	 
-plt.figure()   
-plt.title("Scatter")
-plt.ylabel("Modus_dt")
-plt.xlabel("real_dt")
-plt.scatter(ergebnis["dt"],ergebnis["Modus_dt"])
-plt.show()
+#%%% Auswertung
+korr_plot(ergebnis,"dt","Modus_dt")
+#korr_plot(ergebnis,"rl","Modus_r")
+#korr_plot(ergebnis,"pl","Modus_pi")
 
 
-corr, pvalue = sc.pearsonr(ergebnis["dt"], ergebnis["Modus_dt"])
-print("Korrelationskoeffizient:", corr)
-print("P-Value;",pvalue)
-print("P-Value komplett;","{:0.30f}".format(pvalue))
 
-# creating X-Y Plots With a Regression Line
-
-# slope, intersept, and correlation coefficient calculation 
-slope, intercept, r, p, stderr = sc.linregress(ergebnis["dt"], ergebnis["Modus_dt"])
-line = f'Regression line: y={intercept:.2f}+{slope:.2f}x, r={r:.2f}'
-# plotting
-fig, ax = plt.subplots(figsize = (14,8))
-ax.plot(ergebnis["dt"], ergebnis["Modus_dt"], linewidth=0, marker='s', label='Data points')
-ax.plot(ergebnis["dt"], intercept + slope * ergebnis["dt"], label=line)
-ax.set_xlabel('real_dt')
-ax.set_ylabel('Modus_dt')
-ax.legend(facecolor='white')
-plt.show()
-
-
+#%% Korrelationsmatrix 
+"""Plotten + Korrelationen mit Pandas, SciPy """
 
 #Korrelationsmatrix
 Matrix = ergebnis.corr(method='pearson', min_periods=1)
+#Matrix.style.background_gradient(cmap='coolwarm') # geht erst wenn keine NaNs mehr da sind
 print(Matrix)
 
-import seaborn as sns
 
 f, ax = plt.subplots(figsize=(14, 8))
 corr = ergebnis.corr()
 sns.heatmap(corr, mask=np.zeros_like(corr, dtype=np.bool), cmap=sns.diverging_palette(220, 10, as_cmap=True),
             square=True, annot=True, ax=ax)
 
-from pandas.plotting import scatter_matrix
 scatter_matrix(ergebnis, figsize=(14,8)) #sieht ein wenig umständlich aus daher das darüber
-Matrix.style.background_gradient(cmap='coolwarm') # geht erst wenn keine NaNs mehr da sind
 plt.show()
