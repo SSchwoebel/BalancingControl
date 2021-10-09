@@ -125,24 +125,39 @@ ergebnis['Mean_dt'] = Mean_dtt
 
 #%%% Auswertung
 korr_plot(ergebnis,"dt","Modus_dt")
-#korr_plot(ergebnis,"rl","Modus_r")
-#korr_plot(ergebnis,"pl","Modus_pi")
+korr_plot(ergebnis,"rl","Modus_r")
+korr_plot(ergebnis,"pl","Modus_pi")
 
 
 
 #%% Korrelationsmatrix 
 """Plotten + Korrelationen mit Pandas, SciPy """
 
-#Korrelationsmatrix
-Matrix = ergebnis.corr(method='pearson', min_periods=1)
-#Matrix.style.background_gradient(cmap='coolwarm') # geht erst wenn keine NaNs mehr da sind
-print(Matrix)
+#Korrelationsmatrix ##Background Styl geht nicht in Spyder. 
+# Matrix = ergebnis.corr(method='pearson', min_periods=1)
+# Matrix.style.background_gradient(cmap='coolwarm').set_precision(2) 
+# print(Matrix)
 
+#Weniger Variablen
+df = ergebnis[['pl','rl','dt','Modus_dt','Modus_r','Modus_pi']]
 
+#Gleiche wie unten mit relevanteren Variablen
+f, ax = plt.subplots(figsize=(14, 8))
+corr = df.corr()
+sns.heatmap(corr, mask=np.zeros_like(corr, dtype=np.bool), cmap=sns.diverging_palette(220, 10, as_cmap=True),
+            square=True, annot=True, ax=ax)
+
+scatter_matrix(df, figsize=(14,8)) #sieht ein wenig umständlich aus daher das darüber
+plt.show()
+
+#SNS Korrelationsmatrix
 f, ax = plt.subplots(figsize=(14, 8))
 corr = ergebnis.corr()
 sns.heatmap(corr, mask=np.zeros_like(corr, dtype=np.bool), cmap=sns.diverging_palette(220, 10, as_cmap=True),
             square=True, annot=True, ax=ax)
 
+#Scattermatrix
 scatter_matrix(ergebnis, figsize=(14,8)) #sieht ein wenig umständlich aus daher das darüber
 plt.show()
+
+ 
