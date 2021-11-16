@@ -33,14 +33,16 @@ import scipy.signal as ss
 import bottleneck as bn
 import gc
 
+device = ar.device("cuda") if ar.cuda.is_available() else ar.device("cpu")
+
 #ar.autograd.set_detect_anomaly(True)
 ###################################
 """load data"""
 
 i = 0
-pl = 0.1
-rl = 0.9
-dt =5.
+pl = 0.3
+rl = 0.7
+dt = 5.
 tend = 5
 
 folder = "data"
@@ -56,9 +58,9 @@ with open(fname, 'r') as infile:
 data_load = pickle.decode(loaded)
 
 data = {}
-data["actions"] = ar.tensor(data_load["actions"])
-data["rewards"] = ar.tensor(data_load["rewards"])
-data["observations"] = ar.tensor(data_load["observations"])
+data["actions"] = ar.tensor(data_load["actions"]).to(device)
+data["rewards"] = ar.tensor(data_load["rewards"]).to(device)
+data["observations"] = ar.tensor(data_load["observations"]).to(device)
 
 
 ###################################
@@ -98,11 +100,11 @@ create matrices
 
 
 #generating probability of observations in each state
-A = ar.eye(no)
+A = ar.eye(no).to(device)
 
 
 #state transition generative probability (matrix)
-B = ar.zeros((ns, ns, na))
+B = ar.zeros((ns, ns, na)).to(device)
 b1 = 0.7
 nb1 = 1.-b1
 b2 = 0.7
@@ -138,7 +140,8 @@ B[:,:,1] = array([[  0,  0,  0,  0,  0,  0,  0,],
 
 # agent's beliefs about reward generation
 
-C_alphas = ar.zeros((nr, ns)) + learn_rew
+C_alphas = ar.zeros((nr, ns)).to(device) 
+C_alphas += learn_rew
 C_alphas[0,:3] = 100
 for i in range(1,nr):
     C_alphas[i,0] = 1
@@ -156,24 +159,26 @@ C_agent = C_alphas[:,:] / C_alphas[:,:].sum(axis=0)[None,:]
 
 # context transition matrix
 
-transition_matrix_context = ar.ones(1)
+transition_matrix_context = ar.ones(1).to(device)
 
 
 """
 create policies
 """
 
-pol = array(list(itertools.product(list(range(na)), repeat=T-1)))
+pol = array(list(itertools.product(list(range(na)), repeat=T-1))).to(device)
 
 #pol = pol[-2:]
 npi = pol.shape[0]
 
 # prior over policies
 
-prior_pi = ar.ones(npi)/npi #ar.zeros(npi) + 1e-3/(npi-1)
+prior_pi = ar.ones(npi).to(device)
+prior_pi /= npi #ar.zeros(npi) + 1e-3/(npi-1)
 #prior_pi[170] = 1. - 1e-3
-alphas = ar.zeros((npi)) + learn_pol
-alpha_0 = array([learn_pol])
+alphas = ar.zeros((npi)).to(device) 
+alphas += learn_pol
+alpha_0 = array([learn_pol]).to(device)
 #    for i in range(nb):
 #        alphas[i+1,i] = 100
 #alphas[170] = 100
@@ -184,11 +189,11 @@ prior_pi = alphas / alphas.sum()
 set state prior (where agent thinks it starts)
 """
 
-state_prior = ar.zeros((ns))
+state_prior = ar.zeros((ns)).to(device)
 
 state_prior[0] = 1.
 
-prior_context = array([1.])
+prior_context = array([1.]).to(device)
 
 #    prior_context[0] = 1.
 
