@@ -87,7 +87,7 @@ utility = []
 #ut = [0.985]
 ut = [0.999]
 for u in ut:
-    utility.append(ar.zeros(nr))
+    utility.append(ar.zeros(nr).to(device))
     for i in range(1,nr):
         utility[-1][i] = u/(nr-1)#u/nr*i
     utility[-1][0] = (1.-u)

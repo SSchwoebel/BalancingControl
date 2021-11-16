@@ -26,13 +26,13 @@ class World(object):
         self.free_parameters = {}
 
         #container for observations
-        self.observations = ar.zeros((self.trials, self.T), dtype = int)
+        self.observations = ar.zeros((self.trials, self.T), dtype = int).to(device)
 
         #container for agents actions
-        self.actions = ar.zeros((self.trials, self.T), dtype = int)
+        self.actions = ar.zeros((self.trials, self.T), dtype = int).to(device)
 
         #container for rewards
-        self.rewards = ar.zeros((self.trials, self.T), dtype = int)
+        self.rewards = ar.zeros((self.trials, self.T), dtype = int).to(device)
 
     def simulate_experiment(self, curr_trials=None):
         """This methods evolves all the states of the world by iterating

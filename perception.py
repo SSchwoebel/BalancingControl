@@ -81,7 +81,7 @@ class FittingPerception(object):
         
         self.npart = self.dec_temp.shape[0]
         
-        self.dirichlet_pol_params_init = ar.zeros((self.npi,self.npart)) + self.alpha_0[None,:].to(device)
+        self.dirichlet_pol_params_init = ar.zeros((self.npi,self.npart)).to(device) + self.alpha_0[None,:].to(device)
         
         self.dirichlet_rew_params = [ar.stack([self.dirichlet_rew_params_init]*self.npart, dim=-1).to(device)]
         self.dirichlet_pol_params = [self.dirichlet_pol_params_init]
@@ -139,7 +139,7 @@ class FittingPerception(object):
         
     def make_current_messages(self, tau, t):
         
-        generative_model_rewards = self.generative_model_rewards[-1]
+        generative_model_rewards = self.generative_model_rewards[-1].to(device)
         
         #obs_messages = ar.zeros((self.nh, self.T)) + 1/self.nh
 
@@ -163,7 +163,7 @@ class FittingPerception(object):
         # rew = prev_rew + [self.prior_rewards.matmul(generative_model_rewards)]*(self.T-t-1)
         # rew_messages = ar.stack(rew).T
         
-        rew_messages = ar.stack([ar.stack([generative_model_rewards[r,:,i] for r in self.rewards[-t-1:]] + [self.prior_rewards.matmul(generative_model_rewards[:,:,i])]*(self.T-t-1)).T.to(device) for i in range(self.npart)], dim=-1).to(device)
+        rew_messages = ar.stack([ar.stack([generative_model_rewards[r,:,i].to(device) for r in self.rewards[-t-1:]] + [self.prior_rewards.matmul(generative_model_rewards[:,:,i].to(device)).to(device)]*(self.T-t-1)).T.to(device) for i in range(self.npart)], dim=-1).to(device)
         #print(rew.shape)
         
         # for i in range(t):
@@ -288,8 +288,8 @@ class FittingPerception(object):
         #estimate expected state distribution
         # if t == 0:
         #     self.instantiate_messages(policies)
-        self.observations.append(observation)
-        self.rewards.append(reward)
+        self.observations.append(observation.to(device))
+        self.rewards.append(reward.to(device))
             
         self.update_messages(tau, t, possible_policies)
         
