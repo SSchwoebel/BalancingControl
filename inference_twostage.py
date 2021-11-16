@@ -49,13 +49,20 @@ class SingleInference(object):
         # sample initial vaue of parameter from Beta distribution
         lamb_r = pyro.sample('lamb_r', dist.Beta(alpha_lamb_r, beta_lamb_r))
         
+        # tell pyro about prior over parameters: alpha and beta of h which is between 0 and 1
+        # alpha = beta = 1 equals uniform prior
+        alpha_h = ar.ones(1)
+        beta_h = ar.ones(1)
+        # sample initial vaue of parameter from Beta distribution
+        h = pyro.sample('h', dist.Beta(alpha_h, beta_h))
+        
         # tell pyro about prior over parameters: decision temperature
         # uniform between 0 and 20??
         concentration_dec_temp = ar.tensor(1.)
         rate_dec_temp = ar.tensor(0.5)
         # sample initial vaue of parameter from normal distribution
         dec_temp = pyro.sample('dec_temp', dist.Gamma(concentration_dec_temp, rate_dec_temp))
-        param_dict = {"pol_lambda": lamb_pi, "r_lambda": lamb_r, "dec_temp": dec_temp}
+        param_dict = {"pol_lambda": lamb_pi, "r_lambda": lamb_r, "h": h, "dec_temp": dec_temp}
         
         self.agent.reset(param_dict)
         #self.agent.set_parameters(pol_lambda=lamb_pi, r_lambda=lamb_r, dec_temp=dec_temp)
@@ -109,6 +116,12 @@ class SingleInference(object):
         # sample initial vaue of parameter from Beta distribution
         lamb_r = pyro.sample('lamb_r', dist.Beta(alpha_lamb_r, beta_lamb_r))
         
+        # tell pyro about posterior over parameters: alpha and beta of lambda which is between 0 and 1
+        alpha_h = pyro.param("alpha_h", ar.ones(1), constraint=ar.distributions.constraints.positive)#greater_than_eq(1.))
+        beta_h = pyro.param("beta_h", ar.ones(1), constraint=ar.distributions.constraints.positive)#greater_than_eq(1.))
+        # sample initial vaue of parameter from Beta distribution
+        h = pyro.sample('h', dist.Beta(alpha_lamb_r, beta_lamb_r))
+        
         # tell pyro about posterior over parameters: mean and std of the decision temperature
         concentration_dec_temp = pyro.param("concentration_dec_temp", ar.ones(1)*3., constraint=ar.distributions.constraints.positive)#interval(0., 7.))
         rate_dec_temp = pyro.param("rate_dec_temp", ar.ones(1), constraint=ar.distributions.constraints.positive)
@@ -117,6 +130,7 @@ class SingleInference(object):
         
         param_dict = {"alpha_lamb_pi": alpha_lamb_pi, "beta_lamb_pi": beta_lamb_pi, "lamb_pi": lamb_pi,
                       "alpha_lamb_r": alpha_lamb_r, "beta_lamb_r": beta_lamb_r, "lamb_r": lamb_r,
+                      "alpha_h": alpha_h, "beta_h": beta_h, "h": h,
                       "concentration_dec_temp": concentration_dec_temp, "rate_dec_temp": rate_dec_temp, "dec_temp": dec_temp}
         #print(param_dict)
         
@@ -149,7 +163,21 @@ class SingleInference(object):
 
         self.loss = loss
         
-        return self.loss
+        alpha_lamb_pi = pyro.param("alpha_lamb_pi").data.numpy()
+        beta_lamb_pi = pyro.param("beta_lamb_pi").data.numpy()
+        alpha_lamb_r = pyro.param("alpha_lamb_r").data.numpy()
+        beta_lamb_r = pyro.param("beta_lamb_r").data.numpy()
+        alpha_h = pyro.param("alpha_lamb_r").data.numpy()
+        beta_h = pyro.param("beta_lamb_r").data.numpy()
+        concentration_dec_temp = pyro.param("concentration_dec_temp").data.numpy()
+        rate_dec_temp = pyro.param("rate_dec_temp").data.numpy()
+        
+        param_dict = {"alpha_lamb_pi": alpha_lamb_pi, "beta_lamb_pi": beta_lamb_pi,
+                      "alpha_lamb_r": alpha_lamb_r, "beta_lamb_r": beta_lamb_r,
+                      "alpha_h": alpha_h, "beta_h": beta_h,
+                      "concentration_dec_temp": concentration_dec_temp, "rate_dec_temp": rate_dec_temp}
+        
+        return self.loss, param_dict
     
     def sample_posteriors(self, num_samples=1000):
         
@@ -202,24 +230,28 @@ class SingleInference(object):
         beta_lamb_pi = pyro.param("beta_lamb_pi").data.numpy()
         alpha_lamb_r = pyro.param("alpha_lamb_r").data.numpy()
         beta_lamb_r = pyro.param("beta_lamb_r").data.numpy()
+        alpha_h = pyro.param("alpha_lamb_r").data.numpy()
+        beta_h = pyro.param("beta_lamb_r").data.numpy()
         concentration_dec_temp = pyro.param("concentration_dec_temp").data.numpy()
         rate_dec_temp = pyro.param("rate_dec_temp").data.numpy()
         
         param_dict = {"alpha_lamb_pi": alpha_lamb_pi, "beta_lamb_pi": beta_lamb_pi,
                       "alpha_lamb_r": alpha_lamb_r, "beta_lamb_r": beta_lamb_r,
+                      "alpha_h": alpha_h, "beta_h": beta_h,
                       "concentration_dec_temp": concentration_dec_temp, "rate_dec_temp": rate_dec_temp}
         
         x_lamb = np.arange(0.01,1.,0.01)
         
         y_lamb_pi = analytical_dists.Beta(x_lamb, alpha_lamb_pi, beta_lamb_pi)
         y_lamb_r = analytical_dists.Beta(x_lamb, alpha_lamb_r, beta_lamb_r)
+        y_h = analytical_dists.Beta(x_lamb, alpha_h, beta_h)
         
         x_dec_temp = np.arange(0.01,10.,0.01)
         
         y_dec_temp = analytical_dists.Gamma(x_dec_temp, concentration=concentration_dec_temp, rate=rate_dec_temp)
         
-        xs = [x_lamb, x_lamb, x_dec_temp]
-        ys = [y_lamb_pi, y_lamb_r, y_dec_temp]
+        xs = [x_lamb, x_lamb, x_lamb, x_dec_temp]
+        ys = [y_lamb_pi, y_lamb_r, y_h, y_dec_temp]
         
         return xs, ys, param_dict
     
@@ -232,10 +264,12 @@ class SingleInference(object):
         
         lamb_pi_name = "$\\lambda_{\\pi}$ as Beta($\\alpha$="+str(param_dict["alpha_lamb_pi"][0])+", $\\beta$="+str(param_dict["beta_lamb_pi"][0])+")"
         lamb_r_name = "$\\lambda_{r}$ as Beta($\\alpha$="+str(param_dict["alpha_lamb_r"][0])+", $\\beta$="+str(param_dict["beta_lamb_r"][0])+")"
+        h_name = "h"
         dec_temp_name = "$\\gamma$ as Gamma(conc="+str(param_dict["concentration_dec_temp"][0])+", rate="+str(param_dict["rate_dec_temp"][0])+")"
-        names = [lamb_pi_name, lamb_r_name, dec_temp_name]
+        names = [lamb_pi_name, lamb_r_name, h_name, dec_temp_name]
         xlabels = ["forgetting rate prior policies: $\\lambda_{\pi}$",
                    "forgetting rate reward probabilities: $\\lambda_{r}$",
+                   "h",
                    "decision temperature: $\\gamma$"]
         #xlims = {"lamb_pi": [0,1], "lamb_r": [0,1], "dec_temp": [0,10]}
         

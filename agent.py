@@ -204,6 +204,8 @@ class FittingAgent(object):
             self.perception.r_lambda = kwargs['r_lambda']
         if 'dec_temp' in kwargs.keys():
             self.perception.dec_temp = kwargs['dec_temp']
+        if 'h' in kwargs.keys():
+            self.perception.alpha_0 = 1./kwargs['h']
 
 class BayesianPlanner(object):
 

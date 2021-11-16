@@ -23,7 +23,7 @@ class FittingPerception(object):
                  prior_rewards,
                  prior_policies,
                  policies,
-                 dirichlet_pol_params = None,
+                 alpha_0 = None,
                  dirichlet_rew_params = None,
                  generative_model_context = None,
                  T=5, trials=10, pol_lambda=0, r_lambda=0, non_decaying=0,
@@ -45,11 +45,12 @@ class FittingPerception(object):
         self.actions = ar.unique(policies)
         self.na = len(self.actions)
         self.npart = npart
+        self.alpha_0 = alpha_0
         self.dirichlet_rew_params_init = dirichlet_rew_params#ar.stack([dirichlet_rew_params]*self.npart, dim=-1)
-        self.dirichlet_pol_params_init = dirichlet_pol_params#ar.stack([dirichlet_pol_params]*self.npart, dim=-1)
+        self.dirichlet_pol_params_init = ar.zeros((self.npi,self.npart)) + self.alpha_0[None,:]#ar.stack([dirichlet_pol_params]*self.npart, dim=-1)
         
         self.dirichlet_rew_params = [ar.stack([self.dirichlet_rew_params_init]*self.npart, dim=-1)]
-        self.dirichlet_pol_params = [ar.stack([self.dirichlet_pol_params_init]*self.npart, dim=-1)]
+        self.dirichlet_pol_params = [self.dirichlet_pol_params_init]
         
         #self.prior_policies_init = self.dirichlet_pol_params[0] / self.dirichlet_pol_params[0].sum(axis=0)[None,...]
         self.prior_policies = [self.dirichlet_pol_params[0] / self.dirichlet_pol_params[0].sum(axis=0)[None,...]]
@@ -78,8 +79,10 @@ class FittingPerception(object):
         
         self.npart = self.dec_temp.shape[0]
         
+        self.dirichlet_pol_params_init = ar.zeros((self.npi,self.npart)) + self.alpha_0[None,:]
+        
         self.dirichlet_rew_params = [ar.stack([self.dirichlet_rew_params_init]*self.npart, dim=-1)]
-        self.dirichlet_pol_params = [ar.stack([self.dirichlet_pol_params_init]*self.npart, dim=-1)]
+        self.dirichlet_pol_params = [self.dirichlet_pol_params_init]
         
         self.prior_policies = [self.dirichlet_pol_params[0] / self.dirichlet_pol_params[0].sum(axis=0)[None,...]]
         
@@ -332,10 +335,10 @@ class FittingPerception(object):
         chosen_pol = ar.argmax(self.posterior_policies[-1], axis=0)
         #print(chosen_pol)
 #        self.dirichlet_pol_params[chosen_pol,:] += posterior_context.sum(axis=0)/posterior_context.sum()
-        dirichlet_pol_params = (1-self.pol_lambda) * self.dirichlet_pol_params[-1] + 1 - (1-self.pol_lambda)
+        dirichlet_pol_params = (1-self.pol_lambda) * self.dirichlet_pol_params[-1] + (1 - (1-self.pol_lambda))*self.dirichlet_pol_params_init
         dirichlet_pol_params[(chosen_pol,list(range(self.npart)))] += 1#posterior_context
         
-        prior_policies = dirichlet_pol_params / dirichlet_pol_params.sum()#ar.exp(scs.digamma(self.dirichlet_pol_params) - scs.digamma(self.dirichlet_pol_params.sum(axis=0))[None,:])
+        prior_policies = dirichlet_pol_params / dirichlet_pol_params.sum(axis=0)[None,...]#ar.exp(scs.digamma(self.dirichlet_pol_params) - scs.digamma(self.dirichlet_pol_params.sum(axis=0))[None,:])
         #prior_policies /= prior_policies.sum(axis=0)[None,:]
         
         self.dirichlet_pol_params.append(dirichlet_pol_params)

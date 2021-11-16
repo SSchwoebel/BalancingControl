@@ -162,6 +162,7 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
     prior_pi = ar.ones(npi)/npi #ar.zeros(npi) + 1e-3/(npi-1)
     #prior_pi[170] = 1. - 1e-3
     alphas = ar.zeros((npi)) + learn_pol
+    alpha_0 = learn_pol
 #    for i in range(nb):
 #        alphas[i+1,i] = 100
     #alphas[170] = 100
@@ -209,12 +210,12 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
 
         agnt = 'bethe'
 
-        pol_par = alphas
+        #pol_par = alphas
 
         # perception
         bayes_prc = prc.FittingPerception(A, B, C_agent, transition_matrix_context, 
                                                state_prior, utility, prior_pi, pol,
-                                               pol_par, C_alphas, T=T, trials=trials,
+                                               alpha_0, C_alphas, T=T, trials=trials,
                                                pol_lambda=pol_lambda, r_lambda=r_lambda,
                                                non_decaying=3, dec_temp=dec_temp)
 
@@ -365,15 +366,16 @@ folder = 'data'
 
 recalc_rho = False
 
-for pl in [0.1]:#[0.1,0.3,0.5,0.7,0.9]:
-    for rl in [0.1]:#[0.1,0.3,0.5,0.7,0.9]:
+for pl in [0.1,0.3,0.5,0.7,0.9]:
+    for rl in [0.1,0.3,0.5,0.7,0.9]:
         # TODO: wht does dt=9 not work?? gives control prob of nan
-        for dt in [5.]:#[1.,3.,5.,7.]:
+        for dt in [1.,3.,5.,7.]:
             
             stayed = []
             indices = []
-            for tendency in [1000]:#[1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
+            for tendency in [1,5,10,50,100]:#[1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
                 print(pl, rl, dt, tendency)
+                tend = array([tendency])
             
                 init = array([0.6, 0.4, 0.6, 0.4])
             
@@ -411,7 +413,7 @@ for pl in [0.1]:#[0.1,0.3,0.5,0.7,0.9]:
             
                 worlds = []
                 l = []
-                learn_pol = tendency
+                learn_pol = tend
                 learn_habit = True
                 pol_lambda = ar.tensor([pl])#0.3
                 r_lambda = ar.tensor([rl])#0.6
@@ -470,7 +472,7 @@ for pl in [0.1]:#[0.1,0.3,0.5,0.7,0.9]:
             
                     stayed.append(stayed_list)
 
-                    run_name = "twostage_agent"+str(i)+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend1.json"
+                    run_name = "twostage_agent"+str(i)+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tendency)+".json"
                     fname = os.path.join(folder, run_name)
                     
                     actions = w.actions.numpy()
@@ -483,10 +485,10 @@ for pl in [0.1]:#[0.1,0.3,0.5,0.7,0.9]:
                     with open(fname, 'w') as outfile:
                         json.dump(pickled, outfile)
             
-                stayed = array(stayed)
+                stayed_arr = array(stayed)
                 
                 plt.figure()
-                g = sns.barplot(data=stayed)
+                g = sns.barplot(data=stayed_arr)
                 g.set_xticklabels(names, rotation=45, horizontalalignment='right', fontsize=16)
                 plt.ylim([0,1])
                 plt.yticks(ar.arange(0,1.1,0.2),fontsize=16)

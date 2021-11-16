@@ -39,12 +39,13 @@ import gc
 
 i = 0
 pl = 0.1
-rl = 0.1
+rl = 0.9
 dt =5.
+tend = 5
 
 folder = "data"
 
-run_name = "twostage_agent"+str(i)+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend1.json"
+run_name = "twostage_agent"+str(i)+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tend)+".json"
 fname = os.path.join(folder, run_name)
 
 jsonpickle_numpy.register_handlers()
@@ -172,6 +173,7 @@ npi = pol.shape[0]
 prior_pi = ar.ones(npi)/npi #ar.zeros(npi) + 1e-3/(npi-1)
 #prior_pi[170] = 1. - 1e-3
 alphas = ar.zeros((npi)) + learn_pol
+alpha_0 = array([learn_pol])
 #    for i in range(nb):
 #        alphas[i+1,i] = 100
 #alphas[170] = 100
@@ -200,7 +202,7 @@ pol_par = alphas
 # perception
 bayes_prc = prc.FittingPerception(A, B, C_agent, transition_matrix_context, 
                                        state_prior, utility, prior_pi, pol,
-                                       pol_par, C_alphas, T=T, trials=trials,
+                                       alpha_0, C_alphas, T=T, trials=trials,
                                        pol_lambda=0, r_lambda=0,
                                        non_decaying=3, dec_temp=1)
 
@@ -222,7 +224,7 @@ agent = agt.FittingAgent(bayes_prc, [], pol,
 
 inferrer = inf.SingleInference(agent, data)
 
-loss = inferrer.infer_posterior(iter_steps=200, num_particles=50)
+loss, param_dict = inferrer.infer_posterior(iter_steps=200, num_particles=50)
 
 plt.figure()
 plt.title("ELBO")
@@ -233,4 +235,5 @@ plt.show()
 
 inferrer.plot_posteriors()
 
-print("this is inference for pl =", pl, "rl =", rl, "dt =", dt)
+print("this is inference for pl =", pl, "rl =", rl, "dt =", dt, "tend=", tend)
+print(param_dict)
