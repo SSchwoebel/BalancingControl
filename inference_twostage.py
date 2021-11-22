@@ -22,7 +22,10 @@ import agent as agt
 import perception as prc
 import action_selection as asl
 
-device = ar.device("cuda") if ar.cuda.is_available() else ar.device("cpu")
+#device = ar.device("cuda") if ar.cuda.is_available() else ar.device("cpu")
+#device = ar.device("cuda")
+device = ar.device("cpu")
+#torch.set_num_threads(4)
 print("Running on device", device)
 
 
@@ -164,7 +167,7 @@ class SingleInference(object):
             if ar.isnan(loss[-1]):
                 break
 
-        self.loss = loss
+        self.loss = [l.cpu() for l in loss]
         
         alpha_lamb_pi = pyro.param("alpha_lamb_pi").data.numpy()
         beta_lamb_pi = pyro.param("beta_lamb_pi").data.numpy()
@@ -229,14 +232,14 @@ class SingleInference(object):
     
     def analytical_posteriors(self):
         
-        alpha_lamb_pi = pyro.param("alpha_lamb_pi").data.numpy()
-        beta_lamb_pi = pyro.param("beta_lamb_pi").data.numpy()
-        alpha_lamb_r = pyro.param("alpha_lamb_r").data.numpy()
-        beta_lamb_r = pyro.param("beta_lamb_r").data.numpy()
-        alpha_h = pyro.param("alpha_lamb_r").data.numpy()
-        beta_h = pyro.param("beta_lamb_r").data.numpy()
-        concentration_dec_temp = pyro.param("concentration_dec_temp").data.numpy()
-        rate_dec_temp = pyro.param("rate_dec_temp").data.numpy()
+        alpha_lamb_pi = pyro.param("alpha_lamb_pi").data.cpu().numpy()
+        beta_lamb_pi = pyro.param("beta_lamb_pi").data.cpu().numpy()
+        alpha_lamb_r = pyro.param("alpha_lamb_r").data.cpu().numpy()
+        beta_lamb_r = pyro.param("beta_lamb_r").data.cpu().numpy()
+        alpha_h = pyro.param("alpha_lamb_r").data.cpu().numpy()
+        beta_h = pyro.param("beta_lamb_r").data.cpu().numpy()
+        concentration_dec_temp = pyro.param("concentration_dec_temp").data.cpu().numpy()
+        rate_dec_temp = pyro.param("rate_dec_temp").data.cpu().numpy()
         
         param_dict = {"alpha_lamb_pi": alpha_lamb_pi, "beta_lamb_pi": beta_lamb_pi,
                       "alpha_lamb_r": alpha_lamb_r, "beta_lamb_r": beta_lamb_r,

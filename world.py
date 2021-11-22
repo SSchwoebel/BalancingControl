@@ -13,6 +13,12 @@ else:
     array = ar.tensor
 from misc import ln
 
+#device = ar.device("cuda") if ar.cuda.is_available() else ar.device("cpu")
+#device = ar.device("cuda")
+#device = ar.device("cpu")
+
+from inference_twostage import device
+
 class World(object):
 
     def __init__(self, environment, agent, trials = 1, T = 10):

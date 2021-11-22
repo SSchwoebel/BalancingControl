@@ -33,7 +33,11 @@ import scipy.signal as ss
 import bottleneck as bn
 import gc
 
-device = ar.device("cuda") if ar.cuda.is_available() else ar.device("cpu")
+#device = ar.device("cuda") if ar.cuda.is_available() else ar.device("cpu")
+#device = ar.device("cuda")
+#device = ar.device("cpu")
+
+from inference_twostage import device
 
 #ar.autograd.set_detect_anomaly(True)
 ###################################
@@ -229,7 +233,7 @@ agent = agt.FittingAgent(bayes_prc, [], pol,
 
 inferrer = inf.SingleInference(agent, data)
 
-loss, param_dict = inferrer.infer_posterior(iter_steps=200, num_particles=50)
+loss, param_dict = inferrer.infer_posterior(iter_steps=200, num_particles=200)
 
 plt.figure()
 plt.title("ELBO")
@@ -241,4 +245,4 @@ plt.show()
 inferrer.plot_posteriors()
 
 print("this is inference for pl =", pl, "rl =", rl, "dt =", dt, "tend=", tend)
-print(param_dict)
+# print(param_dict)

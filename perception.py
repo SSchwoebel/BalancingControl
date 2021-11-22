@@ -12,7 +12,11 @@ import scipy.special as scs
 from misc import D_KL_nd_dirichlet, D_KL_dirichlet_categorical
 from opt_einsum import contract
 
-device = ar.device("cuda") if ar.cuda.is_available() else ar.device("cpu")
+#device = ar.device("cuda") if ar.cuda.is_available() else ar.device("cpu")
+#device = ar.device("cuda")
+#device = ar.device("cpu")
+
+from inference_twostage import device
 
 
 class FittingPerception(object):

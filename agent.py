@@ -12,7 +12,11 @@ from perception import HierarchicalPerception
 from misc import ln, softmax, own_logical_and
 import scipy.special as scs
 
-device = ar.device("cuda") if ar.cuda.is_available() else ar.device("cpu")
+#device = ar.device("cuda") if ar.cuda.is_available() else ar.device("cpu")
+#device = ar.device("cuda")
+#device = ar.device("cpu")
+
+from inference_twostage import device
 
 class FittingAgent(object):
 
