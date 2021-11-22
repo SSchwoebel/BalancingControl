@@ -16,7 +16,10 @@ from opt_einsum import contract
 #device = ar.device("cuda")
 #device = ar.device("cpu")
 
-from inference_twostage import device
+try:
+    from inference_twostage import device
+except:
+    device = ar.device("cpu")
 
 
 class FittingPerception(object):

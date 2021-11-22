@@ -16,7 +16,10 @@ import scipy.special as scs
 #device = ar.device("cuda")
 #device = ar.device("cpu")
 
-from inference_twostage import device
+try:
+    from inference_twostage import device
+except:
+    device = ar.device("cpu")
 
 class FittingAgent(object):
 
