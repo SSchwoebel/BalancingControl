@@ -36,7 +36,7 @@ run function
 
 def run_agent(par_list, trials, T, ns, na, nr, nc, f, contexts, states, flankers, \
               state_trans=None, correct_choice=None, congruent=None, pol_lambda=0, \
-              r_lambda=0):
+              r_lambda=0, learn_habit=True):
     #set parameters:
     #learn_pol: initial concentration paramter for policy prior
     #trans_prob: reward probability
@@ -49,7 +49,6 @@ def run_agent(par_list, trials, T, ns, na, nr, nc, f, contexts, states, flankers
     """
     create matrices
     """
-
 
     #generating probability of observations in each state
     A = np.eye(ns)
@@ -96,13 +95,20 @@ def run_agent(par_list, trials, T, ns, na, nr, nc, f, contexts, states, flankers
         transition_matrix_context = np.array([[1]])
 
     # context observation matrix
+        
+    D = np.zeros((2,2)) + unc
+    for c in range(2):
+        D[c,c] = 1-(unc*(2-1))
 
     if nc > 1:
-        D = np.zeros((nc,nc)) + unc
+        # D = np.zeros((nc,nc)) + unc
+        # for c in range(nc):
+        #     D[c,c] = 1-(unc*(nc-1))
+        D_agent = np.zeros((nc,nc)) + unc
         for c in range(nc):
-            D[c,c] = 1-(unc*(nc-1))
+            D_agent[c,c] = 1-(unc*(nc-1))
     else:
-        D = np.array([[1]])
+        D_agent = np.array([[1]])
 
     """
     create environment (grid world)
@@ -125,7 +131,8 @@ def run_agent(par_list, trials, T, ns, na, nr, nc, f, contexts, states, flankers
     # concentration parameters
     alphas = np.zeros((npi, nc)) + learn_pol
     alphas[:,0] = [learn_pol,1]#[10*learn_pol,learn_pol]
-    alphas[:,1] = [1,learn_pol]#[learn_pol,10*learn_pol]
+    if nc>1:
+        alphas[:,1] = [1,learn_pol]#[learn_pol,10*learn_pol]
 
     prior_pi = alphas / alphas.sum(axis=0)
 
@@ -161,7 +168,7 @@ def run_agent(par_list, trials, T, ns, na, nr, nc, f, contexts, states, flankers
     # perception
     bayes_prc = prc.HierarchicalPerception(A, B, C_agent, transition_matrix_context, 
                                       state_prior, utility, prior_pi, alphas, 
-                                      C_alphas, T=T, generative_model_context=D, 
+                                      C_alphas, T=T, generative_model_context=D_agent, 
                                       pol_lambda=pol_lambda, r_lambda=r_lambda,
                                         non_decaying=4)
 
@@ -172,7 +179,7 @@ def run_agent(par_list, trials, T, ns, na, nr, nc, f, contexts, states, flankers
                       prior_policies = prior_pi,
                       number_of_states = ns,
                       prior_context = prior_context,
-                      learn_habit = True,
+                      learn_habit = learn_habit,
                       learn_rew = True,
                       #save_everything = True,
                       number_of_policies = npi,
@@ -234,7 +241,7 @@ def run_flanker_simulations(repetitions, folder):
                     prefix += "beta_"
                 else:
                     prefix += ""
-                run_name = "flanker_"+prefix+"h"+str(int(tendency))+"_t"+str(trans)+"_u"+str(unc)+"_f"+str(f)+"_ut"+str(u)+"_test.json"
+                run_name = "flanker_"+prefix+"h"+str(int(tendency))+"_t"+str(trans)+"_u"+str(unc)+"_f"+str(f)+"_ut"+str(u)+".json"
                 fname = os.path.join(folder, run_name)
                 
                 jsonpickle_numpy.register_handlers()
@@ -313,15 +320,368 @@ def run_flanker_simulations(repetitions, folder):
                 worlds = 0
 
                 gc.collect()
+                
+def run_learningknockout_flanker_simulations(repetitions, folder):
+
+    trials = 100
+    T = 2
+    ns = 6
+    na = 2
+    nr = 2
+    nc = 2
+    u = 0.99
+    utility = np.array([1-u,u])
+    f = 3.5
+    pol_lambda = 0.1
+    r_lambda = 0
+
+    Rho = np.zeros((trials, nr, ns))
+
+    for tendency in [100]:#[1,10,100,250,1000]:#[1,10,25,50,75,100, 250,1000]:#,3,5,10,30,50,100]: #1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
+        for trans in [90]:#[95,96,97,98,99]
+            for unc in [0.2]:#[0,0.1,0.3,0.5,0.7,1,5,10]:#[0.1,1,5,10]:#[0,0.1,0.5,1,2,3,4,5,6,8,10]:
+                print(tendency, trans, unc)
+
+                # Rho[:], contexts, states, state_trans, correct_choice, congruent, num_in_run = \
+                #     switching_timeseries(trials, nr=nr, ns=ns, na=na, nc=nc, stable_length=5)
+
+                # plt.figure()
+                # plt.plot(Rho[:,2,2])
+                # plt.plot(Rho[:,1,1])
+                # plt.show()
+                if pol_lambda>0:
+                    prefix = "alpha_"
+                else:
+                    prefix = ""
+                if r_lambda > 0:
+                    prefix += "beta_"
+                else:
+                    prefix += ""
+                run_name = "flanker_"+prefix+"h"+str(int(tendency))+"_t"+str(trans)+"_u"+str(unc)+"_f"+str(f)+"_ut"+str(u)+"_learningknockout.json"
+                print(run_name)
+                fname = os.path.join(folder, run_name)
+                
+                jsonpickle_numpy.register_handlers()
+
+                if run_name in os.listdir(folder):
+                    with open(fname, 'r') as infile:
+                        data = json.load(infile)
+
+                    worlds = pickle.decode(data)
+                    print(len(worlds))
+                    num_w_old = len(worlds)
+                else:
+                    worlds = []
+                    num_w_old = 0
+
+                learn_pol = tendency
+                parameters = [learn_pol, trans/100., Rho, utility, unc/100.]
+
+                for i in range(num_w_old, repetitions):
+                    Rho[:], states, flankers, contexts, state_trans, correct_choice, congruent = \
+                    flanker_timeseries(trials, nr=nr, ns=ns, na=na, nc=nc)
+                    worlds.append(run_agent(parameters, trials, T, ns, na, nr, nc,\
+                                            f, contexts, states, flankers, \
+                                            state_trans=state_trans, \
+                                            correct_choice=correct_choice, \
+                                            congruent=congruent, \
+                                            pol_lambda = pol_lambda,\
+                                            r_lambda = r_lambda, learn_habit=False))
+                    w = worlds[-1]
+                    print("============")
+                    print(w.agent.perception.generative_model_rewards[:,:,0])
+                    print(w.agent.perception.generative_model_rewards[:,:,1])
+                    print("===")
+                    print(w.agent.prior_policies[-1])
+                    choices = w.actions[:,0]
+                    correct = (choices == w.environment.correct_choice).sum()
+                    print("percent correct:", correct/trials)
+                    correct_cong = (choices[w.environment.congruent==1] == w.environment.correct_choice[w.environment.congruent==1]).sum()
+                    print("percent correct congruent:", correct_cong/(w.environment.congruent==1).sum())
+                    correct_incong = (choices[w.environment.congruent==0] == w.environment.correct_choice[w.environment.congruent==0]).sum()
+                    print("percent correct incongruent:", correct_incong/(w.environment.congruent==0).sum())
+                    RTs = w.agent.action_selection.RT[:,0]
+                    RT_cong = np.median(RTs[w.environment.congruent==1])
+                    RT_incong = np.median(RTs[w.environment.congruent==0])
+                    print("congruent RT:", RT_cong)
+                    print("incongruent RT:", RT_incong)
+                    # plt.figure()
+                    # post_pol = np.einsum('tpc,tc->tp', w.agent.posterior_policies[:,0,:,:], w.agent.posterior_context[:,0,:])
+                    # like = np.einsum('tpc,tc->tp', w.agent.likelihood[:,0,:,:], w.agent.posterior_context[:,0,:])
+                    # plt.plot(post_pol[:,1], '.')
+                    # plt.plot(like[:,1], 'x')
+                    # plt.ylim([0,1])
+                    # plt.show()
+                    # plt.figure()
+                    # plt.plot(w.agent.action_selection.RT[:,0], '.')_test
+                    # #plt.plot(Rho[:,2,2])
+                    # #plt.plot(Rho[:,1,1])
+                    # #plt.ylim([ESS*10,2000])
+                    # plt.ylim([0,2000])
+                    # plt.savefig("Dir_h"+str(int(learn_pol))+"_RT_timecourse"+str(i)+".svg")#"ESS"+str(ESS)+"_h"+str(int(learn_pol))+"_RT_timecourse"+str(i)+".svg")#
+                    # plt.show()
+                    # plt.figure()
+                    # plt.hist(w.agent.action_selection.RT[:,0])
+                    # plt.savefig("uncertain_Dir_h"+str(int(learn_pol))+"_RT_hist"+str(i)+"_1000trials.svg")#"ESS"+str(ESS)+"_h"+str(int(learn_pol))+"_RT_hist"+str(i)+".svg")#
+                    # plt.show()
+                    # plt.figure()
+                    # plt.plot(w.agent.posterior_context[:,0,:], 'x')
+                    # plt.show()
+
+                jsonpickle_numpy.register_handlers()
+                pickled = pickle.encode(worlds)
+                with open(fname, 'w') as outfile:
+                    json.dump(pickled, outfile)
+
+                pickled = 0
+                worlds = 0
+
+                gc.collect()
+                
+                
+def run_priorknockout_flanker_simulations(repetitions, folder):
+
+    trials = 100
+    T = 2
+    ns = 6
+    na = 2
+    nr = 2
+    nc = 2
+    u = 0.99
+    utility = np.array([1-u,u])
+    f = 3.5
+    pol_lambda = 0.1
+    r_lambda = 0
+
+    Rho = np.zeros((trials, nr, ns))
+
+    for tendency in [1]:#[1,10,100,250,1000]:#[1,10,25,50,75,100, 250,1000]:#,3,5,10,30,50,100]: #1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
+        for trans in [90]:#[95,96,97,98,99]
+            for unc in [0.2]:#[0,0.1,0.3,0.5,0.7,1,5,10]:#[0.1,1,5,10]:#[0,0.1,0.5,1,2,3,4,5,6,8,10]:
+                print(tendency, trans, unc)
+
+                # Rho[:], contexts, states, state_trans, correct_choice, congruent, num_in_run = \
+                #     switching_timeseries(trials, nr=nr, ns=ns, na=na, nc=nc, stable_length=5)
+
+                # plt.figure()
+                # plt.plot(Rho[:,2,2])
+                # plt.plot(Rho[:,1,1])
+                # plt.show()
+                if pol_lambda>0:
+                    prefix = "alpha_"
+                else:
+                    prefix = ""
+                if r_lambda > 0:
+                    prefix += "beta_"
+                else:
+                    prefix += ""
+                run_name = "flanker_"+prefix+"h"+str(int(tendency))+"_t"+str(trans)+"_u"+str(unc)+"_f"+str(f)+"_ut"+str(u)+"_priorknockout.json"
+                
+                fname = os.path.join(folder, run_name)
+                print(fname)
+                jsonpickle_numpy.register_handlers()
+
+                if run_name in os.listdir(folder):
+                    with open(fname, 'r') as infile:
+                        data = json.load(infile)
+
+                    worlds = pickle.decode(data)
+                    print(len(worlds))
+                    num_w_old = len(worlds)
+                else:
+                    worlds = []
+                    num_w_old = 0
+
+                learn_pol = tendency
+                parameters = [learn_pol, trans/100., Rho, utility, unc/100.]
+
+                for i in range(num_w_old, repetitions):
+                    Rho[:], states, flankers, contexts, state_trans, correct_choice, congruent = \
+                    flanker_timeseries(trials, nr=nr, ns=ns, na=na, nc=nc)
+                    worlds.append(run_agent(parameters, trials, T, ns, na, nr, nc,\
+                                            f, contexts, states, flankers, \
+                                            state_trans=state_trans, \
+                                            correct_choice=correct_choice, \
+                                            congruent=congruent, \
+                                            pol_lambda = pol_lambda,\
+                                            r_lambda = r_lambda, learn_habit=False))
+                    w = worlds[-1]
+                    print("============")
+                    print(w.agent.perception.generative_model_rewards[:,:,0])
+                    print(w.agent.perception.generative_model_rewards[:,:,1])
+                    print("===")
+                    print(w.agent.prior_policies[-1])
+                    choices = w.actions[:,0]
+                    correct = (choices == w.environment.correct_choice).sum()
+                    print("percent correct:", correct/trials)
+                    correct_cong = (choices[w.environment.congruent==1] == w.environment.correct_choice[w.environment.congruent==1]).sum()
+                    print("percent correct congruent:", correct_cong/(w.environment.congruent==1).sum())
+                    correct_incong = (choices[w.environment.congruent==0] == w.environment.correct_choice[w.environment.congruent==0]).sum()
+                    print("percent correct incongruent:", correct_incong/(w.environment.congruent==0).sum())
+                    RTs = w.agent.action_selection.RT[:,0]
+                    RT_cong = np.median(RTs[w.environment.congruent==1])
+                    RT_incong = np.median(RTs[w.environment.congruent==0])
+                    print("congruent RT:", RT_cong)
+                    print("incongruent RT:", RT_incong)
+                    # plt.figure()
+                    # post_pol = np.einsum('tpc,tc->tp', w.agent.posterior_policies[:,0,:,:], w.agent.posterior_context[:,0,:])
+                    # like = np.einsum('tpc,tc->tp', w.agent.likelihood[:,0,:,:], w.agent.posterior_context[:,0,:])
+                    # plt.plot(post_pol[:,1], '.')
+                    # plt.plot(like[:,1], 'x')
+                    # plt.ylim([0,1])
+                    # plt.show()
+                    # plt.figure()
+                    # plt.plot(w.agent.action_selection.RT[:,0], '.')_test
+                    # #plt.plot(Rho[:,2,2])
+                    # #plt.plot(Rho[:,1,1])
+                    # #plt.ylim([ESS*10,2000])
+                    # plt.ylim([0,2000])
+                    # plt.savefig("Dir_h"+str(int(learn_pol))+"_RT_timecourse"+str(i)+".svg")#"ESS"+str(ESS)+"_h"+str(int(learn_pol))+"_RT_timecourse"+str(i)+".svg")#
+                    # plt.show()
+                    # plt.figure()
+                    # plt.hist(w.agent.action_selection.RT[:,0])
+                    # plt.savefig("uncertain_Dir_h"+str(int(learn_pol))+"_RT_hist"+str(i)+"_1000trials.svg")#"ESS"+str(ESS)+"_h"+str(int(learn_pol))+"_RT_hist"+str(i)+".svg")#
+                    # plt.show()
+                    # plt.figure()
+                    # plt.plot(w.agent.posterior_context[:,0,:], 'x')
+                    # plt.show()
+
+                jsonpickle_numpy.register_handlers()
+                pickled = pickle.encode(worlds)
+                with open(fname, 'w') as outfile:
+                    json.dump(pickled, outfile)
+
+                pickled = 0
+                worlds = 0
+
+                gc.collect()
+                
+                
+def run_contextknockout_flanker_simulations(repetitions, folder):
+
+    trials = 100
+    T = 2
+    ns = 6
+    na = 2
+    nr = 2
+    nc = 2
+    u = 0.99
+    utility = np.array([1-u,u])
+    f = 3.5
+    pol_lambda = 0.1
+    r_lambda = 0
+
+    Rho = np.zeros((trials, nr, ns))
+
+    for tendency in [1]:#[1,10,100,250,1000]:#[1,10,25,50,75,100, 250,1000]:#,3,5,10,30,50,100]: #1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
+        for trans in [90]:#[95,96,97,98,99]
+            for unc in [0.2]:#[0,0.1,0.3,0.5,0.7,1,5,10]:#[0.1,1,5,10]:#[0,0.1,0.5,1,2,3,4,5,6,8,10]:
+                print(tendency, trans, unc)
+
+                # Rho[:], contexts, states, state_trans, correct_choice, congruent, num_in_run = \
+                #     switching_timeseries(trials, nr=nr, ns=ns, na=na, nc=nc, stable_length=5)
+
+                # plt.figure()
+                # plt.plot(Rho[:,2,2])
+                # plt.plot(Rho[:,1,1])
+                # plt.show()
+                if pol_lambda>0:
+                    prefix = "alpha_"
+                else:
+                    prefix = ""
+                if r_lambda > 0:
+                    prefix += "beta_"
+                else:
+                    prefix += ""
+                run_name = "flanker_"+prefix+"h"+str(int(tendency))+"_t"+str(trans)+"_u"+str(unc)+"_f"+str(f)+"_ut"+str(u)+"_contextknockout.json"
+                
+                fname = os.path.join(folder, run_name)
+                print(fname)
+                jsonpickle_numpy.register_handlers()
+
+                if run_name in os.listdir(folder):
+                    with open(fname, 'r') as infile:
+                        data = json.load(infile)
+
+                    worlds = pickle.decode(data)
+                    print(len(worlds))
+                    num_w_old = len(worlds)
+                else:
+                    worlds = []
+                    num_w_old = 0
+
+                learn_pol = tendency
+                parameters = [learn_pol, trans/100., Rho, utility, unc/100.]
+
+                for i in range(num_w_old, repetitions):
+                    Rho[:], states, flankers, contexts, state_trans, correct_choice, congruent = \
+                    flanker_timeseries(trials, nr=nr, ns=ns, na=na, nc=nc)
+                    worlds.append(run_agent(parameters, trials, T, ns, na, nr, 1,\
+                                            f, contexts, states, flankers, \
+                                            state_trans=state_trans, \
+                                            correct_choice=correct_choice, \
+                                            congruent=congruent, \
+                                            pol_lambda = pol_lambda,\
+                                            r_lambda = r_lambda, learn_habit=False))
+                    w = worlds[-1]
+                    print("============")
+                    print(w.agent.perception.generative_model_rewards[:,:,0])
+                    #print(w.agent.perception.generative_model_rewards[:,:,1])
+                    print("===")
+                    print(w.agent.prior_policies[-1])
+                    choices = w.actions[:,0]
+                    correct = (choices == w.environment.correct_choice).sum()
+                    print("percent correct:", correct/trials)
+                    correct_cong = (choices[w.environment.congruent==1] == w.environment.correct_choice[w.environment.congruent==1]).sum()
+                    print("percent correct congruent:", correct_cong/(w.environment.congruent==1).sum())
+                    correct_incong = (choices[w.environment.congruent==0] == w.environment.correct_choice[w.environment.congruent==0]).sum()
+                    print("percent correct incongruent:", correct_incong/(w.environment.congruent==0).sum())
+                    RTs = w.agent.action_selection.RT[:,0]
+                    RT_cong = np.median(RTs[w.environment.congruent==1])
+                    RT_incong = np.median(RTs[w.environment.congruent==0])
+                    print("congruent RT:", RT_cong)
+                    print("incongruent RT:", RT_incong)
+                    # plt.figure()
+                    # post_pol = np.einsum('tpc,tc->tp', w.agent.posterior_policies[:,0,:,:], w.agent.posterior_context[:,0,:])
+                    # like = np.einsum('tpc,tc->tp', w.agent.likelihood[:,0,:,:], w.agent.posterior_context[:,0,:])
+                    # plt.plot(post_pol[:,1], '.')
+                    # plt.plot(like[:,1], 'x')
+                    # plt.ylim([0,1])
+                    # plt.show()
+                    # plt.figure()
+                    # plt.plot(w.agent.action_selection.RT[:,0], '.')_test
+                    # #plt.plot(Rho[:,2,2])
+                    # #plt.plot(Rho[:,1,1])
+                    # #plt.ylim([ESS*10,2000])
+                    # plt.ylim([0,2000])
+                    # plt.savefig("Dir_h"+str(int(learn_pol))+"_RT_timecourse"+str(i)+".svg")#"ESS"+str(ESS)+"_h"+str(int(learn_pol))+"_RT_timecourse"+str(i)+".svg")#
+                    # plt.show()
+                    # plt.figure()
+                    # plt.hist(w.agent.action_selection.RT[:,0])
+                    # plt.savefig("uncertain_Dir_h"+str(int(learn_pol))+"_RT_hist"+str(i)+"_1000trials.svg")#"ESS"+str(ESS)+"_h"+str(int(learn_pol))+"_RT_hist"+str(i)+".svg")#
+                    # plt.show()
+                    # plt.figure()
+                    # plt.plot(w.agent.posterior_context[:,0,:], 'x')
+                    # plt.show()
+
+                jsonpickle_numpy.register_handlers()
+                pickled = pickle.encode(worlds)
+                with open(fname, 'w') as outfile:
+                    json.dump(pickled, outfile)
+
+                pickled = 0
+                worlds = 0
+
+                gc.collect()
 
 
 
 def analyze_flanker_simulations(folder):
 
-    tendencies = [1,10,100, 250]#[1,10,25,50,75,100, 250,1000]#1,10,100,
+    tendencies = [1,10,100, 250]#[1,10,25,50,75,100, 250,1000]#1,10,100,100
     probs = [90,95,99]
     uncertainties = [0,0.1,0.2,0.3,0.5,0.7,1,5,10]#,15,20]
-    run_name = "flanker_alpha_h"+str(int(tendencies[0]))+"_t"+str(probs[0])+"_u"+str(uncertainties[0])+"_f3.5_ut0.99_test.json"
+    run_name = "flanker_alpha_h"+str(int(tendencies[0]))+"_t"+str(probs[0])+"_u"+str(uncertainties[0])+"_f3.5_ut0.99.json"
     fname = os.path.join(folder, run_name)
 
     jsonpickle_numpy.register_handlers()
@@ -357,7 +717,7 @@ def analyze_flanker_simulations(folder):
             for unc in uncertainties:
                 print(tendency, trans, unc)
 
-                run_name = "flanker_alpha_h"+str(int(tendency))+"_t"+str(trans)+"_u"+str(unc)+"_f3.5_ut0.99_test.json"
+                run_name = "flanker_alpha_h"+str(int(tendency))+"_t"+str(trans)+"_u"+str(unc)+"_f3.5_ut0.99.json"
                 fname = os.path.join(folder, run_name)
 
                 jsonpickle_numpy.register_handlers()
@@ -371,7 +731,7 @@ def analyze_flanker_simulations(folder):
                 trials = worlds_old[0].trials
 
                 offset = sim_type*repetitions*trials
-
+                
                 for i in range(repetitions):
                     w = worlds_old[i]
                     correct[offset+i*trials:offset+(i+1)*trials] = (w.actions[:,0] == w.environment.correct_choice).astype(int)
@@ -448,7 +808,7 @@ def analyze_flanker_simulations(folder):
     # gratton
     plt.figure(figsize=(4,5))
     palette = [(0,0,0), (0,0,0)]
-    #plt.title("tendency "+str(tendency)+", trans "+str(trans)+", unc "+str(unc))
+    #plt.title("tendency "+str(tendency)+", trans "+str(100trans)+", unc "+str(unc))
     sns.lineplot(x='prev_cong', y='RT', data=data.query('tendencies==@tendency and trans_probs==@trans and uncertainty==@unc and trial_num>0'), style='congruent', hue='congruent', ci = 95, estimator=np.nanmean, linewidth=3, markers=True, markersize=12, palette=palette)
     #plt.ylim([200,1000])
     plt.xticks([0,1], labels=["CON", "INC"], fontsize=16)
@@ -477,6 +837,357 @@ def analyze_flanker_simulations(folder):
     return data, bin_size
 
 
+def analyze_flanker_knockout(folder):
+
+    tendencies = [1]#[1,10,25,50,75,100, 250,1000]#1,10,100,100
+    probs = [90]
+    uncertainties = [0.2]#,15,20]
+    run_name = "flanker_alpha_h"+str(int(tendencies[0]))+"_t"+str(probs[0])+"_u"+str(uncertainties[0])+"_f3.5_ut0.99_priorknockout.json"
+    fname = os.path.join(folder, run_name)
+
+    jsonpickle_numpy.register_handlers()
+
+    with open(fname, 'r') as infile:
+        data = json.load(infile)
+
+    worlds_old = pickle.decode(data)
+    print(len(worlds_old))
+
+    repetitions = len(worlds_old)
+    trials = worlds_old[0].trials
+    num_types = len(tendencies)*len(probs)*len(uncertainties)
+    correct = np.zeros(repetitions*trials*num_types)
+    RT = np.zeros(repetitions*trials*num_types)
+    agent = np.zeros(repetitions*trials*num_types)
+    congruent = np.zeros(repetitions*trials*num_types)
+    trial_num = np.zeros(repetitions*trials*num_types)
+    epoch = np.zeros(repetitions*trials*num_types)
+    tend_arr = np.zeros(repetitions*trials*num_types)
+    prob_arr = np.zeros(repetitions*trials*num_types)
+    unc_arr  = np.zeros(repetitions*trials*num_types)
+    binned_RT = np.zeros(repetitions*trials*num_types)
+    prev_congruent = np.zeros(repetitions*trials*num_types) - 1
+    non_dec_time = 100
+
+    bin_size = 250
+    t_s = 0.2
+
+    sim_type = 0
+    for tendency in tendencies:#,3,5,10,30,50,100]: #1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
+        for trans in probs:#[100,99,98,97,96,95,94]:
+            for unc in uncertainties:
+                print(tendency, trans, unc)
+
+                run_name = "flanker_alpha_h"+str(int(tendency))+"_t"+str(trans)+"_u"+str(unc)+"_f3.5_ut0.99_priorknockout.json"
+                fname = os.path.join(folder, run_name)
+
+                jsonpickle_numpy.register_handlers()
+
+                with open(fname, 'r') as infile:
+                    data = json.load(infile)
+
+                worlds_old = pickle.decode(data)
+
+                repetitions = len(worlds_old)
+                trials = worlds_old[0].trials
+
+                offset = sim_type*repetitions*trials
+                
+                for i in range(repetitions):
+                    w = worlds_old[i]
+                    correct[offset+i*trials:offset+(i+1)*trials] = (w.actions[:,0] == w.environment.correct_choice).astype(int)
+                    RT[offset+i*trials:offset+(i+1)*trials] = t_s*w.agent.action_selection.RT[:,0] + non_dec_time
+                    agent[offset+i*trials:offset+(i+1)*trials] = i
+                    congruent[offset+i*trials:offset+(i+1)*trials] = np.logical_not(w.environment.congruent)
+                    trial_num[offset+i*trials:offset+(i+1)*trials] = np.arange(0,trials)
+                    epoch[offset+i*trials:offset+(i+1)*trials] = [-1]*10 + [0]*20 + [1]*20 + [2]*20 + [3]*(trials-70)
+                    tend_arr[offset+i*trials:offset+(i+1)*trials] = tendency
+                    prob_arr[offset+i*trials:offset+(i+1)*trials] = trans
+                    unc_arr[offset+i*trials:offset+(i+1)*trials] = unc#/100
+                    binned_RT[offset+i*trials:offset+(i+1)*trials] = t_s*(bin_size//2 + bin_size*(w.agent.action_selection.RT[:,0]//bin_size)) +non_dec_time
+                    prev_congruent[offset+i*trials:offset+(i+1)*trials][1:] = congruent[offset+i*trials:offset+(i+1)*trials][:-1]
+
+                sim_type+=1
+
+    data_dict = {"correct": correct, "RT": RT, "agent": agent,
+                  "congruent": congruent, "binned_RT": binned_RT,
+                  "trial_num": trial_num, "epoch": epoch,
+                  "uncertainty": unc_arr, "tendencies": tend_arr,
+                  "trans_probs": prob_arr, "prev_cong": prev_congruent}
+    data = pd.DataFrame(data_dict)
+
+    # plt.figure()
+    # for i in range(0,3):
+    #     sns.lineplot(x='num_in_run', y='RT', data=data.query('epoch == @i'), style='congruent', label=str(i), ci = 95, estimator=np.nanmean, linewidth=3)
+    # plt.show()
+    tendency=1
+    trans=90
+    unc=0.2
+    cutoff = non_dec_time + 800#non_dec_time + 500#5000#2*500
+
+    # accuracy
+    plt.figure()
+    #plt.title("tendency "+str(tendency)+", trans "+str(trans)+", unc "+str(unc))
+    plt.title("priorknockout")
+    sns.lineplot(x='binned_RT', y='correct', data=data.query('tendencies==@tendency and trans_probs==@trans and uncertainty==@unc and binned_RT<=@cutoff'), style='congruent', ci = 95, estimator=np.nanmean, linewidth=3)
+    #plt.plot([0+bin_size,cutoff-bin_size], [0.5,0.5], '--', color='grey', alpha=0.5)
+    #plt.ylim([0,1.05])
+    plt.yticks(fontsize=16)
+    plt.xticks(fontsize=16)
+    plt.xlabel("RT", fontsize=16)
+    plt.ylabel("Prop correct", fontsize=16)
+    plt.savefig("accuracy_priorknockout.svg")
+    plt.show()
+
+    # gratton
+    plt.figure(figsize=(4,5))
+    palette = [(0,0,0), (0,0,0)]
+    #plt.title("tendency "+str(tendency)+", trans "+str(100trans)+", unc "+str(unc))
+    plt.title("priorknockout")
+    sns.lineplot(x='prev_cong', y='RT', data=data.query('tendencies==@tendency and trans_probs==@trans and uncertainty==@unc and trial_num>0'), style='congruent', hue='congruent', ci = 95, estimator=np.nanmean, linewidth=3, markers=True, markersize=12, palette=palette)
+    #plt.ylim([200,1000])
+    plt.xticks([0,1], labels=["CON", "INC"], fontsize=16)
+    plt.yticks(fontsize=16)
+    plt.xlim([-0.25,1.25])
+    plt.ylim([0,800])
+    plt.xlabel("Previous trial type", fontsize=16)
+    plt.ylabel("RT", fontsize=16)
+    plt.savefig("gratton_priorknockout.svg")
+    plt.show()
+    
+    tendencies = [100]#[1,10,25,50,75,100, 250,1000]#1,10,100,100
+    probs = [90]
+    uncertainties = [0.2]#,15,20]
+    run_name = "flanker_alpha_h"+str(int(tendencies[0]))+"_t"+str(probs[0])+"_u"+str(uncertainties[0])+"_f3.5_ut0.99_learningknockout.json"
+    fname = os.path.join(folder, run_name)
+
+    jsonpickle_numpy.register_handlers()
+
+    with open(fname, 'r') as infile:
+        data = json.load(infile)
+
+    worlds_old = pickle.decode(data)
+    print(len(worlds_old))
+
+    repetitions = len(worlds_old)
+    trials = worlds_old[0].trials
+    num_types = len(tendencies)*len(probs)*len(uncertainties)
+    correct = np.zeros(repetitions*trials*num_types)
+    RT = np.zeros(repetitions*trials*num_types)
+    agent = np.zeros(repetitions*trials*num_types)
+    congruent = np.zeros(repetitions*trials*num_types)
+    trial_num = np.zeros(repetitions*trials*num_types)
+    epoch = np.zeros(repetitions*trials*num_types)
+    tend_arr = np.zeros(repetitions*trials*num_types)
+    prob_arr = np.zeros(repetitions*trials*num_types)
+    unc_arr  = np.zeros(repetitions*trials*num_types)
+    binned_RT = np.zeros(repetitions*trials*num_types)
+    prev_congruent = np.zeros(repetitions*trials*num_types) - 1
+    non_dec_time = 100
+
+    bin_size = 250
+    t_s = 0.2
+
+    sim_type = 0
+    for tendency in tendencies:#,3,5,10,30,50,100]: #1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
+        for trans in probs:#[100,99,98,97,96,95,94]:
+            for unc in uncertainties:
+                print(tendency, trans, unc)
+
+                run_name = "flanker_alpha_h"+str(int(tendency))+"_t"+str(trans)+"_u"+str(unc)+"_f3.5_ut0.99_learningknockout.json"
+                fname = os.path.join(folder, run_name)
+
+                jsonpickle_numpy.register_handlers()
+
+                with open(fname, 'r') as infile:
+                    data = json.load(infile)
+
+                worlds_old = pickle.decode(data)
+
+                repetitions = len(worlds_old)
+                trials = worlds_old[0].trials
+
+                offset = sim_type*repetitions*trials
+                
+                for i in range(repetitions):
+                    w = worlds_old[i]
+                    correct[offset+i*trials:offset+(i+1)*trials] = (w.actions[:,0] == w.environment.correct_choice).astype(int)
+                    RT[offset+i*trials:offset+(i+1)*trials] = t_s*w.agent.action_selection.RT[:,0] + non_dec_time
+                    agent[offset+i*trials:offset+(i+1)*trials] = i
+                    congruent[offset+i*trials:offset+(i+1)*trials] = np.logical_not(w.environment.congruent)
+                    trial_num[offset+i*trials:offset+(i+1)*trials] = np.arange(0,trials)
+                    epoch[offset+i*trials:offset+(i+1)*trials] = [-1]*10 + [0]*20 + [1]*20 + [2]*20 + [3]*(trials-70)
+                    tend_arr[offset+i*trials:offset+(i+1)*trials] = tendency
+                    prob_arr[offset+i*trials:offset+(i+1)*trials] = trans
+                    unc_arr[offset+i*trials:offset+(i+1)*trials] = unc#/100
+                    binned_RT[offset+i*trials:offset+(i+1)*trials] = t_s*(bin_size//2 + bin_size*(w.agent.action_selection.RT[:,0]//bin_size)) +non_dec_time
+                    prev_congruent[offset+i*trials:offset+(i+1)*trials][1:] = congruent[offset+i*trials:offset+(i+1)*trials][:-1]
+
+                sim_type+=1
+
+    data_dict = {"correct": correct, "RT": RT, "agent": agent,
+                 "congruent": congruent, "binned_RT": binned_RT,
+                 "trial_num": trial_num, "epoch": epoch,
+                 "uncertainty": unc_arr, "tendencies": tend_arr,
+                 "trans_probs": prob_arr, "prev_cong": prev_congruent}
+    data = pd.DataFrame(data_dict)
+
+    # plt.figure()
+    # for i in range(0,3):
+    #     sns.lineplot(x='num_in_run', y='RT', data=data.query('epoch == @i'), style='congruent', label=str(i), ci = 95, estimator=np.nanmean, linewidth=3)
+    # plt.show()
+    tendency=100
+    trans=90
+    unc=0.2
+    cutoff = non_dec_time + 500#5000#2*500
+
+    # accuracy
+    plt.figure()
+    #plt.title("tendency "+str(tendency)+", trans "+str(trans)+", unc "+str(unc))
+    plt.title("learningknockout")
+    sns.lineplot(x='binned_RT', y='correct', data=data.query('tendencies==@tendency and trans_probs==@trans and uncertainty==@unc and binned_RT<=@cutoff'), style='congruent', ci = 95, estimator=np.nanmean, linewidth=3)
+    #plt.plot([0+bin_size,cutoff-bin_size], [0.5,0.5], '--', color='grey', alpha=0.5)
+    #plt.ylim([0,1.05])
+    plt.yticks(fontsize=16)
+    plt.xticks(fontsize=16)
+    plt.xlabel("RT", fontsize=16)
+    plt.ylabel("Prop correct", fontsize=16)
+    plt.savefig("accuracy_learningknockout.svg")
+    plt.show()
+
+    # gratton
+    plt.figure(figsize=(4,5))
+    palette = [(0,0,0), (0,0,0)]
+    #plt.title("tendency "+str(tendency)+", trans "+str(100trans)+", unc "+str(unc))
+    plt.title("learningknockout")
+    sns.lineplot(x='prev_cong', y='RT', data=data.query('tendencies==@tendency and trans_probs==@trans and uncertainty==@unc and trial_num>0'), style='congruent', hue='congruent', ci = 95, estimator=np.nanmean, linewidth=3, markers=True, markersize=12, palette=palette)
+    #plt.ylim([200,1000])
+    plt.xticks([0,1], labels=["CON", "INC"], fontsize=16)
+    plt.yticks(fontsize=16)
+    plt.xlim([-0.25,1.25])
+    plt.ylim([0,800])
+    plt.xlabel("Previous trial type", fontsize=16)
+    plt.ylabel("RT", fontsize=16)
+    plt.savefig("gratton_learningknockout.svg")
+    plt.show()
+    
+    tendencies = [1]#[1,10,25,50,75,100, 250,1000]#1,10,100,100
+    probs = [90]
+    uncertainties = [0.2]#,15,20]
+    run_name = "flanker_alpha_h"+str(int(tendencies[0]))+"_t"+str(probs[0])+"_u"+str(uncertainties[0])+"_f3.5_ut0.99_contextknockout.json"
+    fname = os.path.join(folder, run_name)
+
+    jsonpickle_numpy.register_handlers()
+
+    with open(fname, 'r') as infile:
+        data = json.load(infile)
+
+    worlds_old = pickle.decode(data)
+    print(len(worlds_old))
+
+    repetitions = len(worlds_old)
+    trials = worlds_old[0].trials
+    num_types = len(tendencies)*len(probs)*len(uncertainties)
+    correct = np.zeros(repetitions*trials*num_types)
+    RT = np.zeros(repetitions*trials*num_types)
+    agent = np.zeros(repetitions*trials*num_types)
+    congruent = np.zeros(repetitions*trials*num_types)
+    trial_num = np.zeros(repetitions*trials*num_types)
+    epoch = np.zeros(repetitions*trials*num_types)
+    tend_arr = np.zeros(repetitions*trials*num_types)
+    prob_arr = np.zeros(repetitions*trials*num_types)
+    unc_arr  = np.zeros(repetitions*trials*num_types)
+    binned_RT = np.zeros(repetitions*trials*num_types)
+    prev_congruent = np.zeros(repetitions*trials*num_types) - 1
+    non_dec_time = 100
+
+    bin_size = 250
+    t_s = 0.2
+
+    sim_type = 0
+    for tendency in tendencies:#,3,5,10,30,50,100]: #1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
+        for trans in probs:#[100,99,98,97,96,95,94]:
+            for unc in uncertainties:
+                print(tendency, trans, unc)
+
+                run_name = "flanker_alpha_h"+str(int(tendency))+"_t"+str(trans)+"_u"+str(unc)+"_f3.5_ut0.99_contextknockout.json"
+                fname = os.path.join(folder, run_name)
+
+                jsonpickle_numpy.register_handlers()
+
+                with open(fname, 'r') as infile:
+                    data = json.load(infile)
+
+                worlds_old = pickle.decode(data)
+
+                repetitions = len(worlds_old)
+                trials = worlds_old[0].trials
+
+                offset = sim_type*repetitions*trials
+                
+                for i in range(repetitions):
+                    w = worlds_old[i]
+                    correct[offset+i*trials:offset+(i+1)*trials] = (w.actions[:,0] == w.environment.correct_choice).astype(int)
+                    RT[offset+i*trials:offset+(i+1)*trials] = t_s*w.agent.action_selection.RT[:,0] + non_dec_time
+                    agent[offset+i*trials:offset+(i+1)*trials] = i
+                    congruent[offset+i*trials:offset+(i+1)*trials] = np.logical_not(w.environment.congruent)
+                    trial_num[offset+i*trials:offset+(i+1)*trials] = np.arange(0,trials)
+                    epoch[offset+i*trials:offset+(i+1)*trials] = [-1]*10 + [0]*20 + [1]*20 + [2]*20 + [3]*(trials-70)
+                    tend_arr[offset+i*trials:offset+(i+1)*trials] = tendency
+                    prob_arr[offset+i*trials:offset+(i+1)*trials] = trans
+                    unc_arr[offset+i*trials:offset+(i+1)*trials] = unc#/100
+                    binned_RT[offset+i*trials:offset+(i+1)*trials] = t_s*(bin_size//2 + bin_size*(w.agent.action_selection.RT[:,0]//bin_size)) +non_dec_time
+                    prev_congruent[offset+i*trials:offset+(i+1)*trials][1:] = congruent[offset+i*trials:offset+(i+1)*trials][:-1]
+
+                sim_type+=1
+
+    data_dict = {"correct": correct, "RT": RT, "agent": agent,
+                 "congruent": congruent, "binned_RT": binned_RT,
+                 "trial_num": trial_num, "epoch": epoch,
+                 "uncertainty": unc_arr, "tendencies": tend_arr,
+                 "trans_probs": prob_arr, "prev_cong": prev_congruent}
+    data = pd.DataFrame(data_dict)
+
+    # plt.figure()
+    # for i in range(0,3):
+    #     sns.lineplot(x='num_in_run', y='RT', data=data.query('epoch == @i'), style='congruent', label=str(i), ci = 95, estimator=np.nanmean, linewidth=3)
+    # plt.show()
+    tendency=1
+    trans=90
+    unc=0.2
+    cutoff = non_dec_time + 500#5000#2*500
+
+    # accuracy
+    plt.figure()
+    #plt.title("tendency "+str(tendency)+", trans "+str(trans)+", unc "+str(unc))
+    plt.title("contextknockout")
+    sns.lineplot(x='binned_RT', y='correct', data=data.query('tendencies==@tendency and trans_probs==@trans and uncertainty==@unc and binned_RT<=@cutoff'), style='congruent', ci = 95, estimator=np.nanmean, linewidth=3)
+    #plt.plot([0+bin_size,cutoff-bin_size], [0.5,0.5], '--', color='grey', alpha=0.5)
+    #plt.ylim([0,1.05])
+    plt.yticks(fontsize=16)
+    plt.xticks(fontsize=16)
+    plt.xlabel("RT", fontsize=16)
+    plt.ylabel("Prop correct", fontsize=16)
+    plt.savefig("accuracy_contextknockout.svg")
+    plt.show()
+
+    # gratton
+    plt.figure(figsize=(4,5))
+    palette = [(0,0,0), (0,0,0)]
+    #plt.title("tendency "+str(tendency)+", trans "+str(100trans)+", unc "+str(unc))
+    plt.title("contextknockout")
+    sns.lineplot(x='prev_cong', y='RT', data=data.query('tendencies==@tendency and trans_probs==@trans and uncertainty==@unc and trial_num>0'), style='congruent', hue='congruent', ci = 95, estimator=np.nanmean, linewidth=3, markers=True, markersize=12, palette=palette)
+    #plt.ylim([200,1000])
+    plt.xticks([0,1], labels=["CON", "INC"], fontsize=16)
+    plt.yticks(fontsize=16)
+    plt.xlim([-0.25,1.25])
+    plt.ylim([0,800])
+    plt.xlabel("Previous trial type", fontsize=16)
+    plt.ylabel("RT", fontsize=16)
+    plt.savefig("gratton_contextknockout.svg")
+    plt.show()
+
+
 def main():
 
     """
@@ -487,16 +1198,20 @@ def main():
     if not os.path.isdir(folder):
         os.mkdir(folder)
 
-    repetitions = 15
+    repetitions = 50
 
     """
     run simulations
     """
     # runs simulations with varying habitual tendency and reward probability
     # results are stored in data folder
-    run_flanker_simulations(repetitions, folder)
+    #run_flanker_simulations(repetitions, folder)
+    #run_learningknockout_flanker_simulations(repetitions, folder)
+    #run_priorknockout_flanker_simulations(repetitions, folder)
+    #run_contextknockout_flanker_simulations(repetitions, folder)
 
     #data, bin_size = analyze_flanker_simulations(folder)
+    analyze_flanker_knockout(folder)
     return data, bin_size
 
 
