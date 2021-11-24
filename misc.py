@@ -303,6 +303,71 @@ def switching_timeseries(trials, states=None, state_trans=None, pattern=None, ns
     return Rho, pattern, states, state_trans, correct_choice, congruent, num_in_run
 
 
+def switching_timeseries_onecontext(trials, states=None, state_trans=None, pattern=None, ns=6, na=4, nr=2, stable_length=2):
+
+    nc = 1
+    
+    if pattern is None:
+        pattern = np.tile([0]*stable_length+[1]*stable_length, trials//(2*stable_length))
+
+    num_in_run = np.zeros(trials)
+    old = -1
+    count = 0
+    for t,p in enumerate(pattern):
+        if p == old:
+            count+=1
+        else:
+            count=1
+        num_in_run[t] = count
+        old = p
+
+    if states is None:
+        states = np.random.choice(4,size=trials)
+        
+    if state_trans is None:
+        state_trans = np.zeros((ns,ns,na,1))
+        state_trans[:,:,0,0] = [[0, 0, 0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0, 0, 0],
+                                [1, 0, 0, 0, 1, 0, 0, 0],
+                                [0, 1, 0, 0, 0, 1, 0, 0],
+                                [0, 0, 1, 0, 0, 0, 1, 0],
+                                [0, 0, 0, 1, 0, 0, 0, 1],]
+        state_trans[:,:,1,0] = [[0, 0, 0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 1, 1, 0, 0, 0],
+                                [0, 0, 1, 0, 0, 1, 0, 0],
+                                [0, 1, 0, 0, 0, 0, 1, 0],
+                                [1, 0, 0, 0, 0, 0, 0, 1],]
+
+    Rho = np.zeros((nr,ns,2))
+    Rho[:,0:4,:] = np.array([1,0])[:,None,None]
+    Rho[:,4,0] = [0, 1]
+    Rho[:,5,0] = [1, 0]
+    Rho[:,6,0] = [0, 1]
+    Rho[:,7,0] = [1, 0]
+    Rho[:,4,1] = [0, 1]
+    Rho[:,5,1] = [0, 1]
+    Rho[:,6,1] = [1, 0]
+    Rho[:,7,1] = [1, 0]
+    
+    correct_choice = np.zeros(trials, dtype=int)
+    congruent = np.zeros(trials, dtype=int)
+    for t,task in enumerate(pattern):
+        s = states[t]
+        if task == 0:
+            corr_a = s%2
+        if task == 1:
+            corr_a = s//2
+        correct_choice[t] = corr_a
+        congruent[t] = int((s%2) == (s//2))
+
+    return Rho, pattern, states, state_trans, correct_choice, congruent, num_in_run
+
+
 def single_task_timeseries(trials, states=None, state_trans=None, pattern=None, ns=6, na=4, nr=2, nc=1):
 
     if pattern is None:

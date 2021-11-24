@@ -36,7 +36,8 @@ run function
 
 def run_agent(par_list, trials, T, ns, na, nr, nc, f, contexts, states, \
               state_trans=None, correct_choice=None, congruent=None,\
-              num_in_run=None, random_draw=False, pol_lambda=0, r_lambda=0):
+              num_in_run=None, random_draw=False, pol_lambda=0, r_lambda=0,
+              one_context=False):
     #set parameters:
     #learn_pol: initial concentration paramter for policy prior
     #trans_prob: reward probability
@@ -70,7 +71,7 @@ def run_agent(par_list, trials, T, ns, na, nr, nc, f, contexts, states, \
     C_alphas = np.ones((nr, ns, nc))
     # initialize state in front of levers so that agent knows it yields no reward
     C_alphas[:,:4,:] = np.array([100,1])[:,None,None]
-    # C_alphas[:,4:,0] = np.array([[1, 2],
+    # C_alphas[:,4:,0] = np.array([[1, 2],print(self.Rho.shape)
     #                               [2, 1]])
     # C_alphas[:,4:,1] = np.array([[2, 1],
     #                               [1, 2]])
@@ -105,12 +106,22 @@ def run_agent(par_list, trials, T, ns, na, nr, nc, f, contexts, states, \
     """
     create environment (grid world)
     """
-
-    environment = env.TaskSwitching(A, B, Rho, D, states, contexts, \
+    if not one_context:
+        
+        environment = env.TaskSwitching(A, B, Rho, D, states, contexts, \
                                     trials = trials, T = T,\
                                     correct_choice=correct_choice, \
                                     congruent=congruent, \
                                     num_in_run=num_in_run)
+            
+    else:
+        
+        environment = env.TaskSwitchingOneConext(A, B, Rho, D, states, contexts, \
+                                    trials = trials, T = T,\
+                                    correct_choice=correct_choice, \
+                                    congruent=congruent, \
+                                    num_in_run=num_in_run)
+        
 
 
     """
@@ -237,7 +248,7 @@ def run_switching_simulations(repetitions, folder):
                     s += "beta_"
                 else:
                     s += ""
-                run_name = prefix+"switching_prior"+s+"h"+str(int(tendency))+"_t"+str(trans)+"_u"+str(unc)+"_f"+str(f)+"_ut"+str(u)+"_test.json"
+                run_name = prefix+"switching_"+s+"h"+str(int(tendency))+"_t"+str(trans)+"_u"+str(unc)+"_f"+str(f)+"_ut"+str(u)+"_test.json"
                 print(run_name)
                 fname = os.path.join(folder, run_name)
 
@@ -460,6 +471,96 @@ def run_single_task_simulations(repetitions, folder):
                 worlds = 0
 
                 gc.collect()
+                
+                
+def run_switching_simulations_one_context(repetitions, folder):
+
+    trials = 100
+    T = 2
+    ns = 8
+    na = 2
+    nr = 2
+    nc = 1
+    u = 0.99
+    utility = np.array([1-u,u])
+    f = 3.5
+    random_draw = False
+    pol_lambda = 0
+    r_lambda = 0
+
+    Rho = np.zeros((nr, ns, 2))
+
+    for tendency in [1000]:#[1,1000]:#,3,5,10,30,50,100]: #1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
+        # these two params dont exist anyways when there is only one context. 
+        # just setting them for naming consistency with the other simulations
+        for trans in [95]:#[80,85,90,91,92,93,94,95,96,97,98,99]:
+            for unc in [1]:#,2,3,4,5,6,8,10]:
+                print(tendency, trans, unc)
+
+                if random_draw==False:
+                    prefix="acsel_"
+                else:
+                    prefix=""
+                if pol_lambda > 0:
+                    s = "alpha_"
+                else:
+                    s = ""
+                if r_lambda > 0:
+                    s += "beta_"
+                else:
+                    s += ""
+                run_name = prefix+"switching_"+s+"h"+str(int(tendency))+"_t"+str(trans)+"_u"+str(unc)+"_f"+str(f)+"_ut"+str(u)+"_onecontext.json"
+                print(run_name)
+                fname = os.path.join(folder, run_name)
+
+                jsonpickle_numpy.register_handlers()
+
+                if False:#run_name in os.listdir(folder):
+                    with open(fname, 'r') as infile:
+                        data = json.load(infile)
+
+                    worlds = pickle.decode(data)
+                    print(len(worlds))
+                    num_w_old = len(worlds)
+                else:
+                    worlds = []
+                    num_w_old = 0
+
+                learn_pol = tendency
+                parameters = [learn_pol, trans/100., Rho, utility, unc/100.]
+
+                for i in range(num_w_old, repetitions):
+                    Rho[:], contexts, states, state_trans, correct_choice, congruent, num_in_run = \
+                    switching_timeseries_onecontext(trials, nr=nr, ns=ns, na=na, stable_length=5)
+                    worlds.append(run_agent(parameters, trials, T, ns, na, nr, nc,\
+                                            f, contexts, states, \
+                                            state_trans=state_trans, \
+                                            correct_choice=correct_choice, \
+                                            congruent=congruent, \
+                                            num_in_run=num_in_run, \
+                                            random_draw=random_draw, \
+                                            pol_lambda=pol_lambda, \
+                                            r_lambda=r_lambda,
+                                            one_context=True))
+
+
+                if random_draw==False:
+                    prefix="acsel_"
+                else:
+                    prefix=""
+                #run_name = prefix+"switching_h"+str(int(learn_pol))+"_t"+str(trans)+"_u"+str(unc)+".json"
+                fname = os.path.join(folder, run_name)
+
+                jsonpickle_numpy.register_handlers()
+                pickled = pickle.encode(worlds)
+                with open(fname, 'w') as outfile:
+                    json.dump(pickled, outfile)
+
+                pickled = 0
+                worlds = 0
+
+                gc.collect()
+
 
 
 
@@ -468,7 +569,7 @@ def analyze_switching_simulations(folder):
     tendencies = [1000]
     probs = [80,85,90,91,92,93,94,95,96,97,98,99]#
     uncertainties = [0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1,2,3,4,5,6,8,10]
-    run_name = "acsel_switching_priorh"+str(int(tendencies[0]))+"_t"+str(probs[0])+"_u"+str(uncertainties[0])+"_f3.5_ut0.99_test.json"
+    run_name = "acsel_switching_h"+str(int(tendencies[0]))+"_t"+str(probs[0])+"_u"+str(uncertainties[0])+"_f3.5_ut0.99.json"
     print(run_name)
     fname = os.path.join(folder, run_name)
 
@@ -500,7 +601,7 @@ def analyze_switching_simulations(folder):
         for trans in probs:#[100,99,98,97,96,95,94]:
             for unc in uncertainties:
 
-                run_name = "acsel_switching_priorh"+str(int(tendency))+"_t"+str(trans)+"_u"+str(unc)+"_f3.5_ut0.99_test.json"
+                run_name = "acsel_switching_h"+str(int(tendency))+"_t"+str(trans)+"_u"+str(unc)+"_f3.5_ut0.99.json"
                 fname = os.path.join(folder, run_name)
 
                 jsonpickle_numpy.register_handlers()
@@ -643,7 +744,7 @@ def analyze_single_simulations(folder, plot=True, non_dec_time=0, t_s=1):
     tendencies = [1000]
     probs = [90,95,99]#[80,85,90,91,92,93,94,95,96,97,98,99]
     uncertainties = [0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1,2,3,4,5,6,8,10]
-    run_name = "acsel_single_priorh"+str(int(tendencies[0]))+"_t"+str(probs[0])+"_u"+str(uncertainties[0])+"_f3.5_ut0.99_test.json"
+    run_name = "acsel_single_h"+str(int(tendencies[0]))+"_t"+str(probs[0])+"_u"+str(uncertainties[0])+"_f3.5_ut0.99.json"
     fname = os.path.join(folder, run_name)
 
     jsonpickle_numpy.register_handlers()
@@ -672,7 +773,7 @@ def analyze_single_simulations(folder, plot=True, non_dec_time=0, t_s=1):
         for trans in probs:#[100,99,98,97,96,95,94]:
             for unc in uncertainties:
 
-                run_name = "acsel_single_priorh"+str(int(tendency))+"_t"+str(trans)+"_u"+str(unc)+"_f3.5_ut0.99_test.json"
+                run_name = "acsel_single_h"+str(int(tendency))+"_t"+str(trans)+"_u"+str(unc)+"_f3.5_ut0.99.json"
                 fname = os.path.join(folder, run_name)
 
                 jsonpickle_numpy.register_handlers()
@@ -755,6 +856,121 @@ def analyze_single_simulations(folder, plot=True, non_dec_time=0, t_s=1):
 
     return data
 
+
+def analyze_onecontext_simulations(folder):
+
+    tendencies = [1000]
+    probs = [95]#
+    uncertainties = [1]
+    run_name = "acsel_switching_h"+str(int(tendencies[0]))+"_t"+str(probs[0])+"_u"+str(uncertainties[0])+"_f3.5_ut0.99_onecontext.json"
+    print(run_name)
+    fname = os.path.join(folder, run_name)
+
+    jsonpickle_numpy.register_handlers()
+
+    with open(fname, 'r') as infile:
+        data = json.load(infile)
+
+    worlds_old = pickle.decode(data)
+
+    repetitions = len(worlds_old)
+    trials = worlds_old[0].trials
+    num_types = len(tendencies)*len(probs)*len(uncertainties)
+    correct = np.zeros(repetitions*trials*num_types)
+    RT = np.zeros(repetitions*trials*num_types)
+    agent = np.zeros(repetitions*trials*num_types)
+    num_in_run = np.zeros(repetitions*trials*num_types)
+    congruent = np.zeros(repetitions*trials*num_types)
+    trial_num = np.zeros(repetitions*trials*num_types)
+    epoch = np.zeros(repetitions*trials*num_types)
+    tend_arr = np.zeros(repetitions*trials*num_types)
+    prob_arr = np.zeros(repetitions*trials*num_types)
+    unc_arr  = np.zeros(repetitions*trials*num_types)
+    non_dec_time = 100
+    t_s = 0.2
+
+    sim_type = 0
+    for tendency in tendencies:#,3,5,10,30,50,100]: #1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
+        for trans in probs:#[100,99,98,97,96,95,94]:
+            for unc in uncertainties:
+
+                run_name = "acsel_switching_h"+str(int(tendency))+"_t"+str(trans)+"_u"+str(unc)+"_f3.5_ut0.99_onecontext.json"
+                fname = os.path.join(folder, run_name)
+
+                jsonpickle_numpy.register_handlers()
+
+                with open(fname, 'r') as infile:
+                    data = json.load(infile)
+
+                worlds_old = pickle.decode(data)
+
+                repetitions = len(worlds_old)
+                trials = worlds_old[0].trials
+                
+                print("switching", len(worlds_old), tendency, trans, unc)
+
+                offset = sim_type*repetitions*trials
+
+                for i in range(repetitions):
+                    w = worlds_old[i]
+                    correct[offset+i*trials:offset+(i+1)*trials] = (w.actions[:,0] == w.environment.correct_choice).astype(int)
+                    RT[offset+i*trials:offset+(i+1)*trials] = t_s*w.agent.action_selection.RT[:,0] + non_dec_time
+                    agent[offset+i*trials:offset+(i+1)*trials] = i
+                    num_in_run[offset+i*trials:offset+(i+1)*trials] = w.environment.num_in_run
+                    congruent[offset+i*trials:offset+(i+1)*trials] = np.logical_not(w.environment.congruent)
+                    trial_num[offset+i*trials:offset+(i+1)*trials] = np.arange(0,trials)
+                    epoch[offset+i*trials:offset+(i+1)*trials] = [-1]*10 + [0]*10 + [1]*20 + [2]*30 + [3]*(trials-70)#
+                    tend_arr[offset+i*trials:offset+(i+1)*trials] = tendency
+                    prob_arr[offset+i*trials:offset+(i+1)*trials] = 100-trans
+                    unc_arr[offset+i*trials:offset+(i+1)*trials] = unc
+
+                sim_type+=1
+
+    data_dict = {"correct": correct, "RT": RT, "agent": agent,
+                 "num_in_run": num_in_run, "congruent": congruent,
+                 "trial_num": trial_num, "epoch": epoch,
+                 "uncertainty": unc_arr, "tendencies": tend_arr,
+                 "trans_probs": prob_arr}
+    data = pd.DataFrame(data_dict)
+
+    # plt.figure()
+    # for i in range(0,3):
+    #     sns.lineplot(x='num_in_run', y='RT', data=data.query('epoch == @i'), style='congruent', label=str(i), ci = 95, estimator=np.nanmean, linewidth=3)
+    # plt.show()
+    tendency=1000
+    trans=95
+    unc=1
+    trans = 100-trans
+
+    # RT & accuracy as a function of num in run for congruent and incongruent trials and for different training durations (Fig 3 in Steyvers 2019)
+    #sns.set_style("white")switching
+    current_palette = sns.color_palette("colorblind")
+    plot_palette = [(236/255,98/255,103/255), current_palette[2], current_palette[0]]
+    sns.set_style("ticks")
+    plt.figure(figsize=(3.5,5))
+    #plt.title("tendency "+str(tendency)+", trans "+str(trans)+", unc "+str(unc))
+    sns.lineplot(x='num_in_run', y='RT', data=data.query('epoch >= 0 and epoch < 3 and tendencies==@tendency and uncertainty==@unc and trans_probs==@trans'), style='congruent', hue='epoch', markers=True, ci = 95, estimator=np.nanmean, linewidth=3, palette=plot_palette)
+    #plt.ylim([600,2000])
+    plt.xticks([1,2,3,4,5], fontsize=16)
+    plt.yticks(fontsize=16)
+    plt.xlabel("Trial after switch", fontsize=16)
+    plt.ylabel("RT", fontsize=16)
+    plt.savefig("numinrun_congruent_RT.svg")
+    plt.show()
+    plt.figure(figsize=(3.5,5))
+    #plt.title("tendency "+str(tendency)+", trans "+str(trans)+", unc "+str(unc))
+    sns.lineplot(x='num_in_run', y='correct', data=data.query('epoch >= 0 and epoch < 3 and tendencies==@tendency and uncertainty==@unc and trans_probs==@trans'), style='congruent', hue='epoch', markers=True, ci = 95, estimator=np.nanmean, linewidth=3, palette=plot_palette)
+    #plt.ylim([0.65,1.])
+    plt.xticks([1,2,3,4,5], fontsize=16)
+    plt.yticks(fontsize=16)
+    plt.xlabel("Trial after switch", fontsize=16)
+    plt.ylabel("Prop correct", fontsize=16)
+    plt.savefig("numinrun_congruent_correct.svg")
+    plt.show()
+
+    return data, data_single
+
+
 def main():
 
     """
@@ -765,7 +981,7 @@ def main():
     if not os.path.isdir(folder):
         os.mkdir(folder)
 
-    repetitions = 15
+    repetitions = 50
 
     """
     run simulations
@@ -773,10 +989,12 @@ def main():
     # runs simulations with varying habitual tendency and reward probability
     # results are stored in data folder
     #run_switching_simulations(repetitions, folder)
-    run_single_task_simulations(repetitions, folder)
+    #run_single_task_simulations(repetitions, folder)
+    #run_switching_simulations_one_context(repetitions, folder)
 
     #data, data_single = analyze_switching_simulations(folder) #
     #data = analyze_single_simulations(folder)
+    data = analyze_onecontext_simulations(folder)
     return data, data_single
 
 
