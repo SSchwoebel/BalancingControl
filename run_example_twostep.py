@@ -6,15 +6,25 @@ Created on Thu May 11 17:56:24 2017
 @author: sarah
 """
 
-arr_type = "torch"
-if arr_type == "numpy":
-    import numpy as ar
-    array = ar.array
-else:
+arr_type = "jnp"
+if arr_type == "torch":
     import torch as ar
     array = ar.tensor
-    
-import numpy as np
+    import scipy.special as scs
+    import numpy as np
+    import pyro
+    import pyro.distributions as dist
+    import scipy as sc
+    import scipy.signal as ss
+elif arr_type == "jnp":
+    import jax.numpy as ar
+    array = ar.array
+    import jax.scipy.special as scs
+    import jax.numpy as np
+    import numpyro as pyro
+    import numpyro.distributions as dist
+    import jax.scipy as sc
+    import jax.scipy.signal as ss
 
 #from plotting import *
 from misc import *
@@ -35,13 +45,11 @@ import json
 import seaborn as sns
 import pandas as pd
 import os
-import scipy as sc
-import scipy.signal as ss
 import bottleneck as bn
 import gc
 #ar.set_printoptions(threshold = 100000, precision = 5)
 
-from inference_twostage import device
+#from inference_twostage import device
 
 """
 set parameters

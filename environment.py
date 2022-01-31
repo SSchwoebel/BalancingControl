@@ -1,12 +1,14 @@
 """This module contains various experimental environments used for testing
 human behavior."""
-arr_type = "torch"
+arr_type = "jnp"
 if arr_type == "numpy":
     import numpy as ar
     array = ar.array
-else:
+elif arr_type == "torch":
     import torch as ar
     array = ar.tensor
+elif arr_type == "jnp":
+    import jax.numpy as ar
 
 
 class GridWorld(object):

@@ -5,28 +5,37 @@ Created on Mon Sep 13 11:21:08 2021
 
 @author: sarah
 """
+arr_type = "jnp"
+if arr_type == "torch":
+    import torch as ar
+    array = ar.tensor
+    import scipy.special as scs
+    import numpy as np
+    import pyro
+    import pyro.distributions as dist
+elif arr_type == "jnp":
+    import jax.numpy as ar
+    array = ar.array
+    import jax.scipy.special as scs
+    import jax.numpy as np
+    import numpyro as pyro
+    import numpyro.distributions as dist
 
-import torch as ar
-array = ar.tensor
-import numpy as np
 import pandas as pd
 import matplotlib.pylab as plt
 import seaborn as sns
-import numpy as np
 import distributions as analytical_dists
 
 from tqdm import tqdm
-import pyro
-import pyro.distributions as dist
 import agent as agt
 import perception as prc
 import action_selection as asl
 
 #device = ar.device("cuda") if ar.cuda.is_available() else ar.device("cpu")
 #device = ar.device("cuda")
-device = ar.device("cpu")
+#device = ar.device("cpu")
 #torch.set_num_threads(4)
-print("Running on device", device)
+#print("Running on device", device)
 
 
 class SingleInference(object):
@@ -43,31 +52,31 @@ class SingleInference(object):
         
         # tell pyro about prior over parameters: alpha and beta of lambda which is between 0 and 1
         # alpha = beta = 1 equals uniform prior
-        alpha_lamb_pi = ar.ones(1).to(device)
-        beta_lamb_pi = ar.ones(1).to(device)
+        alpha_lamb_pi = ar.ones(1)#.to(device)
+        beta_lamb_pi = ar.ones(1)#.to(device)
         # sample initial vaue of parameter from Beta distribution
-        lamb_pi = pyro.sample('lamb_pi', dist.Beta(alpha_lamb_pi, beta_lamb_pi)).to(device)
+        lamb_pi = pyro.sample('lamb_pi', dist.Beta(alpha_lamb_pi, beta_lamb_pi))#.to(device)
         
         # tell pyro about prior over parameters: alpha and beta of lambda which is between 0 and 1
         # alpha = beta = 1 equals uniform prior
-        alpha_lamb_r = ar.ones(1).to(device)
-        beta_lamb_r = ar.ones(1).to(device)
+        alpha_lamb_r = ar.ones(1)#.to(device)
+        beta_lamb_r = ar.ones(1)#.to(device)
         # sample initial vaue of parameter from Beta distribution
-        lamb_r = pyro.sample('lamb_r', dist.Beta(alpha_lamb_r, beta_lamb_r)).to(device)
+        lamb_r = pyro.sample('lamb_r', dist.Beta(alpha_lamb_r, beta_lamb_r))#.to(device)
         
         # tell pyro about prior over parameters: alpha and beta of h which is between 0 and 1
         # alpha = beta = 1 equals uniform prior
-        alpha_h = ar.ones(1).to(device)
-        beta_h = ar.ones(1).to(device)
+        alpha_h = ar.ones(1)#.to(device)
+        beta_h = ar.ones(1)#.to(device)
         # sample initial vaue of parameter from Beta distribution
-        h = pyro.sample('h', dist.Beta(alpha_h, beta_h)).to(device)
+        h = pyro.sample('h', dist.Beta(alpha_h, beta_h))#.to(device)
         
         # tell pyro about prior over parameters: decision temperature
         # uniform between 0 and 20??
-        concentration_dec_temp = ar.tensor(1.).to(device)
-        rate_dec_temp = ar.tensor(0.5).to(device)
+        concentration_dec_temp = ar.tensor(1.)#.to(device)
+        rate_dec_temp = ar.tensor(0.5)#.to(device)
         # sample initial vaue of parameter from normal distribution
-        dec_temp = pyro.sample('dec_temp', dist.Gamma(concentration_dec_temp, rate_dec_temp)).to(device)
+        dec_temp = pyro.sample('dec_temp', dist.Gamma(concentration_dec_temp, rate_dec_temp))#.to(device)
         param_dict = {"pol_lambda": lamb_pi, "r_lambda": lamb_r, "h": h, "dec_temp": dec_temp}
         
         self.agent.reset(param_dict)
@@ -109,30 +118,30 @@ class SingleInference(object):
         # approximate posterior. assume MF: each param has his own univariate Normal.
         
         # tell pyro about posterior over parameters: alpha and beta of lambda which is between 0 and 1
-        alpha_lamb_pi = pyro.param("alpha_lamb_pi", ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)#greater_than_eq(1.))
-        beta_lamb_pi = pyro.param("beta_lamb_pi", ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)#greater_than_eq(1.))
+        alpha_lamb_pi = pyro.param("alpha_lamb_pi", ar.ones(1), constraint=ar.distributions.constraints.positive)#.to(device)#greater_than_eq(1.))
+        beta_lamb_pi = pyro.param("beta_lamb_pi", ar.ones(1), constraint=ar.distributions.constraints.positive)#.to(device)#greater_than_eq(1.))
         # sample vaue of parameter from Beta distribution
         # print()
         # print(alpha_lamb_pi, beta_lamb_pi)
-        lamb_pi = pyro.sample('lamb_pi', dist.Beta(alpha_lamb_pi, beta_lamb_pi)).to(device)
+        lamb_pi = pyro.sample('lamb_pi', dist.Beta(alpha_lamb_pi, beta_lamb_pi))#.to(device)
         
         # tell pyro about posterior over parameters: alpha and beta of lambda which is between 0 and 1
-        alpha_lamb_r = pyro.param("alpha_lamb_r", ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)#greater_than_eq(1.))
-        beta_lamb_r = pyro.param("beta_lamb_r", ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)#greater_than_eq(1.))
+        alpha_lamb_r = pyro.param("alpha_lamb_r", ar.ones(1), constraint=ar.distributions.constraints.positive)#.to(device)#greater_than_eq(1.))
+        beta_lamb_r = pyro.param("beta_lamb_r", ar.ones(1), constraint=ar.distributions.constraints.positive)#.to(device)#greater_than_eq(1.))
         # sample initial vaue of parameter from Beta distribution
-        lamb_r = pyro.sample('lamb_r', dist.Beta(alpha_lamb_r, beta_lamb_r)).to(device)
+        lamb_r = pyro.sample('lamb_r', dist.Beta(alpha_lamb_r, beta_lamb_r))#.to(device)
         
         # tell pyro about posterior over parameters: alpha and beta of lambda which is between 0 and 1
-        alpha_h = pyro.param("alpha_h", ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)#greater_than_eq(1.))
-        beta_h = pyro.param("beta_h", ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)#greater_than_eq(1.))
+        alpha_h = pyro.param("alpha_h", ar.ones(1), constraint=ar.distributions.constraints.positive)#.to(device)#greater_than_eq(1.))
+        beta_h = pyro.param("beta_h", ar.ones(1), constraint=ar.distributions.constraints.positive)#.to(device)#greater_than_eq(1.))
         # sample initial vaue of parameter from Beta distribution
-        h = pyro.sample('h', dist.Beta(alpha_lamb_r, beta_lamb_r)).to(device)
+        h = pyro.sample('h', dist.Beta(alpha_lamb_r, beta_lamb_r))#.to(device)
         
         # tell pyro about posterior over parameters: mean and std of the decision temperature
-        concentration_dec_temp = pyro.param("concentration_dec_temp", ar.ones(1)*3., constraint=ar.distributions.constraints.positive).to(device)#interval(0., 7.))
-        rate_dec_temp = pyro.param("rate_dec_temp", ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)
+        concentration_dec_temp = pyro.param("concentration_dec_temp", ar.ones(1)*3., constraint=ar.distributions.constraints.positive)#.to(device)#interval(0., 7.))
+        rate_dec_temp = pyro.param("rate_dec_temp", ar.ones(1), constraint=ar.distributions.constraints.positive)#.to(device)
         # sample initial vaue of parameter from normal distribution
-        dec_temp = pyro.sample('dec_temp', dist.Gamma(concentration_dec_temp, rate_dec_temp)).to(device)
+        dec_temp = pyro.sample('dec_temp', dist.Gamma(concentration_dec_temp, rate_dec_temp))#.to(device)
         
         param_dict = {"alpha_lamb_pi": alpha_lamb_pi, "beta_lamb_pi": beta_lamb_pi, "lamb_pi": lamb_pi,
                       "alpha_lamb_r": alpha_lamb_r, "beta_lamb_r": beta_lamb_r, "lamb_r": lamb_r,
@@ -162,7 +171,7 @@ class SingleInference(object):
         loss = []
         pbar = tqdm(range(iter_steps), position=0)
         for step in pbar:
-            loss.append(ar.tensor(svi.step()).to(device))
+            loss.append(ar.tensor(svi.step()))#.to(device))
             pbar.set_description("Mean ELBO %6.2f" % ar.tensor(loss[-20:]).mean())
             if ar.isnan(loss[-1]):
                 break

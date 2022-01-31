@@ -7,11 +7,26 @@ Created on Mon Sep 13 14:09:11 2021
 """
 
 
-import torch as ar
-array = ar.tensor
+arr_type = "jnp"
+if arr_type == "torch":
+    import torch as ar
+    array = ar.tensor
+    import scipy.special as scs
+    import numpy as np
+    import pyro
+    import pyro.distributions as dist
+    import scipy as sc
+    import scipy.signal as ss
+elif arr_type == "jnp":
+    import jax.numpy as ar
+    array = ar.array
+    import jax.scipy.special as scs
+    import jax.numpy as np
+    import numpyro as pyro
+    import numpyro.distributions as dist
+    import jax.scipy as sc
+    import jax.scipy.signal as ss
 
-import pyro
-import pyro.distributions as dist
 import agent as agt
 import perception as prc
 import action_selection as asl
@@ -28,8 +43,6 @@ import json
 import seaborn as sns
 import pandas as pd
 import os
-import scipy as sc
-import scipy.signal as ss
 import bottleneck as bn
 import gc
 
@@ -37,7 +50,7 @@ import gc
 #device = ar.device("cuda")
 #device = ar.device("cpu")
 
-from inference_twostage import device
+#from inference_twostage import device
 
 #ar.autograd.set_detect_anomaly(True)
 ###################################
@@ -47,7 +60,7 @@ i = 0
 pl = 0.3
 rl = 0.7
 dt = 5.
-tend = 5
+tend = 1
 
 folder = "data"
 
@@ -62,9 +75,9 @@ with open(fname, 'r') as infile:
 data_load = pickle.decode(loaded)
 
 data = {}
-data["actions"] = ar.tensor(data_load["actions"]).to(device)
-data["rewards"] = ar.tensor(data_load["rewards"]).to(device)
-data["observations"] = ar.tensor(data_load["observations"]).to(device)
+data["actions"] = array(data_load["actions"])#.to(device)
+data["rewards"] = array(data_load["rewards"])#.to(device)
+data["observations"] = array(data_load["observations"])#.to(device)
 
 
 ###################################
@@ -91,10 +104,10 @@ utility = []
 #ut = [0.985]
 ut = [0.999]
 for u in ut:
-    utility.append(ar.zeros(nr).to(device))
+    utility.append(ar.zeros(nr))#.to(device))
     for i in range(1,nr):
-        utility[-1][i] = u/(nr-1)#u/nr*i
-    utility[-1][0] = (1.-u)
+        utility[-1].at[i].set(u/(nr-1))#u/nr*i
+    utility[-1].at[0].set(1.-u)
     
 utility = utility[-1]
 
@@ -104,31 +117,31 @@ create matrices
 
 
 #generating probability of observations in each state
-A = ar.eye(no).to(device)
+A = ar.eye(no)#.to(device)
 
 
 #state transition generative probability (matrix)
-B = ar.zeros((ns, ns, na)).to(device)
+B = ar.zeros((ns, ns, na))#.to(device)
 b1 = 0.7
 nb1 = 1.-b1
 b2 = 0.7
 nb2 = 1.-b2
 
-B[:,:,0] = array([[  0,  0,  0,  0,  0,  0,  0,],
+B.at[:,:,0].set(array([[  0,  0,  0,  0,  0,  0,  0,],
                      [ b1,  0,  0,  0,  0,  0,  0,],
                      [nb1,  0,  0,  0,  0,  0,  0,],
                      [  0,  1,  0,  1,  0,  0,  0,],
                      [  0,  0,  1,  0,  1,  0,  0,],
                      [  0,  0,  0,  0,  0,  1,  0,],
-                     [  0,  0,  0,  0,  0,  0,  1,],])
+                     [  0,  0,  0,  0,  0,  0,  1,],]))
 
-B[:,:,1] = array([[  0,  0,  0,  0,  0,  0,  0,],
+B.at[:,:,1].set(array([[  0,  0,  0,  0,  0,  0,  0,],
                      [nb2,  0,  0,  0,  0,  0,  0,],
                      [ b2,  0,  0,  0,  0,  0,  0,],
                      [  0,  0,  0,  1,  0,  0,  0,],
                      [  0,  0,  0,  0,  1,  0,  0,],
                      [  0,  1,  0,  0,  0,  1,  0,],
-                     [  0,  0,  1,  0,  0,  0,  1,],])
+                     [  0,  0,  1,  0,  0,  0,  1,],]))
 
 # create reward generation
 #
@@ -144,11 +157,11 @@ B[:,:,1] = array([[  0,  0,  0,  0,  0,  0,  0,],
 
 # agent's beliefs about reward generation
 
-C_alphas = ar.zeros((nr, ns)).to(device) 
+C_alphas = ar.zeros((nr, ns))#.to(device) 
 C_alphas += learn_rew
-C_alphas[0,:3] = 100
+C_alphas.at[0,:3].set(100)
 for i in range(1,nr):
-    C_alphas[i,0] = 1
+    C_alphas.at[i,0].set(1)
 #    C_alphas[0,1:,:] = 100
 #    for c in range(nb):
 #        C_alphas[1,c+1,c] = 100
@@ -163,26 +176,26 @@ C_agent = C_alphas[:,:] / C_alphas[:,:].sum(axis=0)[None,:]
 
 # context transition matrix
 
-transition_matrix_context = ar.ones(1).to(device)
+transition_matrix_context = ar.ones(1)#.to(device)
 
 
 """
 create policies
 """
 
-pol = array(list(itertools.product(list(range(na)), repeat=T-1))).to(device)
+pol = array(list(itertools.product(list(range(na)), repeat=T-1)))#.to(device)
 
 #pol = pol[-2:]
 npi = pol.shape[0]
 
 # prior over policies
 
-prior_pi = ar.ones(npi).to(device)
+prior_pi = ar.ones(npi)#.to(device)
 prior_pi /= npi #ar.zeros(npi) + 1e-3/(npi-1)
 #prior_pi[170] = 1. - 1e-3
-alphas = ar.zeros((npi)).to(device) 
+alphas = ar.zeros((npi))#.to(device) 
 alphas += learn_pol
-alpha_0 = array([learn_pol]).to(device)
+alpha_0 = array([learn_pol])#.to(device)
 #    for i in range(nb):
 #        alphas[i+1,i] = 100
 #alphas[170] = 100
@@ -193,11 +206,11 @@ prior_pi = alphas / alphas.sum()
 set state prior (where agent thinks it starts)
 """
 
-state_prior = ar.zeros((ns)).to(device)
+state_prior = ar.zeros((ns))#.to(device)
 
-state_prior[0] = 1.
+state_prior.at[0].set(1.)
 
-prior_context = array([1.]).to(device)
+prior_context = array([1.])#.to(device)
 
 #    prior_context[0] = 1.
 

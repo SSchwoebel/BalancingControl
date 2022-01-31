@@ -1,16 +1,22 @@
 """This module contains the class that defines the interaction between
 different modules that govern agent's behavior.
 """
-arr_type = "torch"
+arr_type = "jnp"
 if arr_type == "numpy":
     import numpy as ar
     array = ar.array
-else:
+    import scipy.special as scs
+elif arr_type == "torch":
     import torch as ar
     array = ar.tensor
+    import scipy.special as scs
+elif arr_type == "jnp":
+    import jax.numpy as ar
+    array = ar.array
+    import jax.scipy.special as scs
+
 from perception import HierarchicalPerception
 from misc import ln, softmax, own_logical_and
-import scipy.special as scs
 
 #device = ar.device("cuda") if ar.cuda.is_available() else ar.device("cpu")
 #device = ar.device("cuda")
@@ -19,7 +25,8 @@ import scipy.special as scs
 try:
     from inference_twostage import device
 except:
-    device = ar.device("cpu")
+    pass
+    #device = ar.device("cpu")
 
 class FittingAgent(object):
 
@@ -48,57 +55,57 @@ class FittingAgent(object):
             self.policies = policies
         else:
             #make action sequences for each policy
-            self.policies = ar.eye(self.npi, dtype = int).to(device)
+            self.policies = ar.eye(self.npi, dtype = int)#.to(device)
 
         self.possible_polcies = self.policies.clone().detach()
 
-        self.actions = ar.unique(self.policies).to(device)
+        self.actions = ar.unique(self.policies)#.to(device)
         self.na = len(self.actions)
 
         if prior_states is not None:
             self.prior_states = prior_states
         else:
-            self.prior_states = ar.ones(self.nh).to(device)
+            self.prior_states = ar.ones(self.nh)#.to(device)
             self.prior_states /= self.prior_states.sum()
 
         if prior_context is not None:
             self.prior_context = prior_context
             self.nc = prior_context.shape[0]
         else:
-            self.prior_context = ar.ones(1).to(device)
+            self.prior_context = ar.ones(1)#.to(device)
             self.nc = 1
 
         if prior_policies is not None:
             self.prior_policies = prior_policies[:,None]#ar.tile(prior_policies, (1,self.nc)).T
         else:
-            self.prior_policies = ar.ones((self.npi)).to(device)/self.npi
+            self.prior_policies = ar.ones((self.npi))#.to(device)/self.npi
 
         self.learn_habit = learn_habit
         self.learn_rew = learn_rew
 
         #set various data structures
-        self.actions = ar.zeros((trials, T), dtype = int).to(device)
-        self.observations = ar.zeros((trials, T), dtype = int).to(device)
-        self.rewards = ar.zeros((trials, T), dtype = int).to(device)
-        self.posterior_actions = ar.zeros((trials, T-1, self.na)).to(device)
-        self.posterior_rewards = ar.zeros((trials, T, self.nr)).to(device)
-        self.control_probs  = ar.zeros((trials, T, self.na)).to(device)
+        self.actions = ar.zeros((trials, T), dtype = int)#.to(device)
+        self.observations = ar.zeros((trials, T), dtype = int)#.to(device)
+        self.rewards = ar.zeros((trials, T), dtype = int)#.to(device)
+        self.posterior_actions = ar.zeros((trials, T-1, self.na))#.to(device)
+        self.posterior_rewards = ar.zeros((trials, T, self.nr))#.to(device)
+        self.control_probs  = ar.zeros((trials, T, self.na))#.to(device)
         self.log_probability = 0
         if hasattr(self.perception, 'generative_model_context'):
-            self.context_obs = ar.zeros(trials, dtype=int).to(device)
+            self.context_obs = ar.zeros(trials, dtype=int)#.to(device)
 
 
     def reset(self, param_dict):
 
-        self.actions = ar.zeros((self.trials, self.T), dtype = int).to(device)
-        self.observations = ar.zeros((self.trials, self.T), dtype = int).to(device)
-        self.rewards = ar.zeros((self.trials, self.T), dtype = int).to(device)
-        self.posterior_actions = ar.zeros((self.trials, self.T-1, self.na)).to(device)
-        self.posterior_rewards = ar.zeros((self.trials, self.T, self.nr)).to(device)
-        self.control_probs  = ar.zeros((self.trials, self.T, self.na)).to(device)
+        self.actions = ar.zeros((self.trials, self.T), dtype = int)#.to(device)
+        self.observations = ar.zeros((self.trials, self.T), dtype = int)#.to(device)
+        self.rewards = ar.zeros((self.trials, self.T), dtype = int)#.to(device)
+        self.posterior_actions = ar.zeros((self.trials, self.T-1, self.na))#.to(device)
+        self.posterior_rewards = ar.zeros((self.trials, self.T, self.nr))#.to(device)
+        self.control_probs  = ar.zeros((self.trials, self.T, self.na))#.to(device)
         self.log_probability = 0
         if hasattr(self.perception, 'generative_model_context'):
-            self.context_obs = ar.zeros(trials, dtype=int).to(device)
+            self.context_obs = ar.zeros(trials, dtype=int)#.to(device)
 
         self.set_parameters(**param_dict)
         self.perception.reset()
@@ -113,16 +120,16 @@ class FittingAgent(object):
             self.context_obs[tau] = context
 
         if t == 0:
-            self.possible_polcies = ar.arange(0,self.npi,1, dtype=ar.long).to(device)
+            self.possible_polcies = ar.arange(0,self.npi,1, dtype=ar.long)#.to(device)
         else:
             #TODO!
             # wow so inefficient. probably rather remove for fitting...
             possible_policies = self.policies[:,t-1]==response
-            prev_pols = ar.zeros(self.npi, dtype=bool).to(device)
+            prev_pols = ar.zeros(self.npi, dtype=bool)#.to(device)
             prev_pols[:] = False
             prev_pols[self.possible_polcies] = True
-            new_pols = own_logical_and(possible_policies, prev_pols).to(device)
-            self.possible_polcies = ar.where(new_pols==True)[0].to(device)
+            new_pols = own_logical_and(possible_policies, prev_pols)#.to(device)
+            self.possible_polcies = ar.where(new_pols==True)[0]#.to(device)
             
             # TODO once 1D intersect exists
             #self.possible_polcies = ar.intersect1d(self.possible_polcies, possible_policies)
@@ -195,7 +202,7 @@ class FittingAgent(object):
 
         # TODO: should this be t=0 or t=t?
         # TODO attention this now only works for one context...
-        posterior_policies = post[:].to(device)#self.posterior_policies[tau, t, :, 0]#ar.einsum('pc,c->p', self.posterior_policies[tau, t], self.posterior_context[tau, t])
+        posterior_policies = post[:]#.to(device)#self.posterior_policies[tau, t, :, 0]#ar.einsum('pc,c->p', self.posterior_policies[tau, t], self.posterior_context[tau, t])
         #posterior_policies /= posterior_policies.sum()
         
         #estimate action probability

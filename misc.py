@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-arr_type = "torch"
+arr_type = "jnp"
 if arr_type == "numpy":
     import numpy as ar
     array = ar.array
-else:
+    import scipy.special as scs
+elif arr_type == "torch":
     import torch as ar
     array = ar.tensor
-import scipy.special as scs
+    import scipy.special as scs
+elif arr_type == "jnp":
+    import jax.numpy as ar
+    array = ar.array
+    import jax.scipy.special as scs
+
 import matplotlib.pylab as plt
 import seaborn as sns
 
@@ -42,6 +48,14 @@ def ln(x):
     # TODO
     #with ar.errstate(divide='ignore'):
     return ar.log(x+1e-20)#ar.nan_to_num(ar.log(x))
+
+def entropy(p, q=None, axis=0):
+    if q is None:
+        q = ar.ones_like(p)
+    
+    S = - ar.sum(p * ln(p/q), axis=axis)
+    
+    return S
 
 def logit(x):
     with ar.errstate(divide = 'ignore'):

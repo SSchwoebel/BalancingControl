@@ -1,14 +1,20 @@
 from misc import ln, logBeta, Beta_function
-arr_type = "torch"
+arr_type = "jnp"
 if arr_type == "numpy":
     import numpy as ar
     array = ar.array
-else:
+    import scipy.special as scs
+elif arr_type == "torch":
     import torch as ar
     array = ar.tensor
+    import scipy.special as scs
+elif arr_type == "jnp":
+    import jax.numpy as ar
+    array = ar.array
+    import jax.scipy.special as scs
+
+from misc import entropy
 from statsmodels.tsa.stattools import acovf as acov
-import scipy.special as scs
-from scipy.stats import entropy
 import matplotlib.pylab as plt
 
 class MCMCSelector(object):
