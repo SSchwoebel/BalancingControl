@@ -1,17 +1,7 @@
 from misc import ln, logBeta, Beta_function
-arr_type = "jnp"
-if arr_type == "numpy":
-    import numpy as ar
-    array = ar.array
-    import scipy.special as scs
-elif arr_type == "torch":
-    import torch as ar
-    array = ar.tensor
-    import scipy.special as scs
-elif arr_type == "jnp":
-    import jax.numpy as ar
-    array = ar.array
-    import jax.scipy.special as scs
+
+import jax.numpy as jnp
+import jax.scipy.special as scs
 
 from misc import entropy
 from statsmodels.tsa.stattools import acovf as acov
@@ -23,9 +13,9 @@ class MCMCSelector(object):
         self.n_pars = 0
 
         self.na = number_of_actions
-        self.control_probability = ar.zeros((trials, T, self.na))
+        self.control_probability = jnp.zeros((trials, T, self.na))
         self.ess = ESS
-        self.RT = ar.zeros((trials, T-1))
+        self.RT = jnp.zeros((trials, T-1))
 
     def reset_beliefs(self):
         self.control_probability[:,:,:] = 0
@@ -41,18 +31,18 @@ class MCMCSelector(object):
         npi = posterior_policies.shape[0]
         likelihood = args[0]
         prior = args[1]
-        accepted_pis = ar.zeros(50000, dtype=ar.int32) - 1
+        accepted_pis = jnp.zeros(50000, dtype=jnp.int32) - 1
 
         curr_ess = 0
         i = 0
 
-        pi = ar.random.choice(npi, p=prior)
+        pi = jnp.random.choice(npi, p=prior)
         accepted_pis[i] = pi
         i += 1
         while (curr_ess < self.ess) or (i<10*self.ess):
 
-            pi = ar.random.choice(npi, p=prior)
-            r = ar.random.rand()
+            pi = jnp.random.choice(npi, p=prior)
+            r = jnp.random.rand()
             #print(i, curr_ess)
 
             if likelihood[pi]/likelihood[accepted_pis[i-1]] > r:#posterior_policies[pi]/posterior_policies[accepted_pis[i-1]] > r:
@@ -64,7 +54,7 @@ class MCMCSelector(object):
             #print(autocorr)
 
             if autocorr[0] > 0:
-                ACT = 1 + 2*ar.abs(autocorr[1:]).sum()/autocorr[0]
+                ACT = 1 + 2*jnp.abs(autocorr[1:]).sum()/autocorr[0]
                 curr_ess = i/ACT
             else:
                 ACT = 0
@@ -85,7 +75,7 @@ class MCMCSelector(object):
     def estimate_action_probability(self, tau, t, posterior_policies, actions, *args):
 
         #estimate action probability
-        control_prob = ar.zeros(self.na)
+        control_prob = jnp.zeros(self.na)
         for a in range(self.na):
             control_prob[a] = posterior_policies[actions == a].sum()
 
@@ -99,20 +89,20 @@ class DirichletSelector(object):
         self.n_pars = 0
 
         self.na = number_of_actions
-        self.control_probability = ar.zeros((trials, T, self.na))
-        self.RT = ar.zeros((trials, T-1))
+        self.control_probability = jnp.zeros((trials, T, self.na))
+        self.RT = jnp.zeros((trials, T-1))
         self.factor = factor
         self.draw_true_post = draw_true_post
 
         self.calc_dkl = calc_dkl
         if calc_dkl:
-            self.DKL_post = ar.zeros((trials, T-1))
-            self.DKL_prior = ar.zeros((trials, T-1))
+            self.DKL_post = jnp.zeros((trials, T-1))
+            self.DKL_prior = jnp.zeros((trials, T-1))
         self.calc_entropy = calc_entropy
         if calc_entropy:
-            self.entropy_post = ar.zeros((trials, T-1))
-            self.entropy_prior = ar.zeros((trials, T-1))
-            self.entropy_like = ar.zeros((trials, T-1))
+            self.entropy_post = jnp.zeros((trials, T-1))
+            self.entropy_prior = jnp.zeros((trials, T-1))
+            self.entropy_like = jnp.zeros((trials, T-1))
 
     def reset_beliefs(self):
         self.control_probability[:,:,:] = 0
@@ -127,14 +117,14 @@ class DirichletSelector(object):
 
         npi = posterior_policies.shape[0]
         likelihood = args[0]
-        prior = args[1] #ar.ones_like(likelihood)/npi #
-        # likelihood = ar.array([0.5,0.5])
-        # prior = ar.array([0.5,0.5])
+        prior = args[1] #jnp.ones_like(likelihood)/npi #
+        # likelihood = jnp.array([0.5,0.5])
+        # prior = jnp.array([0.5,0.5])
         # posterior_policies = prior * likelihood
         # posterior_policies /= posterior_policies.sum()
         #print(posterior_policies, prior, likelihood)
-        self.accepted_pis = ar.zeros(100000, dtype=ar.int32) - 1
-        dir_counts = ar.ones(npi, ar.double)
+        self.accepted_pis = jnp.zeros(100000, dtype=jnp.int32) - 1
+        dir_counts = jnp.ones(npi, jnp.double)
 
         curr_ess = 0
         i = 0
@@ -144,7 +134,7 @@ class DirichletSelector(object):
                         + logBeta(dir_counts)
         #print("H", H_0)
 
-        pi = ar.random.choice(npi, p=prior)
+        pi = jnp.random.choice(npi, p=prior)
         self.accepted_pis[i] = pi
         dir_counts[pi] += 1
         H_dir =         + (dir_counts.sum()-npi)*scs.digamma(dir_counts.sum()) \
@@ -156,8 +146,8 @@ class DirichletSelector(object):
             i += 1
             while H_dir>H_0 - self.factor + self.factor*H_0:
 
-                pi = ar.random.choice(npi, p=prior)
-                r = ar.random.rand()
+                pi = jnp.random.choice(npi, p=prior)
+                r = jnp.random.rand()
                 #print(i, curr_ess)
 
                 #acc_prob = min(1, posterior_policies[pi]/posterior_policies[self.accepted_pis[i-1]])
@@ -185,7 +175,7 @@ class DirichletSelector(object):
             self.RT[tau,t] = 0
 
         if self.draw_true_post:
-            chosen_pol = ar.random.choice(npi, p=posterior_policies)
+            chosen_pol = jnp.random.choice(npi, p=posterior_policies)
         else:
             chosen_pol = self.accepted_pis[i-1]
 
@@ -200,7 +190,7 @@ class DirichletSelector(object):
             # autocorr = acov(self.accepted_pis[:i+1])
 
             # if autocorr[0] > 0:
-            #     ACT = 1 + 2*ar.abs(autocorr[1:]).sum()/autocorr[0]
+            #     ACT = 1 + 2*jnp.abs(autocorr[1:]).sum()/autocorr[0]
             #     ess = i/ACT
             #     ess = round(ess)
             # else:
@@ -219,9 +209,9 @@ class DirichletSelector(object):
             # if t==0:
             #     print(tau)
             #     n = 12
-            #     ind = ar.argpartition(posterior_policies, -n)[-n:]
-            #     print(ar.sort(ind))
-            #     print(ar.sort(posterior_policies[ind]))
+            #     ind = jnp.argpartition(posterior_policies, -n)[-n:]
+            #     print(jnp.sort(ind))
+            #     print(jnp.sort(posterior_policies[ind]))
 
         #estimate action probability
         self.estimate_action_probability(tau, t, posterior_policies, actions)
@@ -231,7 +221,7 @@ class DirichletSelector(object):
     def estimate_action_probability(self, tau, t, posterior_policies, actions, *args):
 
         #estimate action probability
-        control_prob = ar.zeros(self.na)
+        control_prob = jnp.zeros(self.na)
         for a in range(self.na):
             control_prob[a] = posterior_policies[actions == a].sum()
 
@@ -245,9 +235,9 @@ class DKLSelector(object):
         self.n_pars = 0
 
         self.na = number_of_actions
-        self.control_probability = ar.zeros((trials, T, self.na))
+        self.control_probability = jnp.zeros((trials, T, self.na))
         self.ess = ESS
-        self.RT = ar.zeros((trials, T-1))
+        self.RT = jnp.zeros((trials, T-1))
 
     def reset_beliefs(self):
         self.control_probability[:,:,:] = 0
@@ -268,18 +258,18 @@ class DKLSelector(object):
         H = - (posterior_policies * ln(posterior_policies)).sum()
         H_p = - (prior * ln(prior)).sum()
 
-        self.RT[tau,t] = ar.exp(H_p + ar.random.normal(H, DKL))
+        self.RT[tau,t] = jnp.exp(H_p + jnp.random.normal(H, DKL))
 
         #estimate action probability
         self.estimate_action_probability(tau, t, posterior_policies, actions)
-        u = ar.random.choice(self.na, p = self.control_probability[tau, t])
+        u = jnp.random.choice(self.na, p = self.control_probability[tau, t])
 
         return u
 
     def estimate_action_probability(self, tau, t, posterior_policies, actions, *args):
 
         #estimate action probability
-        control_prob = ar.zeros(self.na)
+        control_prob = jnp.zeros(self.na)
         for a in range(self.na):
             control_prob[a] = posterior_policies[actions == a].sum()
 
@@ -293,7 +283,7 @@ class AveragedSelector(object):
         self.n_pars = 0
 
         self.na = number_of_actions
-        self.control_probability = ar.zeros((trials, T, self.na))
+        self.control_probability = jnp.zeros((trials, T, self.na))
 
     def reset_beliefs(self):
         self.control_probability[:,:,:] = 0
@@ -310,13 +300,13 @@ class AveragedSelector(object):
         self.estimate_action_probability(tau, t, posterior_policies, actions)
 
         #generate the desired response from action probability
-        u = ar.distributions.Categorical(self.control_probability[tau, t]).sample()
+        u = jnp.distributions.Categorical(self.control_probability[tau, t]).sample()
 
         return u
 
     def estimate_action_probability(self, tau, t, posterior_policies, actions, *args):
         #estimate action probability
-        control_prob = ar.zeros(self.na)
+        control_prob = jnp.zeros(self.na)
         for a in range(self.na):
             control_prob[a] = posterior_policies[actions == a].sum()
 
@@ -330,7 +320,7 @@ class MaxSelector(object):
         self.n_pars = 0
 
         self.na = number_of_actions
-        self.control_probability = ar.zeros((trials, T, self.na))
+        self.control_probability = jnp.zeros((trials, T, self.na))
 
     def reset_beliefs(self):
         self.control_probability[:,:,:] = 0
@@ -347,15 +337,15 @@ class MaxSelector(object):
         self.estimate_action_probability(tau, t, posterior_policies, actions)
 
         #generate the desired response from maximum policy probability
-        indices = ar.where(posterior_policies == ar.amax(posterior_policies))
-        u = ar.random.choice(actions[indices])
+        indices = jnp.where(posterior_policies == jnp.amax(posterior_policies))
+        u = jnp.random.choice(actions[indices])
 
         return u
 
     def estimate_action_probability(self, tau, t, posterior_policies, actions, *args):
 
         #estimate action probability
-        control_prob = ar.zeros(self.na)
+        control_prob = jnp.zeros(self.na)
         for a in range(self.na):
             control_prob[a] = posterior_policies[actions == a].sum()
 
@@ -384,7 +374,7 @@ class AveragedPolicySelector(object):
 
         #generate the desired response from policy probability
         npi = posterior_policies.shape[0]
-        pi = ar.random.choice(npi, p = posterior_policies)
+        pi = jnp.random.choice(npi, p = posterior_policies)
 
         u = actions[pi]
 

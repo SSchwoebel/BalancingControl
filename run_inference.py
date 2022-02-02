@@ -5,27 +5,12 @@ Created on Mon Sep 13 14:09:11 2021
 
 @author: sarah
 """
-
-
-arr_type = "jnp"
-if arr_type == "torch":
-    import torch as ar
-    array = ar.tensor
-    import scipy.special as scs
-    import numpy as np
-    import pyro
-    import pyro.distributions as dist
-    import scipy as sc
-    import scipy.signal as ss
-elif arr_type == "jnp":
-    import jax.numpy as ar
-    array = ar.array
-    import jax.scipy.special as scs
-    import jax.numpy as np
-    import numpyro as pyro
-    import numpyro.distributions as dist
-    import jax.scipy as sc
-    import jax.scipy.signal as ss
+import jax.numpy as jnp
+import jax.scipy.special as scs
+import numpyro as pyro
+import numpyro.distributions as dist
+import jax.scipy as sc
+import jax.scipy.signal as ss
 
 import agent as agt
 import perception as prc
@@ -46,13 +31,13 @@ import os
 import bottleneck as bn
 import gc
 
-#device = ar.device("cuda") if ar.cuda.is_available() else ar.device("cpu")
-#device = ar.device("cuda")
-#device = ar.device("cpu")
+#device = jnp.device("cuda") if jnp.cuda.is_available() else jnp.device("cpu")
+#device = jnp.device("cuda")
+#device = jnp.device("cpu")
 
 #from inference_twostage import device
 
-#ar.autograd.set_detect_anomaly(True)
+#jnp.autograd.set_detect_anomaly(True)
 ###################################
 """load data"""
 
@@ -75,9 +60,9 @@ with open(fname, 'r') as infile:
 data_load = pickle.decode(loaded)
 
 data = {}
-data["actions"] = array(data_load["actions"])#.to(device)
-data["rewards"] = array(data_load["rewards"])#.to(device)
-data["observations"] = array(data_load["observations"])#.to(device)
+data["actions"] = jnp.array(data_load["actions"])#.to(device)
+data["rewards"] = jnp.array(data_load["rewards"])#.to(device)
+data["observations"] = jnp.array(data_load["observations"])#.to(device)
 
 
 ###################################
@@ -104,7 +89,7 @@ utility = []
 #ut = [0.985]
 ut = [0.999]
 for u in ut:
-    utility.append(ar.zeros(nr))#.to(device))
+    utility.append(jnp.zeros(nr))#.to(device))
     for i in range(1,nr):
         utility[-1].at[i].set(u/(nr-1))#u/nr*i
     utility[-1].at[0].set(1.-u)
@@ -117,17 +102,17 @@ create matrices
 
 
 #generating probability of observations in each state
-A = ar.eye(no)#.to(device)
+A = jnp.eye(no)#.to(device)
 
 
 #state transition generative probability (matrix)
-B = ar.zeros((ns, ns, na))#.to(device)
+B = jnp.zeros((ns, ns, na))#.to(device)
 b1 = 0.7
 nb1 = 1.-b1
 b2 = 0.7
 nb2 = 1.-b2
 
-B.at[:,:,0].set(array([[  0,  0,  0,  0,  0,  0,  0,],
+B.at[:,:,0].set(jnp.array([[  0,  0,  0,  0,  0,  0,  0,],
                      [ b1,  0,  0,  0,  0,  0,  0,],
                      [nb1,  0,  0,  0,  0,  0,  0,],
                      [  0,  1,  0,  1,  0,  0,  0,],
@@ -135,7 +120,7 @@ B.at[:,:,0].set(array([[  0,  0,  0,  0,  0,  0,  0,],
                      [  0,  0,  0,  0,  0,  1,  0,],
                      [  0,  0,  0,  0,  0,  0,  1,],]))
 
-B.at[:,:,1].set(array([[  0,  0,  0,  0,  0,  0,  0,],
+B.at[:,:,1].set(jnp.array([[  0,  0,  0,  0,  0,  0,  0,],
                      [nb2,  0,  0,  0,  0,  0,  0,],
                      [ b2,  0,  0,  0,  0,  0,  0,],
                      [  0,  0,  0,  1,  0,  0,  0,],
@@ -145,19 +130,19 @@ B.at[:,:,1].set(array([[  0,  0,  0,  0,  0,  0,  0,],
 
 # create reward generation
 #
-#    C = ar.zeros((utility.shape[0], ns))
+#    C = jnp.zeros((utility.shape[0], ns))
 #
-#    vals = array([0., 1./5., 0.95, 1./5., 1/5., 1./5.])
+#    vals = jnp.array([0., 1./5., 0.95, 1./5., 1/5., 1./5.])
 #
 #    for i in range(ns):
 #        C[:,i] = [1-vals[i],vals[i]]
 #
-#    changes = array([0.01, -0.01])
+#    changes = jnp.array([0.01, -0.01])
 #    Rho = generate_bandit_timeseries(C, nb, trials, changes)
 
 # agent's beliefs about reward generation
 
-C_alphas = ar.zeros((nr, ns))#.to(device) 
+C_alphas = jnp.zeros((nr, ns))#.to(device) 
 C_alphas += learn_rew
 C_alphas.at[0,:3].set(100)
 for i in range(1,nr):
@@ -168,34 +153,34 @@ for i in range(1,nr):
 #        C_alphas[0,c+1,c] = 1
 #C_alphas[:,13] = [100, 1]
 
-#C_agent = ar.zeros((nr, ns, nc))
+#C_agent = jnp.zeros((nr, ns, nc))
 # for c in range(nc):
-#     C_agent[:,:,c] = array([(C_alphas[:,i,c])/(C_alphas[:,i,c]).sum() for i in range(ns)]).T
+#     C_agent[:,:,c] = jnp.array([(C_alphas[:,i,c])/(C_alphas[:,i,c]).sum() for i in range(ns)]).T
 C_agent = C_alphas[:,:] / C_alphas[:,:].sum(axis=0)[None,:]
-#array([ar.random.dirichlet(C_alphas[:,i]) for i in range(ns)]).T
+#jnp.array([jnp.random.dirichlet(C_alphas[:,i]) for i in range(ns)]).T
 
 # context transition matrix
 
-transition_matrix_context = ar.ones(1)#.to(device)
+transition_matrix_context = jnp.ones(1)#.to(device)
 
 
 """
 create policies
 """
 
-pol = array(list(itertools.product(list(range(na)), repeat=T-1)))#.to(device)
+pol = jnp.array(list(itertools.product(list(range(na)), repeat=T-1)))#.to(device)
 
 #pol = pol[-2:]
 npi = pol.shape[0]
 
 # prior over policies
 
-prior_pi = ar.ones(npi)#.to(device)
-prior_pi /= npi #ar.zeros(npi) + 1e-3/(npi-1)
+prior_pi = jnp.ones(npi)#.to(device)
+prior_pi /= npi #jnp.zeros(npi) + 1e-3/(npi-1)
 #prior_pi[170] = 1. - 1e-3
-alphas = ar.zeros((npi))#.to(device) 
+alphas = jnp.zeros((npi))#.to(device) 
 alphas += learn_pol
-alpha_0 = array([learn_pol])#.to(device)
+alpha_0 = jnp.array([learn_pol])#.to(device)
 #    for i in range(nb):
 #        alphas[i+1,i] = 100
 #alphas[170] = 100
@@ -206,11 +191,11 @@ prior_pi = alphas / alphas.sum()
 set state prior (where agent thinks it starts)
 """
 
-state_prior = ar.zeros((ns))#.to(device)
+state_prior = jnp.zeros((ns))#.to(device)
 
 state_prior.at[0].set(1.)
 
-prior_context = array([1.])#.to(device)
+prior_context = jnp.array([1.])#.to(device)
 
 #    prior_context[0] = 1.
 

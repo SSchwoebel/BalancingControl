@@ -6,25 +6,12 @@ Created on Thu May 11 17:56:24 2017
 @author: sarah
 """
 
-arr_type = "jnp"
-if arr_type == "torch":
-    import torch as ar
-    array = ar.tensor
-    import scipy.special as scs
-    import numpy as np
-    import pyro
-    import pyro.distributions as dist
-    import scipy as sc
-    import scipy.signal as ss
-elif arr_type == "jnp":
-    import jax.numpy as ar
-    array = ar.array
-    import jax.scipy.special as scs
-    import jax.numpy as np
-    import numpyro as pyro
-    import numpyro.distributions as dist
-    import jax.scipy as sc
-    import jax.scipy.signal as ss
+import jax.numpy as jnp
+import jax.scipy.special as scs
+import numpyro as pyro
+import numpyro.distributions as dist
+import jax.scipy as sc
+import jax.scipy.signal as ss
 
 #from plotting import *
 from misc import *
@@ -47,7 +34,7 @@ import pandas as pd
 import os
 import bottleneck as bn
 import gc
-#ar.set_printoptions(threshold = 100000, precision = 5)
+#jnp.set_printoptions(threshold = 100000, precision = 5)
 
 #from inference_twostage import device
 
@@ -90,11 +77,11 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
 
 
     #generating probability of observations in each state
-    A = ar.eye(no)
+    A = jnp.eye(no)
 
 
     #state transition generative probability (matrix)
-    B = ar.zeros((ns, ns, na))
+    B = jnp.zeros((ns, ns, na))
     b1 = 0.7
     nb1 = 1.-b1
     b2 = 0.7
@@ -118,7 +105,7 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
 
     # create reward generation
 #
-#    C = ar.zeros((utility.shape[0], ns))
+#    C = jnp.zeros((utility.shape[0], ns))
 #
 #    vals = array([0., 1./5., 0.95, 1./5., 1/5., 1./5.])
 #
@@ -130,7 +117,7 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
 
     # agent's beliefs about reward generation
 
-    C_alphas = ar.zeros((nr, ns)) + learn_rew
+    C_alphas = jnp.zeros((nr, ns)) + learn_rew
     C_alphas[0,:3] = 100
     for i in range(1,nr):
         C_alphas[i,0] = 1
@@ -140,15 +127,15 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
 #        C_alphas[0,c+1,c] = 1
     #C_alphas[:,13] = [100, 1]
 
-    #C_agent = ar.zeros((nr, ns, nc))
+    #C_agent = jnp.zeros((nr, ns, nc))
     # for c in range(nc):
     #     C_agent[:,:,c] = array([(C_alphas[:,i,c])/(C_alphas[:,i,c]).sum() for i in range(ns)]).T
     C_agent = C_alphas[:,:] / C_alphas[:,:].sum(axis=0)[None,:]
-    #array([ar.random.dirichlet(C_alphas[:,i]) for i in range(ns)]).T
+    #array([jnp.random.dirichlet(C_alphas[:,i]) for i in range(ns)]).T
 
     # context transition matrix
 
-    transition_matrix_context = ar.ones(1)
+    transition_matrix_context = jnp.ones(1)
 
     """
     create environment (grid world)
@@ -168,9 +155,9 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
 
     # prior over policies
 
-    prior_pi = ar.ones(npi)/npi #ar.zeros(npi) + 1e-3/(npi-1)
+    prior_pi = jnp.ones(npi)/npi #jnp.zeros(npi) + 1e-3/(npi-1)
     #prior_pi[170] = 1. - 1e-3
-    alphas = ar.zeros((npi)) + learn_pol
+    alphas = jnp.zeros((npi)) + learn_pol
     alpha_0 = learn_pol
 #    for i in range(nb):
 #        alphas[i+1,i] = 100
@@ -182,7 +169,7 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
     set state prior (where agent thinks it starts)
     """
 
-    state_prior = ar.zeros((ns))
+    state_prior = jnp.zeros((ns))
 
     state_prior[0] = 1.
 
@@ -289,19 +276,19 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
 #    plt.show()
 #
 #
-#    rewarded = ar.where(w.rewards[:trials-1,-1] == 1)[0]
-#    unrewarded = ar.where(w.rewards[:trials-1,-1] == 0)[0]
+#    rewarded = jnp.where(w.rewards[:trials-1,-1] == 1)[0]
+#    unrewarded = jnp.where(w.rewards[:trials-1,-1] == 0)[0]
 #
-#    rare = ar.append(ar.where(w.environment.hidden_states[ar.where(w.actions[:,0] == 0)[0]] == 2)[0],
-#                     ar.where(w.environment.hidden_states[ar.where(w.actions[:,0] == 1)[0]] == 1)[0])
+#    rare = jnp.append(jnp.where(w.environment.hidden_states[jnp.where(w.actions[:,0] == 0)[0]] == 2)[0],
+#                     jnp.where(w.environment.hidden_states[jnp.where(w.actions[:,0] == 1)[0]] == 1)[0])
 #
-#    common = ar.append(ar.where(w.environment.hidden_states[ar.where(w.actions[:,0] == 0)[0]] == 1)[0],
-#                     ar.where(w.environment.hidden_states[ar.where(w.actions[:,0] == 1)[0]] == 2)[0])
+#    common = jnp.append(jnp.where(w.environment.hidden_states[jnp.where(w.actions[:,0] == 0)[0]] == 1)[0],
+#                     jnp.where(w.environment.hidden_states[jnp.where(w.actions[:,0] == 1)[0]] == 2)[0])
 #
 #    names = ["rewarded common", "rewarded rare", "unrewarded common", "unrewarded rare"]
 #
-#    index_list = [ar.intersect1d(rewarded, common), ar.intersect1d(rewarded, rare),
-#                 ar.intersect1d(unrewarded, common), ar.intersect1d(unrewarded, rare)]
+#    index_list = [jnp.intersect1d(rewarded, common), jnp.intersect1d(rewarded, rare),
+#                 jnp.intersect1d(unrewarded, common), jnp.intersect1d(unrewarded, rare)]
 #
 #    stayed_list = [((w.actions[index_list[i],0] - w.actions[index_list[i]+1,0])==0).sum()/len(index_list[i]) for i in range(4)]
 #
@@ -326,16 +313,16 @@ utility = []
 #ut = [0.985]
 ut = [0.999]
 for u in ut:
-    utility.append(ar.zeros(nr))
+    utility.append(jnp.zeros(nr))
     for i in range(1,nr):
         utility[-1][i] = u/(nr-1)#u/nr*i
     utility[-1][0] = (1.-u)
 
 changes = []
 
-C = ar.zeros((nr, ns))
+C = jnp.zeros((nr, ns))
 
-Rho = ar.zeros((trials, C.shape[0], C.shape[1]))
+Rho = jnp.zeros((trials, C.shape[0], C.shape[1]))
 n_training = 1
 #for i in range(4):
 #    Rho[trials*i//4:trials*(i+1)//4] = generate_bandit_timeseries_training(trials//4, nr, ns, nb//2, n_training, (i%2)*2)#generate_bandit_timeseries_change(C, nb, trials, changes)
@@ -405,13 +392,13 @@ for pl in [0.1,0.3,0.5,0.7,0.9]:
                     if arr_type == "numpy":
                         Rho[:] = pickle.decode(data)[:trials]
                     else:
-                        Rho[:] = ar.from_numpy(pickle.decode(data))[:trials]
+                        Rho[:] = jnp.from_numpy(pickle.decode(data))[:trials]
             
                 plt.figure(figsize=(10,5))
                 for i in range(4):
                     plt.plot(Rho[:,1,3+i], label="$p_{}$".format(i+1), linewidth=4)
                 plt.ylim([0,1])
-                plt.yticks(ar.arange(0,1.1,0.2),fontsize=18)
+                plt.yticks(jnp.arange(0,1.1,0.2),fontsize=18)
                 plt.ylabel("reward probability", fontsize=20)
                 plt.xlim([-0.1, trials+0.1])
                 plt.xticks(range(0,trials+1,50),fontsize=18)
@@ -424,9 +411,9 @@ for pl in [0.1,0.3,0.5,0.7,0.9]:
                 l = []
                 learn_pol = tend
                 learn_habit = True
-                pol_lambda = ar.tensor([pl])#0.3
-                r_lambda = ar.tensor([rl])#0.6
-                dec_temp = ar.tensor([dt])#4.
+                pol_lambda = jnp.tensor([pl])#0.3
+                r_lambda = jnp.tensor([rl])#0.6
+                dec_temp = jnp.tensor([dt])#4.
                 l.append([learn_pol, avg, Rho, learn_habit, pol_lambda, r_lambda, dec_temp])
             
                 par_list = []
@@ -441,21 +428,21 @@ for pl in [0.1,0.3,0.5,0.7,0.9]:
             
                     w = worlds[-1]
             
-                    # rewarded = ar.where(w.rewards[:trials-1,-1] == 1)[0]
+                    # rewarded = jnp.where(w.rewards[:trials-1,-1] == 1)[0]
             
-                    # unrewarded = ar.where(w.rewards[:trials-1,-1] == 0)[0]
+                    # unrewarded = jnp.where(w.rewards[:trials-1,-1] == 0)[0]
                     
                     rewarded = w.rewards[:trials-1,-1] == 1
             
                     unrewarded = rewarded==False#w.rewards[:trials-1,-1] == 0
             
-                    # TODO: go back to ar.logical_and when on pytorch version 1.5
-                    # rare = ar.cat((ar.where(own_logical_and(w.environment.hidden_states[:,1]==2, w.actions[:,0] == 0) == True)[0],
-                    #                  ar.where(own_logical_and(w.environment.hidden_states[:,1]==1, w.actions[:,0] == 1) == True)[0]))
+                    # TODO: go back to jnp.logical_and when on pytorch version 1.5
+                    # rare = jnp.cat((jnp.where(own_logical_and(w.environment.hidden_states[:,1]==2, w.actions[:,0] == 0) == True)[0],
+                    #                  jnp.where(own_logical_and(w.environment.hidden_states[:,1]==1, w.actions[:,0] == 1) == True)[0]))
                     # rare.sort()
             
-                    # common = ar.cat((ar.where(own_logical_and(w.environment.hidden_states[:,1]==2, w.actions[:,0] == 1) == True)[0],
-                    #                    ar.where(own_logical_and(w.environment.hidden_states[:,1]==1, w.actions[:,0] == 0) == True)[0]))
+                    # common = jnp.cat((jnp.where(own_logical_and(w.environment.hidden_states[:,1]==2, w.actions[:,0] == 1) == True)[0],
+                    #                    jnp.where(own_logical_and(w.environment.hidden_states[:,1]==1, w.actions[:,0] == 0) == True)[0]))
                     # common.sort()
                     
                     rare = own_logical_or(own_logical_and(w.environment.hidden_states[:trials-1,1]==2, w.actions[:trials-1,0] == 0),
@@ -466,13 +453,13 @@ for pl in [0.1,0.3,0.5,0.7,0.9]:
             
                     names = ["rewarded common", "rewarded rare", "unrewarded common", "unrewarded rare"]
             
-                    # index_list = [ar.intersect1d(rewarded, common), ar.intersect1d(rewarded, rare),
-                    #              ar.intersect1d(unrewarded, common), ar.intersect1d(unrewarded, rare)]
+                    # index_list = [jnp.intersect1d(rewarded, common), jnp.intersect1d(rewarded, rare),
+                    #              jnp.intersect1d(unrewarded, common), jnp.intersect1d(unrewarded, rare)]
                     
-                    rewarded_common = ar.where(own_logical_and(rewarded,common) == True)[0]
-                    rewarded_rare = ar.where(own_logical_and(rewarded,rare) == True)[0]
-                    unrewarded_common = ar.where(own_logical_and(unrewarded,common) == True)[0]
-                    unrewarded_rare = ar.where(own_logical_and(unrewarded,rare) == True)[0]
+                    rewarded_common = jnp.where(own_logical_and(rewarded,common) == True)[0]
+                    rewarded_rare = jnp.where(own_logical_and(rewarded,rare) == True)[0]
+                    unrewarded_common = jnp.where(own_logical_and(unrewarded,common) == True)[0]
+                    unrewarded_rare = jnp.where(own_logical_and(unrewarded,rare) == True)[0]
                     
                     index_list = [rewarded_common, rewarded_rare,
                                  unrewarded_common, unrewarded_rare]
@@ -500,7 +487,7 @@ for pl in [0.1,0.3,0.5,0.7,0.9]:
                 g = sns.barplot(data=stayed_arr)
                 g.set_xticklabels(names, rotation=45, horizontalalignment='right', fontsize=16)
                 plt.ylim([0,1])
-                plt.yticks(ar.arange(0,1.1,0.2),fontsize=16)
+                plt.yticks(jnp.arange(0,1.1,0.2),fontsize=16)
                 if learn_habit:
                     plt.title("habit and goal-directed", fontsize=18)
                     plt.savefig("habit_and_goal.svg",dpi=300)
