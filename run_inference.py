@@ -10,6 +10,9 @@ Created on Mon Sep 13 14:09:11 2021
 import torch as ar
 array = ar.tensor
 
+ar.set_num_threads(1)
+print("torch threads", ar.get_num_threads())
+
 import pyro
 import pyro.distributions as dist
 import agent as agt
@@ -32,6 +35,7 @@ import scipy as sc
 import scipy.signal as ss
 import bottleneck as bn
 import gc
+import sys
 
 #device = ar.device("cuda") if ar.cuda.is_available() else ar.device("cpu")
 #device = ar.device("cuda")
