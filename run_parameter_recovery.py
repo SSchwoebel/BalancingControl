@@ -260,6 +260,7 @@ if __name__=='__main__':
     if len(sys.argv[1:])>0:
         dt = float(kwargs["dt"])
         tend = int(kwargs["tend"])
+        i = int(kwargs["i"])
     else:
         dt =  5.
         tend = 5
@@ -267,34 +268,33 @@ if __name__=='__main__':
     iter_steps = 200
     num_particles = 200
     
-    for i in range(5):
-        for pl in [0.1,0.3,0.5,0.7,0.9]:
-            for rl in [0.1,0.3,0.5,0.7,0.9]:
-                    
-                inf_name = "twostage_inference"+str(i)+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tend)+".json"
+    for pl in [0.1,0.3,0.5,0.7,0.9]:
+        for rl in [0.1,0.3,0.5,0.7,0.9]:
                 
-                if inf_name not in os.listdir(folder):
+            inf_name = "twostage_inference"+str(i)+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tend)+".json"
+            
+            if inf_name not in os.listdir(folder):
+                
+                print("analysing i", i, "pl", pl, "rl", rl, "dt", dt, "tend", tend)
+                
+                param_dict = recover_parameters(i, pl, rl, dt, tend, iter_steps=iter_steps, num_particles=num_particles)
+                
+                total_param_dict = param_dict.copy()
+                total_param_dict['pl'] = pl
+                total_param_dict['rl'] = rl
+                total_param_dict['dt'] = dt
+                total_param_dict['tend'] = tend                            
+                
+                fname = os.path.join(folder, inf_name)
+                
+                jsonpickle_numpy.register_handlers()
+                
+                pickled = pickle.encode(total_param_dict)
+                with open(fname, 'w') as outfile:
+                    json.dump(pickled, outfile)
                     
-                    print("analysing i", i, "pl", pl, "rl", rl, "dt", dt, "tend", tend)
+            else:
+                print("skipping i", i, "pl", pl, "rl", rl, "dt", dt, "tend", tend)
                     
-                    param_dict = recover_parameters(i, pl, rl, dt, tend, iter_steps=iter_steps, num_particles=num_particles)
-                    
-                    total_param_dict = param_dict.copy()
-                    total_param_dict['pl'] = pl
-                    total_param_dict['rl'] = rl
-                    total_param_dict['dt'] = dt
-                    total_param_dict['tend'] = tend                            
-                    
-                    fname = os.path.join(folder, inf_name)
-                    
-                    jsonpickle_numpy.register_handlers()
-                    
-                    pickled = pickle.encode(total_param_dict)
-                    with open(fname, 'w') as outfile:
-                        json.dump(pickled, outfile)
-                        
-                else:
-                    print("skipping i", i, "pl", pl, "rl", rl, "dt", dt, "tend", tend)
-                        
-                gc.collect()
+            gc.collect()
                         
