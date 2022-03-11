@@ -258,8 +258,8 @@ def loop_fct(param_list):
     
     dt, tend, i = param_list
 
-    iter_steps = 5
-    num_particles = 6
+    iter_steps = 200
+    num_particles = 200
     
     for pl in [0.1,0.3,0.5,0.7,0.9]:
         for rl in [0.1,0.3,0.5,0.7,0.9]:

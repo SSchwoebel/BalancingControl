@@ -160,10 +160,10 @@ class SingleInference(object):
                                   vectorize_particles=True))
 
         loss = []
-        pbar = tqdm(range(iter_steps), position=0)
-        for step in pbar:
+        #pbar = tqdm(range(iter_steps), position=0)
+        for step in range(iter_steps):#pbar:
             loss.append(ar.tensor(svi.step()).to(device))
-            pbar.set_description("Mean ELBO %6.2f" % ar.tensor(loss[-20:]).mean())
+            #pbar.set_description("Mean ELBO %6.2f" % ar.tensor(loss[-20:]).mean())
             if ar.isnan(loss[-1]):
                 break
 
