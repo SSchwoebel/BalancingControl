@@ -87,40 +87,40 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
     b2 = 0.7
     nb2 = 1.-b2
 
-    B[:,:,0] = array([[  0,  0,  0,  0,  0,  0,  0,],
+    B.at[:,:,0].set(jnp.array([[  0,  0,  0,  0,  0,  0,  0,],
                          [ b1,  0,  0,  0,  0,  0,  0,],
                          [nb1,  0,  0,  0,  0,  0,  0,],
                          [  0,  1,  0,  1,  0,  0,  0,],
                          [  0,  0,  1,  0,  1,  0,  0,],
                          [  0,  0,  0,  0,  0,  1,  0,],
-                         [  0,  0,  0,  0,  0,  0,  1,],])
+                         [  0,  0,  0,  0,  0,  0,  1,],]))
 
-    B[:,:,1] = array([[  0,  0,  0,  0,  0,  0,  0,],
+    B.at[:,:,1].set(jnp.array([[  0,  0,  0,  0,  0,  0,  0,],
                          [nb2,  0,  0,  0,  0,  0,  0,],
                          [ b2,  0,  0,  0,  0,  0,  0,],
                          [  0,  0,  0,  1,  0,  0,  0,],
                          [  0,  0,  0,  0,  1,  0,  0,],
                          [  0,  1,  0,  0,  0,  1,  0,],
-                         [  0,  0,  1,  0,  0,  0,  1,],])
+                         [  0,  0,  1,  0,  0,  0,  1,],]))
 
     # create reward generation
 #
 #    C = jnp.zeros((utility.shape[0], ns))
 #
-#    vals = array([0., 1./5., 0.95, 1./5., 1/5., 1./5.])
+#    vals = jnp.array([0., 1./5., 0.95, 1./5., 1/5., 1./5.])
 #
 #    for i in range(ns):
 #        C[:,i] = [1-vals[i],vals[i]]
 #
-#    changes = array([0.01, -0.01])
+#    changes = jnp.array([0.01, -0.01])
 #    Rho = generate_bandit_timeseries(C, nb, trials, changes)
 
     # agent's beliefs about reward generation
 
     C_alphas = jnp.zeros((nr, ns)) + learn_rew
-    C_alphas[0,:3] = 100
+    C_alphas.at[0,:3].set(100)
     for i in range(1,nr):
-        C_alphas[i,0] = 1
+        C_alphas.at[i,0].set(1)
 #    C_alphas[0,1:,:] = 100
 #    for c in range(nb):
 #        C_alphas[1,c+1,c] = 100
@@ -129,9 +129,9 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
 
     #C_agent = jnp.zeros((nr, ns, nc))
     # for c in range(nc):
-    #     C_agent[:,:,c] = array([(C_alphas[:,i,c])/(C_alphas[:,i,c]).sum() for i in range(ns)]).T
+    #     C_agent[:,:,c] = jnp.array([(C_alphas[:,i,c])/(C_alphas[:,i,c]).sum() for i in range(ns)]).T
     C_agent = C_alphas[:,:] / C_alphas[:,:].sum(axis=0)[None,:]
-    #array([jnp.random.dirichlet(C_alphas[:,i]) for i in range(ns)]).T
+    #jnp.array([jnp.random.dirichlet(C_alphas[:,i]) for i in range(ns)]).T
 
     # context transition matrix
 
@@ -148,7 +148,7 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
     create policies
     """
 
-    pol = array(list(itertools.product(list(range(na)), repeat=T-1)))
+    pol = jnp.array(list(itertools.product(list(range(na)), repeat=T-1)))
 
     #pol = pol[-2:]
     npi = pol.shape[0]
@@ -171,7 +171,7 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
 
     state_prior = jnp.zeros((ns))
 
-    state_prior[0] = 1.
+    state_prior.at[0].set(1.)
 
     """
     set action selection method
@@ -194,7 +194,7 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
 #                                        number_of_policies = npi,
 #                                        number_of_actions = na)
 
-    prior_context = array([1.])
+    prior_context = jnp.array([1.])
 
 #    prior_context[0] = 1.
 
@@ -315,8 +315,8 @@ ut = [0.999]
 for u in ut:
     utility.append(jnp.zeros(nr))
     for i in range(1,nr):
-        utility[-1][i] = u/(nr-1)#u/nr*i
-    utility[-1][0] = (1.-u)
+        utility[-1].at[i].set(u/(nr-1))#u/nr*i
+    utility[-1].at[0].set(1.-u)
 
 changes = []
 
@@ -369,11 +369,11 @@ for pl in [0.1,0.3,0.5,0.7,0.9]:
             
             stayed = []
             indices = []
-            for tendency in [2,3,4]:#[1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
+            for tendency in [1000]:#[1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
                 print(pl, rl, dt, tendency)
-                tend = array([tendency])
+                tend = jnp.array([tendency])
             
-                init = array([0.6, 0.4, 0.6, 0.4])
+                init = jnp.array([0.6, 0.4, 0.6, 0.4])
             
                 Rho_fname = 'twostep_rho.json'
             
@@ -389,10 +389,10 @@ for pl in [0.1,0.3,0.5,0.7,0.9]:
                 else:
                     with open(fname, 'r') as infile:
                         data = json.load(infile)
-                    if arr_type == "numpy":
-                        Rho[:] = pickle.decode(data)[:trials]
-                    else:
-                        Rho[:] = jnp.from_numpy(pickle.decode(data))[:trials]
+                    #if arr_type == "numpy":
+                    Rho = pickle.decode(data)[:trials]
+                    #else:
+                    #W    Rho[:] = jnp.from_numpy(pickle.decode(data))[:trials]
             
                 plt.figure(figsize=(10,5))
                 for i in range(4):
@@ -411,9 +411,9 @@ for pl in [0.1,0.3,0.5,0.7,0.9]:
                 l = []
                 learn_pol = tend
                 learn_habit = True
-                pol_lambda = jnp.tensor([pl])#0.3
-                r_lambda = jnp.tensor([rl])#0.6
-                dec_temp = jnp.tensor([dt])#4.
+                pol_lambda = jnp.array([pl])#0.3
+                r_lambda = jnp.array([rl])#0.6
+                dec_temp = jnp.array([dt])#4.
                 l.append([learn_pol, avg, Rho, learn_habit, pol_lambda, r_lambda, dec_temp])
             
                 par_list = []
@@ -471,9 +471,9 @@ for pl in [0.1,0.3,0.5,0.7,0.9]:
                     run_name = "twostage_agent"+str(i)+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tendency)+".json"
                     fname = os.path.join(folder, run_name)
                     
-                    actions = w.actions.numpy()
-                    observations = w.observations.numpy()
-                    rewards = w.rewards.numpy()
+                    actions = w.actions#.numpy()
+                    observations = w.observations#.numpy()
+                    rewards = w.rewards#.numpy()
                     data = {"actions": actions, "observations": observations, "rewards": rewards}
     
                     jsonpickle_numpy.register_handlers()
@@ -481,7 +481,7 @@ for pl in [0.1,0.3,0.5,0.7,0.9]:
                     with open(fname, 'w') as outfile:
                         json.dump(pickled, outfile)
             
-                stayed_arr = array(stayed)
+                stayed_arr = jnp.array(stayed)
                 
                 plt.figure()
                 g = sns.barplot(data=stayed_arr)

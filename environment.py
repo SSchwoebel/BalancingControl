@@ -1,6 +1,7 @@
 """This module contains various experimental environments used for testing
 human behavior."""
 import jax.numpy as jnp
+from jax import random
 
 
 class GridWorld(object):
@@ -25,7 +26,7 @@ class GridWorld(object):
 
     def set_initial_states(self, tau):
         #start in lower corner
-        self.hidden_states[tau, 0] = self.initial_state
+        self.hidden_states.at[tau, 0].set(self.initial_state)
 
         if tau%100==0:
             print("trial:", tau)
@@ -41,8 +42,8 @@ class GridWorld(object):
 
         current_state = self.hidden_states[tau, t-1]
 
-        self.hidden_states[tau, t] = jnp.random.choice(self.Theta.shape[0],
-                          p = self.Theta[:, current_state, int(response)])
+        self.hidden_states.at[tau, t].set(jnp.random.choice(self.Theta.shape[0],
+                          p = self.Theta[:, current_state, int(response)]))
 
     def generate_rewards(self, tau, t):
         #generate one sample from multinomial distribution
@@ -95,11 +96,13 @@ class MultiArmedBandid(object):
 
         #set probability distribution used for generating observations
         self.Omega = Omega
+        self.no = Omega.shape[0]
 
         #set probability distribution used for generating rewards
 #        self.Rho = jnp.zeros((trials, Rho.shape[0], Rho.shape[1]))
 #        self.Rho[0] = Rho.copy()
         self.Rho = Rho
+        self.nr = Rho.shape[1]
 
         #set probability distribution used for generating state transitions
         self.Theta = Theta
@@ -115,7 +118,7 @@ class MultiArmedBandid(object):
 
     def set_initial_states(self, tau):
         #start in lower corner
-        self.hidden_states[tau, 0] = 0
+        self.hidden_states.at[tau, 0].set(0)
 
 #        if tau%100==0:
 #            print("trial:", tau)
@@ -123,7 +126,7 @@ class MultiArmedBandid(object):
 
     def generate_observations(self, tau, t):
         #generate one sample from multinomial distribution
-        o = jnp.multinomial(self.Omega[:, self.hidden_states[tau, t]],1)
+        o = random.choice(random.PRNGKey(100),jnp.arange(self.no), p=self.Omega[:, self.hidden_states[tau, t]])
         return o
 
 
@@ -131,11 +134,11 @@ class MultiArmedBandid(object):
 
         current_state = self.hidden_states[tau, t-1]
 
-        self.hidden_states[tau, t] = jnp.multinomial(self.Theta[:, current_state, int(response)],1)
+        self.hidden_states.at[tau, t].set(random.choice(random.PRNGKey(100),jnp.arange(self.nh), p=self.Theta[:, current_state, int(response)]))
 
     def generate_rewards(self, tau, t):
         #generate one sample from multinomial distribution
-        r = jnp.multinomial(self.Rho[tau, :, self.hidden_states[tau, t]],1)
+        r = random.choice(random.PRNGKey(100),jnp.arange(self.nr), p=self.Rho[tau, :, self.hidden_states[tau, t]])
 
 #        if tau < self.trials-1:
 #            #change Rho slowly

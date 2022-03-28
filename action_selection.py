@@ -2,6 +2,7 @@ from misc import ln, logBeta, Beta_function
 
 import jax.numpy as jnp
 import jax.scipy.special as scs
+from jax import random
 
 from misc import entropy
 from statsmodels.tsa.stattools import acovf as acov
@@ -300,7 +301,7 @@ class AveragedSelector(object):
         self.estimate_action_probability(tau, t, posterior_policies, actions)
 
         #generate the desired response from action probability
-        u = jnp.distributions.Categorical(self.control_probability[tau, t]).sample()
+        u = random.choice(random.PRNGKey(100),jnp.arange(self.na), p=self.control_probability[tau, t])
 
         return u
 
@@ -308,10 +309,10 @@ class AveragedSelector(object):
         #estimate action probability
         control_prob = jnp.zeros(self.na)
         for a in range(self.na):
-            control_prob[a] = posterior_policies[actions == a].sum()
+            control_prob.at[a].set(posterior_policies[actions == a].sum())
 
 
-        self.control_probability[tau, t] = control_prob
+        self.control_probability.at[tau, t].set(control_prob)
 
 
 class MaxSelector(object):

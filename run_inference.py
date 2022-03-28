@@ -42,13 +42,14 @@ import gc
 """load data"""
 
 i = 0
-pl = 0.3
+pl = 0.1
 rl = 0.7
 dt = 5.
-tend = 1
+tend = 1000
 
 folder = "data"
 
+#run_name = "twostage_agent"+str(i)+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+".json"
 run_name = "twostage_agent"+str(i)+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tend)+".json"
 fname = os.path.join(folder, run_name)
 
@@ -80,7 +81,7 @@ nr = 2
 learn_pol=1000
 learn_habit=True
 
-learn_rew = 1
+learn_rew = tend
 
 utility = []
 
@@ -231,7 +232,7 @@ agent = agt.FittingAgent(bayes_prc, [], pol,
 
 inferrer = inf.SingleInference(agent, data)
 
-loss, param_dict = inferrer.infer_posterior(iter_steps=200, num_particles=200)
+loss, param_dict = inferrer.infer_posterior(iter_steps=1000)#, num_particles=10)
 
 plt.figure()
 plt.title("ELBO")

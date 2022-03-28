@@ -94,7 +94,7 @@ class FittingAgent(object):
         self.control_probs  = jnp.zeros((self.trials, self.T, self.na))#.to(device)
         self.log_probability = 0
         if hasattr(self.perception, 'generative_model_context'):
-            self.context_obs = jnp.zeros(trials, dtype=int)#.to(device)
+            self.context_obs = jnp.zeros(self.trials, dtype=int)#.to(device)
 
         self.set_parameters(**param_dict)
         self.perception.reset()
@@ -182,8 +182,8 @@ class FittingAgent(object):
         # avg_likelihood = avg_likelihood[non_zero]
         # prior = prior[non_zero]
 
-        self.actions[tau, t] = self.action_selection.select_desired_action(tau,
-                                        t, posterior_policies, controls, None, None)
+        self.actions.at[tau, t].set(self.action_selection.select_desired_action(tau,
+                                        t, posterior_policies, controls, None, None))
 
 
         return self.actions[tau, t]
