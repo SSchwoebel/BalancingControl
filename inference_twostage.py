@@ -10,7 +10,7 @@ import jax.numpy as jnp
 import jax.scipy.special as scs
 import numpyro as pyro
 import numpyro.distributions as dist
-from jax import random
+from jax import random, lax
 
 import pandas as pd
 import matplotlib.pylab as plt
@@ -75,12 +75,11 @@ class SingleInference(object):
         self.agent.reset(param_dict)
         #self.agent.set_parameters(pol_lambda=lamb_pi, r_lambda=lamb_r, dec_temp=dec_temp)
         
-        for tau in range(self.trials):
-        #with pyro.plate("tau", self.trials, subsample_size=1) as tau:
+        def scan_fn(c, tau):
             for t in range(self.T):
             #with pyro.plate("t", self.T, subsample_size=1) as t:
                 
-                #print(tau, t)
+                print(tau, t)
                 if t==0:
                     prev_response = None
                     context = None
@@ -108,6 +107,45 @@ class SingleInference(object):
                     #print(tau,t,param_dict)
                     
                     pyro.sample('res_{}_{}'.format(tau, t), dist.Categorical(probs.T), obs=curr_response)
+                    
+                    return None, None
+                    
+        
+        _ = lax.scan(scan_fn, None, jnp.arange(self.trials))    
+        
+        # for tau in range(self.trials):
+        # #with pyro.plate("tau", self.trials, subsample_size=1) as tau:
+        #     for t in range(self.T):
+        #     #with pyro.plate("t", self.T, subsample_size=1) as t:
+                
+        #         #print(tau, t)
+        #         if t==0:
+        #             prev_response = None
+        #             context = None
+        #         else:
+        #             prev_response = self.data["actions"][tau, t-1]
+        #             context = None
+        
+        #         observation = self.data["observations"][tau, t]
+        
+        #         reward = self.data["rewards"][tau, t]
+        
+        #         self.agent.update_beliefs(tau, t, observation, reward, prev_response, context)
+        
+        #         if t < self.T-1:
+                
+        #             probs = self.agent.perception.posterior_actions[-1]
+        #             #print(probs)
+        #             #if jnp.any(jnp.isnan(probs)):
+        #             # print(probs)
+        #             # print(dec_temp, lamb_pi, lamb_r)
+            
+        #             curr_response = self.data["actions"][tau, t]
+        #             #print(curr_response)
+        #             # print(tau, t, probs, curr_response)
+        #             #print(tau,t,param_dict)
+                    
+        #             pyro.sample('res_{}_{}'.format(tau, t), dist.Categorical(probs.T), obs=curr_response)
                     
 
     def guide(self):
