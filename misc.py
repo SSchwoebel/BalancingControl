@@ -555,3 +555,9 @@ def plot_habit_learning(w, results, save_figs=False, fname=''):
 #        plt.savefig(fname+"_utility_a_habit.svg")
 #        plt.savefig(fname+"_utility_a_habit.png", bbox_inches = 'tight', dpi=300)
 #    plt.show()
+
+
+def precalc_fitting_agent_settings():
+    # todo
+    # precalc possible policies, big_trans_matrix, curr_rew and curr_obs, preference fix rew counts
+    pass
