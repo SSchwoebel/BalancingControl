@@ -15,6 +15,8 @@ import jsonpickle.ext.numpy as jsonpickle_numpy
 import json
 import os
 import copy
+import matplotlib.pylab as plt
+import seaborn as sns
 
 
 class Perception(object):
@@ -53,9 +55,14 @@ class Perception(object):
         
         total_counts = jnp.concatenate([self.fix_rew_counts, rew_counts], axis=1)
         rew_matrix = total_counts / total_counts.sum(axis=0)
+        print("matrix", rew_matrix)
         prior_policies = pol_counts / pol_counts.sum(axis=0)
         
         rew_messages = self.make_rew_messages(rew_matrix, curr_rew)
+        print(rew_messages.shape)
+        print("0", rew_messages[:,0,0])
+        print("1", rew_messages[:,1,0])
+        print("2", rew_messages[:,2,0])
         obs_messages = self.make_obs_messages(curr_obs)
         fwd_messages, fwd_norms = self.make_fwd_messages(rew_messages, obs_messages)
         bwd_messages = self.make_bwd_messages(rew_messages, obs_messages)
@@ -81,9 +88,11 @@ class Perception(object):
         rew_messages = []
         for i, rew in enumerate(curr_rew):
             if rew is not None:
-                rew_messages.append(rew_matrix[rew])
+                message = rew_matrix[rew]
+                rew_messages.append(message / message.sum(axis=0))
             else:
-                rew_messages.append(jnp.einsum('r,rsn->sn', self.preference, rew_matrix))
+                message = jnp.einsum('r,rsn->sn', self.preference, rew_matrix)
+                rew_messages.append(message / message.sum(axis=0))
                 
         return jnp.stack(rew_messages).transpose((1,0,2))
     
@@ -191,13 +200,13 @@ class Perception(object):
     
     def update_pol_counts(self, prev_pol_counts, posterior_policies):
         
-        pol_counts = (1-self.lambda_pi)[None,...]*prev_pol_counts + (self.lambda_pi*self.alpha)[None,...] + posterior_policies
+        pol_counts = (1-self.lambda_pi)[None,...]*prev_pol_counts + (self.lambda_pi)[None,...] + posterior_policies#*self.alpha
         
         return pol_counts
 
     
 class Agent(object):
-    def __init__(self, state_trans_matrix, obs_matrix, opt_params, fix_rew_counts, preference, prior_states, policies, na, T, trials, rng_key):
+    def __init__(self, state_trans_matrix, obs_matrix, opt_params, fix_rew_counts, preference, prior_states, policies, na, T, trials, rng_seed):
         
         self.T = T
         self.npi = policies.shape[0]
@@ -209,7 +218,7 @@ class Agent(object):
         self.obs_matrix = obs_matrix
         self.opt_params = opt_params
         self.na = na
-        self.rng_key = rng_key
+        self.rng_key = random.PRNGKey(rng_seed)
         updated_states = prior_states.shape[0] - fix_rew_counts.shape[1]
         nr = fix_rew_counts.shape[0]
         init_rew_counts = jnp.ones((nr, updated_states, 1))
@@ -220,7 +229,9 @@ class Agent(object):
     def calc_big_trans_matrix(self, state_trans_matrix, policies):
         
         npi = policies.shape[0]
-        return jnp.stack([jnp.stack([state_trans_matrix[:,:,policies[pi,t]] for pi in range(self.npi)]) for t in range(self.T-1)]).T
+        big_trans_matrix = jnp.stack([jnp.stack([state_trans_matrix[:,:,policies[pi,t]] for pi in range(self.npi)]) for t in range(self.T-1)]).transpose((2,3,1,0))
+        print(big_trans_matrix.shape)
+        return big_trans_matrix
     
     # def init_counts(self):
     #     pass
@@ -253,15 +264,17 @@ class Agent(object):
         
     def generate_response(self, posterior_actions):
         
-        a = random.choice(self.rng_key, jnp.arange(self.na), p=posterior_actions)
+        key, subkey = random.split(self.rng_key)
+        a = random.choice(subkey, jnp.arange(self.na), p=posterior_actions)
+        self.rng_key = key
         
         return a
     
 class Environment(object):
-    def __init__(self, state_trans_matrix, reward_matrix, observation_matrix, rng_key, initial_state=0):
+    def __init__(self, state_trans_matrix, reward_matrix, observation_matrix, rng_seed, initial_state=0):
         self.curr_state = initial_state
         self.initial_state = initial_state
-        self.rng_key = rng_key
+        self.rng_key = random.PRNGKey(rng_seed)
         self.state_trans_matrix = state_trans_matrix
         self.ns = state_trans_matrix.shape[0]
         self.reward_matrix = reward_matrix
@@ -274,23 +287,29 @@ class Environment(object):
         rew = self.generate_reward(tau)
         obs = self.generate_observation()
         
-        return rew, obs
+        return rew, obs, self.curr_state
     
     def generate_reward(self, tau):
         
-        rew = random.choice(self.rng_key, jnp.arange(self.nr), p=self.reward_matrix[tau,:,self.curr_state])
+        key, subkey = random.split(self.rng_key)
+        rew = random.choice(subkey, jnp.arange(self.nr), p=self.reward_matrix[tau,:,self.curr_state])
+        self.rng_key = key
         
         return rew
     
     def generate_observation(self):
         
-        obs = random.choice(self.rng_key, jnp.arange(self.no), p=self.observation_matrix[:,self.curr_state])
+        key, subkey = random.split(self.rng_key)
+        obs = random.choice(subkey, jnp.arange(self.no), p=self.observation_matrix[:,self.curr_state])
+        self.rng_key = key
         
         return obs
     
     def generate_state_transition(self, response):
         
-        state = random.choice(self.rng_key, jnp.arange(self.ns), p=self.state_trans_matrix[:,self.curr_state,response])
+        key, subkey = random.split(self.rng_key)
+        state = random.choice(subkey, jnp.arange(self.ns), p=self.state_trans_matrix[:,self.curr_state,response])
+        self.rng_key = key
         
         return state
     
@@ -298,85 +317,61 @@ class Environment(object):
         self.curr_state = self.generate_state_transition(response)
         rew = self.generate_reward(tau)
         obs = self.generate_observation()
-        print(tau)
-        print(self.curr_state, rew, obs, response)
         
-        return obs, rew
+        return obs, rew, self.curr_state
     
     
 class World(object):
-    def __init__(self, state_trans_matrix, reward_matrix, observation_matrix, opt_params, fix_rew_counts, preference, prior_states, policies, na, T, trials, rng_key):
+    def __init__(self, state_trans_matrix, reward_matrix, observation_matrix, opt_params, fix_rew_counts, preference, prior_states, policies, na, T, trials, rng_seed):
         
-        self.environment = Environment(state_trans_matrix, reward_matrix, observation_matrix, rng_key)
-        self.agent = Agent(state_trans_matrix, observation_matrix, opt_params, fix_rew_counts, preference, prior_states, policies, na, T, trials, rng_key)
+        self.environment = Environment(state_trans_matrix, reward_matrix, observation_matrix, rng_seed)
+        self.agent = Agent(state_trans_matrix, observation_matrix, opt_params, fix_rew_counts, preference, prior_states, policies, na, T, trials, rng_seed)
         self.T = T
+        self.trials = 0
         
-        self.observations = []
-        self.rewards = []
-        self.responses = []
-        self.trials = []
-        self.time_steps = []
         self.results = []
-        self.curr_observed = {"obs": [None]*T, "rew": [None]*T, "tau": None, "t": None, "respone": [None]*(T-1)}
+        self.curr_observed = {"obs": [None]*T, "rew": [None]*T, "state": [None]*T, "tau": None, "t": None, "response": [None]*(T-1)}
         
     def step(self, tau, t):
         
-        #print(tau, t)
+        print(tau, t)
         if t==0:
-            self.curr_observed = {"obs": [None]*self.T, "rew": [None]*self.T, "tau": None, "t": None, "response": [None]*(self.T-1)}
-            obs, rew = self.environment.init_trial(tau)
+            self.curr_observed = {"obs": [None]*self.T, "rew": [None]*self.T, "state": [None]*self.T, "tau": None, "t": None, "response": [None]*(self.T-1)}
+            obs, rew, state = self.environment.init_trial(tau)
         else:
-            obs, rew = self.environment.step(self.curr_observed["response"][t-1], tau)  
+            obs, rew, state = self.environment.step(self.curr_observed["response"][t-1], tau)  
             
         #print(self.curr_observed)
         
         self.curr_observed["tau"] = tau
         self.curr_observed["t"] = t
         self.curr_observed["obs"][t] = int(obs)
-        self.curr_observed["rew"][t] = int(rew)      
+        self.curr_observed["rew"][t] = int(rew)   
+        self.curr_observed["state"][t] = int(state)
         
         response = self.agent.step(self.curr_observed)
-        
-        self.observations.append(int(obs))
-        self.rewards.append(int(rew))
-        if response is not None:
-            self.responses.append(int(response))
-        else:
-            self.responses.append(None)
-        self.trials.append(tau)
-        self.time_steps.append(t)
         
         if t < self.T-1:
             self.curr_observed["response"][t] = int(response)
         
-        self.results.append(self.curr_observed.copy())
+        self.results.append(copy.deepcopy(self.curr_observed))
         
         if t==self.T-1:
             self.curr_observed = {}
-            
-        if tau==200:
-            self.test = self.results.copy()
-            print("test")
-            print(self.test[-1])
         
     def run(self, trials):
         
+        self.trials += trials
         for tau in range(trials):
             for t in range(self.T):
                 self.step(tau, t)
-                if tau == trials-1 and t==0:
-                    print("inside loop")
-                    print(self.results[-1])
-                    
-        print("after loop")
-        print(self.results[-3])
                 
-        return self.results.copy()
+        return self.results
                 
                 
 class SimulateTwoStageTask(object):
-    def __init__(self):
-        pass
+    def __init__(self, rng_seed):
+        self.rng_seed = rng_seed
     
     def read_twostage_contingencies(self, fname = 'data/twostep_rho.json', trials=-1):
         
@@ -396,7 +391,7 @@ class SimulateTwoStageTask(object):
         
         return jnp.array(Rho)
     
-    def run(self, lambda_r, lambda_pi, dec_temp, h=1000):
+    def run(self, lambda_r, lambda_pi, dec_temp, h=0.001):
         
         self.opt_params = {"lambda_r": jnp.array([lambda_r]), "lambda_pi": jnp.array([lambda_pi]), "dec_temp": jnp.array([dec_temp]), "h": jnp.array([h])}
                 
@@ -437,7 +432,7 @@ class SimulateTwoStageTask(object):
                              [  0,  0,  1,  0,  0,  0,  1,],]]).transpose((1,2,0))
         
         u = 0.999
-        utility = jnp.array([u, 1-u])
+        utility = jnp.array([1-u, u])
             
         preference = utility
         
@@ -445,16 +440,13 @@ class SimulateTwoStageTask(object):
         
         policies = jnp.array(list(itertools.product(list(range(na)), repeat=T-1)))
         
-        prior_states = jnp.zeros(ns)
-        prior_states.at[0].set(1)
+        prior_states = jnp.eye(ns)[0]
         
         reward_matrix = self.read_twostage_contingencies(trials=trials)
         
-        rng_key = random.PRNGKey(1)
-        
         w = World(state_trans_matrix, reward_matrix, observation_matrix,
                   self.opt_params, fix_rew_counts, preference, prior_states,
-                  policies, na, T, trials, rng_key)
+                  policies, na, T, trials, self.rng_seed)
         
         results =  w.run(trials)
         print("outside of run")
@@ -475,9 +467,50 @@ class SimulateTwoStageTask(object):
         
 if __name__ == '__main__':
     
-    simulation = SimulateTwoStageTask()
-    w, results = simulation.run(0.3, 0.7, 5., 0.01)
+    simulation = SimulateTwoStageTask(rng_seed=1000)
+    w, results = simulation.run(0.3, 0.7, 5., 1./1000)
     
-    first_actions = jnp.array([r['response'] for r in w.results if r['t']==2])
+    for r in w.results:
+        if r['t']==2:
+            print(r)
     
-    #rewarded = 
+    first_actions = jnp.array([r['response'][0] for r in w.results if r['t']==2])
+    
+    rewarded = jnp.array([r['rew'][-1]==1 for r in w.results if r['t']==2 and r['tau'] < w.trials-1])
+    unrewarded = jnp.logical_not(rewarded)
+    
+    rare1 = jnp.logical_and(jnp.array([r['state'][1]==2 for r in w.results if r['t']==2 and r['tau'] < w.trials-1]), 
+                            first_actions[:w.trials-1] == 0) 
+    rare2 = jnp.logical_and(jnp.array([r['state'][1]==1 for r in w.results if r['t']==2 and r['tau'] < w.trials-1]), 
+                            first_actions[:w.trials-1] == 1) 
+    rare = jnp.logical_or(rare1, rare2)
+    
+    common = rare==False
+    
+    rewarded_common = jnp.where(jnp.logical_and(rewarded,common) == True)[0]
+    rewarded_rare = jnp.where(jnp.logical_and(rewarded,rare) == True)[0]
+    unrewarded_common = jnp.where(jnp.logical_and(unrewarded,common) == True)[0]
+    unrewarded_rare = jnp.where(jnp.logical_and(unrewarded,rare) == True)[0]
+
+    names = ["rewarded common", "rewarded rare", "unrewarded common", "unrewarded rare"]
+    
+    index_list = [rewarded_common, rewarded_rare,
+                  unrewarded_common, unrewarded_rare]
+    
+    stayed_list = [(first_actions[index_list[i]] == first_actions[index_list[i]+1]).sum()/float(len(index_list[i])) for i in range(4)]
+    stayed_arr = jnp.array(stayed_list)
+    
+    plt.figure()
+    g = sns.barplot(data=stayed_arr)
+    g.set_xticklabels(names, rotation=45, horizontalalignment='right', fontsize=16)
+    plt.ylim([0,1])
+    plt.yticks(jnp.arange(0,1.1,0.2),fontsize=16)
+    plt.title("habit and goal-directed", fontsize=18)
+    plt.savefig("habit_and_goal.svg",dpi=300)
+    plt.ylabel("stay probability",fontsize=16)
+    plt.show()
+    
+    
+    
+    
+    
