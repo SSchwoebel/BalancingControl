@@ -23,8 +23,8 @@ class Perception(object):
     def __init__(self, big_trans_matrix, obs_matrix, opt_params, fix_rew_counts, preference, prior_states, policies, na, possible_policies, T):
         
         # has shape ns x ns x npi x T-1
-        self.big_trans_matrix = big_trans_matrix
-        self.obs_matrix = obs_matrix
+        self.big_trans_matrix = big_trans_matrix + 1e-20
+        self.obs_matrix = obs_matrix + 1e-20
         self.fix_rew_counts = fix_rew_counts
         self.preference = preference
         self.policies = policies
@@ -39,7 +39,7 @@ class Perception(object):
         
         npart = self.lambda_r.shape[0]
         npi = policies.shape[0]
-        self.prior_states = jnp.repeat(jnp.repeat(prior_states[:,None], npi, axis=1)[:,:,None], npart, axis=1)
+        self.prior_states = jnp.repeat(jnp.repeat(prior_states[:,None], npi, axis=1)[:,:,None], npart, axis=1) #+ 1e-20
         self.bwd_init = jnp.repeat(jnp.repeat((jnp.ones_like(prior_states)/prior_states.shape[0])[:,None], npi, axis=1)[:,:,None], npart, axis=1)
     
     def step(self, carry, curr_observed):
@@ -55,20 +55,20 @@ class Perception(object):
         
         total_counts = jnp.concatenate([self.fix_rew_counts, rew_counts], axis=1)
         rew_matrix = total_counts / total_counts.sum(axis=0)
-        print("matrix", rew_matrix)
         prior_policies = pol_counts / pol_counts.sum(axis=0)
         
         rew_messages = self.make_rew_messages(rew_matrix, curr_rew)
-        print(rew_messages.shape)
-        print("0", rew_messages[:,0,0])
-        print("1", rew_messages[:,1,0])
-        print("2", rew_messages[:,2,0])
         obs_messages = self.make_obs_messages(curr_obs)
         fwd_messages, fwd_norms = self.make_fwd_messages(rew_messages, obs_messages)
         bwd_messages = self.make_bwd_messages(rew_messages, obs_messages)
+        # print(bwd_messages.shape)
+        # print("0", bwd_messages[:,0,0,0])
+        # print("1", bwd_messages[:,1,0,0])
+        # print("2", bwd_messages[:,2,0,0])
         
         posterior_states = fwd_messages*bwd_messages*obs_messages[...,None,None]*rew_messages[...,None]
         norm = posterior_states.sum(axis=0)
+        posterior_states = jnp.where(norm[None,...] > 0, posterior_states/norm[None,...],  posterior_states)
         fwd_norms = jnp.concatenate([fwd_norms, norm[-1][None,:]], axis=0)
         
         posterior_policies = self.eval_posterior_policies(fwd_norms, prior_policies)
@@ -76,6 +76,7 @@ class Perception(object):
         marginal_posterior_states = jnp.einsum('stpn,pn->stn', posterior_states, posterior_policies)
         
         posterior_actions = self.post_actions_from_policies(posterior_policies, t)
+        print(posterior_actions)
         
         if t==self.T-1:
             rew_counts = self.update_rew_counts(rew_counts, curr_rew, marginal_posterior_states, t=t)
@@ -88,11 +89,9 @@ class Perception(object):
         rew_messages = []
         for i, rew in enumerate(curr_rew):
             if rew is not None:
-                message = rew_matrix[rew]
-                rew_messages.append(message / message.sum(axis=0))
+                rew_messages.append(rew_matrix[rew])
             else:
-                message = jnp.einsum('r,rsn->sn', self.preference, rew_matrix)
-                rew_messages.append(message / message.sum(axis=0))
+                rew_messages.append(jnp.einsum('r,rsn->sn', self.preference, rew_matrix))
                 
         return jnp.stack(rew_messages).transpose((1,0,2))
     
@@ -136,7 +135,14 @@ class Perception(object):
         bwd_messages = []
         bwd_norms = []
         for input_message in input_messages:
+            # print("carry", carry)
+            # print("input messages: rew, obs trans")
+            # print(input_message[0])
+            # print(input_message[1])
+            # print(input_message[2][:,:,0])
             carry, output = self.scan_messages(carry, input_message)
+            # print("message")
+            # print(output[0][:,0])
             bwd_messages.append(output[0])
         #fwd = scan(self.scan_messages, init, input_messages)
         bwd_messages = jnp.flip(jnp.stack([init]+bwd_messages), axis=0).transpose((1,0,2,3))
@@ -149,14 +155,15 @@ class Perception(object):
     def scan_messages(self, carry, input_message):
         
         old_message = carry
-        #print(input_message)
-        obs_message, rew_message, trans_matrix = input_message
+        #print("input", input_message)
+        rew_message, obs_message, trans_matrix = input_message
         
-        #print(old_message)
-        tmp_message = jnp.einsum('spn,shp,sn,sn->hpn', old_message, trans_matrix, obs_message, obs_message)
+        #print("old", old_message)
+        tmp_message = jnp.einsum('hpn,shp,h,hn->spn', old_message, trans_matrix, obs_message, rew_message)
+        # print(tmp_message)
         
         norm = tmp_message.sum(axis=0)
-        message = jnp.where(norm > 0, tmp_message/norm, tmp_message)
+        message = jnp.where(norm > 0, tmp_message/norm[None,...], tmp_message)
         norm = jnp.where(self.possible_policies[:,None], norm, 0)
         
         return message, (message, norm)
@@ -184,23 +191,26 @@ class Perception(object):
         
         #note to self: try implemementing with binary mask multiplication instead of separated matrices
         # maybe using jnp.where ?
-        ns = prev_rew_counts.shape[1]
+        no = prev_rew_counts.shape[0]
         if t is None:
             for i, rew in enumerate(curr_rew):
                 if rew is not None:
                     rew_counts = (1-self.lambda_r)[None,None,...]*prev_rew_counts + self.lambda_r[None,None,...] \
-                        + jnp.eye(ns)[rew][:,None,...]*post_states[-prev_rew_counts.shape[1]:,i,...][None,:,...]
+                        + jnp.eye(no)[rew][:,None,...]*post_states[-prev_rew_counts.shape[1]:,i,...][None,:,...]
                     prev_rew_counts = rew_counts
         else:
             rew = curr_rew[t]
             rew_counts = (1-self.lambda_r)[None,None,...]*prev_rew_counts + self.lambda_r[None,None,...] \
-                        + jnp.eye(ns)[rew][:,None,...]*post_states[-prev_rew_counts.shape[1]:,t,...][None,:,...]
+                        + jnp.eye(no)[rew][:,None,None]*post_states[-prev_rew_counts.shape[1]:,t,...][None,:,:]
             
         return rew_counts
     
     def update_pol_counts(self, prev_pol_counts, posterior_policies):
         
         pol_counts = (1-self.lambda_pi)[None,...]*prev_pol_counts + (self.lambda_pi)[None,...] + posterior_policies#*self.alpha
+                
+        # print("counts")
+        # print(pol_counts)
         
         return pol_counts
 
@@ -212,6 +222,7 @@ class Agent(object):
         self.npi = policies.shape[0]
         self.policies = policies
         big_trans_matrix = self.calc_big_trans_matrix(state_trans_matrix, policies)
+        print(big_trans_matrix.shape)
         possible_policies = [[[True]*self.npi]*T]*trials
         self.perception = Perception(big_trans_matrix, obs_matrix, opt_params, fix_rew_counts, preference, prior_states, policies, na, possible_policies, T)
         self.state_trans_matrix = state_trans_matrix
@@ -230,7 +241,6 @@ class Agent(object):
         
         npi = policies.shape[0]
         big_trans_matrix = jnp.stack([jnp.stack([state_trans_matrix[:,:,policies[pi,t]] for pi in range(self.npi)]) for t in range(self.T-1)]).transpose((2,3,1,0))
-        print(big_trans_matrix.shape)
         return big_trans_matrix
     
     # def init_counts(self):
@@ -246,7 +256,7 @@ class Agent(object):
         
         if t == 0:
             self.perception.all_possible_policies[tau][t] = jnp.stack(self.perception.all_possible_policies[tau][t])
-        if t>0 and t < self.T - 1:
+        if t>0:# and t < self.T - 1:
             possible_policies = self.policies[:,t-1]==response[t-1]
             possible_policies = jnp.logical_and(self.perception.all_possible_policies[tau][t-1], possible_policies)
             self.perception.all_possible_policies[tau][t] = jnp.stack(possible_policies)
@@ -449,8 +459,6 @@ class SimulateTwoStageTask(object):
                   policies, na, T, trials, self.rng_seed)
         
         results =  w.run(trials)
-        print("outside of run")
-        print(results[-3])
         
         i=0
         folder = 'data'
@@ -467,38 +475,48 @@ class SimulateTwoStageTask(object):
         
 if __name__ == '__main__':
     
-    simulation = SimulateTwoStageTask(rng_seed=1000)
-    w, results = simulation.run(0.3, 0.7, 5., 1./1000)
+    stayed = []
     
-    for r in w.results:
-        if r['t']==2:
-            print(r)
+    for s in [3, 27]:#range(10):
+        
+        simulation = SimulateTwoStageTask(rng_seed=s)
+        w, results = simulation.run(0.6, 0.3, 1., 1./1000)
+        
+        for r in w.results:
+            if r['t']==2:
+                print(r)
+        
+        first_actions = jnp.array([r['response'][0] for r in w.results if r['t']==2])
+        
+        rewarded = jnp.array([r['rew'][-1]==1 for r in w.results if r['t']==2 and r['tau'] < w.trials-1])
+        unrewarded = jnp.logical_not(rewarded)
+        
+        # common = jnp.array([r['state'][1]==(r['response'][0]+1) for i, r in enumerate(w.results) if r['t']==2 and r['tau'] < w.trials-1])
+        
+        # rare = jnp.logical_not(common)
+        
+        rare1 = jnp.logical_and(jnp.array([r['state'][1]==2 for r in w.results if r['t']==2 and r['tau'] < w.trials-1]), 
+                                first_actions[:w.trials-1] == 0) 
+        rare2 = jnp.logical_and(jnp.array([r['state'][1]==1 for r in w.results if r['t']==2 and r['tau'] < w.trials-1]), 
+                                first_actions[:w.trials-1] == 1) 
+        rare = jnp.logical_or(rare1, rare2)
+        
+        common = jnp.logical_not(rare)
+        
+        rewarded_common = jnp.where(jnp.logical_and(rewarded,common) == True)[0]
+        rewarded_rare = jnp.where(jnp.logical_and(rewarded,rare) == True)[0]
+        unrewarded_common = jnp.where(jnp.logical_and(unrewarded,common) == True)[0]
+        unrewarded_rare = jnp.where(jnp.logical_and(unrewarded,rare) == True)[0]
     
-    first_actions = jnp.array([r['response'][0] for r in w.results if r['t']==2])
-    
-    rewarded = jnp.array([r['rew'][-1]==1 for r in w.results if r['t']==2 and r['tau'] < w.trials-1])
-    unrewarded = jnp.logical_not(rewarded)
-    
-    rare1 = jnp.logical_and(jnp.array([r['state'][1]==2 for r in w.results if r['t']==2 and r['tau'] < w.trials-1]), 
-                            first_actions[:w.trials-1] == 0) 
-    rare2 = jnp.logical_and(jnp.array([r['state'][1]==1 for r in w.results if r['t']==2 and r['tau'] < w.trials-1]), 
-                            first_actions[:w.trials-1] == 1) 
-    rare = jnp.logical_or(rare1, rare2)
-    
-    common = rare==False
-    
-    rewarded_common = jnp.where(jnp.logical_and(rewarded,common) == True)[0]
-    rewarded_rare = jnp.where(jnp.logical_and(rewarded,rare) == True)[0]
-    unrewarded_common = jnp.where(jnp.logical_and(unrewarded,common) == True)[0]
-    unrewarded_rare = jnp.where(jnp.logical_and(unrewarded,rare) == True)[0]
-
-    names = ["rewarded common", "rewarded rare", "unrewarded common", "unrewarded rare"]
-    
-    index_list = [rewarded_common, rewarded_rare,
-                  unrewarded_common, unrewarded_rare]
-    
-    stayed_list = [(first_actions[index_list[i]] == first_actions[index_list[i]+1]).sum()/float(len(index_list[i])) for i in range(4)]
-    stayed_arr = jnp.array(stayed_list)
+        names = ["rewarded common", "rewarded rare", "unrewarded common", "unrewarded rare"]
+        
+        index_list = [rewarded_common, rewarded_rare,
+                      unrewarded_common, unrewarded_rare]
+        
+        stayed_list = [(first_actions[index_list[i]] == first_actions[index_list[i]+1]).sum()/float(len(index_list[i])) for i in range(4)]
+        stayed.append(stayed_list)
+        
+    stayed_arr = jnp.array(stayed)
     
     plt.figure()
     g = sns.barplot(data=stayed_arr)
