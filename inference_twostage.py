@@ -73,7 +73,7 @@ class SingleInference(object):
         self.agent.reset(param_dict)
         #self.agent.set_parameters(pol_lambda=lamb_pi, r_lambda=lamb_r, dec_temp=dec_temp)
         
-        for tau in range(self.trials):
+        for tau in pyro.markov(range(self.trials)):
             for t in range(self.T):
                 
                 if t==0:
@@ -160,10 +160,10 @@ class SingleInference(object):
                                   vectorize_particles=True))
 
         loss = []
-        #pbar = tqdm(range(iter_steps), position=0)
-        for step in range(iter_steps):#pbar:
+        pbar = tqdm(range(iter_steps), position=0)
+        for step in pbar:#range(iter_steps):
             loss.append(ar.tensor(svi.step()).to(device))
-            #pbar.set_description("Mean ELBO %6.2f" % ar.tensor(loss[-20:]).mean())
+            pbar.set_description("Mean ELBO %6.2f" % ar.tensor(loss[-20:]).mean())
             if ar.isnan(loss[-1]):
                 break
 

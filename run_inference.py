@@ -237,7 +237,7 @@ agent = agt.FittingAgent(bayes_prc, [], pol,
 
 inferrer = inf.SingleInference(agent, data)
 
-loss, param_dict = inferrer.infer_posterior(iter_steps=200, num_particles=200)
+loss, param_dict = inferrer.infer_posterior(iter_steps=500, num_particles=50)
 
 plt.figure()
 plt.title("ELBO")

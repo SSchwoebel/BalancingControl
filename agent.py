@@ -113,7 +113,7 @@ class FittingAgent(object):
             self.context_obs[tau] = context
 
         if t == 0:
-            self.possible_polcies = ar.arange(0,self.npi,1, dtype=ar.long).to(device)
+            self.possible_polcies = ar.ones(self.npi, dtype=bool)#ar.arange(0,self.npi,1, dtype=ar.long).to(device)
         else:
             #TODO!
             # wow so inefficient. probably rather remove for fitting...
@@ -122,7 +122,7 @@ class FittingAgent(object):
             prev_pols[:] = False
             prev_pols[self.possible_polcies] = True
             new_pols = own_logical_and(possible_policies, prev_pols).to(device)
-            self.possible_polcies = ar.where(new_pols==True)[0].to(device)
+            self.possible_polcies = new_pols#ar.where(new_pols==True)[0].to(device)
             
             # TODO once 1D intersect exists
             #self.possible_polcies = ar.intersect1d(self.possible_polcies, possible_policies)
@@ -162,7 +162,7 @@ class FittingAgent(object):
                                                   self.posterior_policies[tau,t])
         #if reward > 0:
         # check later if stuff still works!
-        if self.learn_rew:# and t>0:#==self.T-1:
+        if self.learn_rew and t==self.T-1:
             self.perception.update_beliefs_dirichlet_rew_params(tau, t, \
                                                             reward)
 
