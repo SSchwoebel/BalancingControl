@@ -18,13 +18,15 @@ import copy
 import matplotlib.pylab as plt
 import seaborn as sns
 
+from jax.config import config
+config.update("jax_enable_x64", True)
 
 class Perception(object):
     def __init__(self, big_trans_matrix, obs_matrix, opt_params, fix_rew_counts, preference, prior_states, policies, na, possible_policies, T):
         
         # has shape ns x ns x npi x T-1
-        self.big_trans_matrix = big_trans_matrix + 1e-20
-        self.obs_matrix = obs_matrix + 1e-20
+        self.big_trans_matrix = big_trans_matrix #+ 1e-20
+        self.obs_matrix = obs_matrix #+ 1e-20
         self.fix_rew_counts = fix_rew_counts
         self.preference = preference
         self.policies = policies
@@ -52,6 +54,7 @@ class Perception(object):
         tau = curr_observed["tau"]
         
         self.possible_policies = jnp.stack(self.all_possible_policies[tau][t])
+        # print(self.possible_policies)
         
         total_counts = jnp.concatenate([self.fix_rew_counts, rew_counts], axis=1)
         rew_matrix = total_counts / total_counts.sum(axis=0)
@@ -68,15 +71,25 @@ class Perception(object):
         
         posterior_states = fwd_messages*bwd_messages*obs_messages[...,None,None]*rew_messages[...,None]
         norm = posterior_states.sum(axis=0)
+        # print(fwd_messages[:,t])
+        # print(bwd_messages[:,t])
+        # print(obs_messages[:,t])
+        # print(rew_messages[:,t])
         posterior_states = jnp.where(norm[None,...] > 0, posterior_states/norm[None,...],  posterior_states)
+        print(posterior_states[:,t])
         fwd_norms = jnp.concatenate([fwd_norms, norm[-1][None,:]], axis=0)
+        fwd_norms = jnp.where(self.possible_policies[:,None], fwd_norms, 0)
+        # print(fwd_norms[:,0])
+        # print(fwd_norms[:,1])
+        # print(fwd_norms[:,2])
+        # print(fwd_norms[:,3])
         
         posterior_policies = self.eval_posterior_policies(fwd_norms, prior_policies)
+        print(posterior_policies)
         
         marginal_posterior_states = jnp.einsum('stpn,pn->stn', posterior_states, posterior_policies)
         
         posterior_actions = self.post_actions_from_policies(posterior_policies, t)
-        print(posterior_actions)
         
         if t==self.T-1:
             rew_counts = self.update_rew_counts(rew_counts, curr_rew, marginal_posterior_states, t=t)
@@ -109,68 +122,76 @@ class Perception(object):
     
     def make_fwd_messages(self, rew_messages, obs_messages):
         
-        input_messages = [(rew_messages[:,i], obs_messages[:,i], self.big_trans_matrix[...,i]) for i in range(self.T-1)]
-        init = self.prior_states
-        carry = init
-        fwd_messages = []
-        fwd_norms = []
-        for input_message in input_messages:
-            carry, output = self.scan_messages(carry, input_message)
-            fwd_messages.append(output[0])
-            fwd_norms.append(output[1])
-        #fwd = scan(self.scan_messages, init, input_messages)
-        fwd_messages = jnp.stack([init]+fwd_messages).transpose((1,0,2,3))
-        fwd_norms = jnp.stack(fwd_norms)
+        input_messages = jnp.stack([jnp.stack([rew_messages[:,i], obs_messages[:,i][:,None]]) for i in range(self.T-1)])
+        init = (0, self.prior_states)
+        # carry = init
+        # fwd_messages = []
+        # fwd_norms = []
+        # for input_message in input_messages:
+        #     carry, output = self.scan_fwd_messages(carry, input_message)
+        #     fwd_messages.append(output[0])
+        #     fwd_norms.append(output[1])
+        #     fwd_messages = jnp.stack([init]+fwd_messages).transpose((1,0,2,3))
+        #     fwd_norms = jnp.stack(fwd_norms)
         
-        # fwd_messages = fwd[:,0,...].transpose((1,0,2,3))
+        carry, fwd = scan(self.scan_fwd_messages, init, input_messages)
+        fwd_messages, fwd_norms = fwd
+        fwd_messages = jnp.concatenate([init[1][None,...], fwd_messages], axis=0).transpose((1,0,2,3))
         # fwd_norms = fwd[:,1,...]
         
         return fwd_messages, fwd_norms
     
     def make_bwd_messages(self, rew_messages, obs_messages):
         
-        input_messages = [(rew_messages[:,i+1], obs_messages[:,i+1], self.big_trans_matrix[...,i].transpose((1,0,2))) for i in range(self.T-1)]
-        init = self.bwd_init
+        input_messages = jnp.stack([jnp.stack([rew_messages[:,i+1], obs_messages[:,i+1][:,None]]) for i in range(self.T-1)])
+        init = (0, self.bwd_init)
         carry = init
-        bwd_messages = []
-        bwd_norms = []
-        for input_message in input_messages:
-            # print("carry", carry)
-            # print("input messages: rew, obs trans")
-            # print(input_message[0])
-            # print(input_message[1])
-            # print(input_message[2][:,:,0])
-            carry, output = self.scan_messages(carry, input_message)
-            # print("message")
-            # print(output[0][:,0])
-            bwd_messages.append(output[0])
-        #fwd = scan(self.scan_messages, init, input_messages)
-        bwd_messages = jnp.flip(jnp.stack([init]+bwd_messages), axis=0).transpose((1,0,2,3))
-        # bwd = scan(self.scan_messages, init, input_messages, reverse=True)
-        
-        # bwd_messages = jnp.flip(bwd[:,0,...], axis=0).transpose((1,0,2,3))
+        # print(init[1])
+        # bwd_messages = []
+        # bwd_norms = []
+        # for input_message in input_messages:
+        #     carry, output = self.scan_bwd_messages(carry, input_message)
+        #     bwd_messages.append(output[0])
+        # bwd_messages = jnp.flip(jnp.stack([init]+bwd_messages), axis=0).transpose((1,0,2,3))
+        carry, bwd = scan(self.scan_bwd_messages, init, input_messages, reverse=True)
+        bwd_messages, bwd_norms = bwd
+        bwd_messages = jnp.concatenate([bwd_messages, init[1][None,...]], axis=0).transpose((1,0,2,3))
         
         return bwd_messages
         
-    def scan_messages(self, carry, input_message):
+    def scan_fwd_messages(self, carry, input_message):
         
-        old_message = carry
-        #print("input", input_message)
-        rew_message, obs_message, trans_matrix = input_message
-        
+        i, old_message = carry
+        rew_message, obs_message = input_message
         #print("old", old_message)
-        tmp_message = jnp.einsum('hpn,shp,h,hn->spn', old_message, trans_matrix, obs_message, rew_message)
+        tmp_message = jnp.einsum('hpn,shp,hn,hn->spn', old_message, self.big_trans_matrix[...,i], obs_message, rew_message)
         # print(tmp_message)
         
         norm = tmp_message.sum(axis=0)
         message = jnp.where(norm > 0, tmp_message/norm[None,...], tmp_message)
-        norm = jnp.where(self.possible_policies[:,None], norm, 0)
+        #norms = jnp.where(self.possible_policies[:,None], norm, 0)
+        i += 1
         
-        return message, (message, norm)
+        return (i, message), (message, norm)
+        
+    def scan_bwd_messages(self, carry, input_message):
+        
+        i, old_message = carry
+        rew_message, obs_message = input_message
+        
+        #print("old", old_message)
+        tmp_message = jnp.einsum('hpn,shp,hn,hn->spn', old_message, self.big_trans_matrix[...,i].transpose((1,0,2)), obs_message, rew_message)
+        # print(tmp_message)
+        
+        norm = tmp_message.sum(axis=0)
+        message = tmp_message#jnp.where(norm > 0, tmp_message/norm[None,...], tmp_message)
+        i += 1
+        
+        return (i, message), (message, norm)
         
     def eval_posterior_policies(self, fwd_norms, prior_policies):
         
-        likelihood = (fwd_norms+1e-10).prod(axis=0)
+        likelihood = (fwd_norms).prod(axis=0)#+1e-10
         norm = likelihood.sum(axis=0)
         post = jnp.power(likelihood/norm,self.dec_temp[None,:]) * prior_policies
         posterior_policies = post / post.sum(axis=0)
@@ -207,7 +228,7 @@ class Perception(object):
     
     def update_pol_counts(self, prev_pol_counts, posterior_policies):
         
-        pol_counts = (1-self.lambda_pi)[None,...]*prev_pol_counts + (self.lambda_pi)[None,...] + posterior_policies#*self.alpha
+        pol_counts = (1-self.lambda_pi)[None,...]*prev_pol_counts + (self.lambda_pi)[None,...]*self.alpha + posterior_policies#
                 
         # print("counts")
         # print(pol_counts)
@@ -263,7 +284,7 @@ class Agent(object):
             
         
         new_carry, posterior_actions = self.perception.step(self.carry, curr_observed)
-        self.carry = new_carry
+        self.carry = new_carry#copy.deepcopy(new_carry)
         
         if t < self.T-1:
             response = self.generate_response(posterior_actions)
@@ -459,16 +480,6 @@ class SimulateTwoStageTask(object):
                   policies, na, T, trials, self.rng_seed)
         
         results =  w.run(trials)
-        
-        i=0
-        folder = 'data'
-        run_name = "twostage_results"+str(i)+"_pl"+str(lambda_pi)+"_rl"+str(lambda_r)+"_dt"+str(dec_temp)+"_tend"+str(int(1./h))+".json"
-        fname = os.path.join(folder, run_name)
-        data = w.results
-
-        pickled = pickle.encode(data)
-        with open(fname, 'w') as outfile:
-            json.dump(pickled, outfile)
             
         return w, results
         
@@ -477,14 +488,28 @@ if __name__ == '__main__':
     
     stayed = []
     
-    for s in [3, 27]:#range(10):
+    for i, s in enumerate([3, 27]):#range(10):
+        
+        lambda_pi = 0.3
+        lambda_r = 0.3
+        dec_temp = 5.
+        h = 1./1000
         
         simulation = SimulateTwoStageTask(rng_seed=s)
-        w, results = simulation.run(0.6, 0.3, 1., 1./1000)
+        w, results = simulation.run(lambda_pi, lambda_r, dec_temp, h)
         
-        for r in w.results:
-            if r['t']==2:
-                print(r)
+        # for r in w.results:
+        #     if r['t']==2:
+        #         print(r)
+        
+        folder = 'data'
+        run_name = "twostage_results"+str(i)+"_pl"+str(lambda_pi)+"_rl"+str(lambda_r)+"_dt"+str(dec_temp)+"_tend"+str(int(1./h))+".json"
+        fname = os.path.join(folder, run_name)
+        data = w.results
+
+        pickled = pickle.encode(data)
+        with open(fname, 'w') as outfile:
+            json.dump(pickled, outfile)
         
         first_actions = jnp.array([r['response'][0] for r in w.results if r['t']==2])
         
