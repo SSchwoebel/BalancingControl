@@ -13,7 +13,7 @@ if arr_type == "numpy":
 else:
     import torch as ar
     array = ar.tensor
-    
+
 import numpy as np
 
 #from plotting import *
@@ -66,7 +66,7 @@ proni = "/home/sarah/proni/sarah/"
 """
 run function
 """
-def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
+def run_fake_agent(par_list, actions, observations, rewards, trials=trials, T=T, ns=ns, na=na):
 
     #set parameters:
     #obs_unc: observation uncertainty condition
@@ -146,7 +146,7 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
     create environment (grid world)
     """
 
-    environment = env.MultiArmedBandid(A, B, Rho, trials = trials, T = T)
+    #environment = env.MultiArmedBandid(A, B, Rho, trials = trials, T = T)
 
 
     """
@@ -252,7 +252,7 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
     create world
     """
 
-    w = world.World(environment, bayes_pln, trials = trials, T = T)
+    w = world.FakeWorld(bayes_pln, observations, rewards, actions, trials = trials, T = T)
 
     """
     simulate experiment
@@ -353,7 +353,7 @@ n_training = 1
 #Rho[:trials//2] = generate_bandit_timeseries_training(trials//2, nr, ns, nb, n_training)
 #Rho[trials//2:] = generate_bandit_timeseries_slowchange(trials//2, nr, ns, nb)
 
-repetitions = 5
+repetitions = 2
 
 #learn_rew = 21
 
@@ -367,14 +367,14 @@ folder = 'data'
 
 recalc_rho = False
 
-for pl in [0.1,0.3,0.5,0.7,0.9]:
-    for rl in [0.1,0.3,0.5,0.7,0.9]:
+for pl in [0.3]:#[0.1,0.3,0.5,0.7,0.9]:
+    for rl in [0.3]:#[0.1,0.3,0.5,0.7,0.9]:
         # TODO: wht does dt=9 not work?? gives control prob of nan
-        for dt in [1.,3.,5.,7.]:
+        for dt in [5.]:#[1.,3.,5.,7.]:
             
             stayed = []
             indices = []
-            for tendency in [1,5,10,50,100]:#[1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
+            for tendency in [1000]:#[1,5,10,50,100]:#[1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
                 print(pl, rl, dt, tendency)
                 tend = array([tendency])
             
@@ -429,7 +429,19 @@ for pl in [0.1,0.3,0.5,0.7,0.9]:
                 par_list = par_list*repetitions
             
                 for i, pars in enumerate(par_list):
-                    worlds.append(run_agent(pars))
+                
+                    run_name = "twostage_results"+str(i)+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tendency)+".json"
+                    fname = os.path.join("/home/sarah/src/BalancingControl/data/", run_name)
+                    with open(fname, 'r') as infile:
+                        data = json.load(infile)
+                    
+                    results = pickle.decode(data)
+                    actions = array([r['response'] for r in results if r['t']==2])
+                    observations = array([r['obs'] for r in results if r['t']==2])
+                    rewards = array([r['rew'] for r in results if r['t']==2])
+                    states = array([r['state'] for r in results if r['t']==2])
+                    
+                    worlds.append(run_fake_agent(pars, actions, observations, rewards))
             
                     w = worlds[-1]
             
@@ -437,7 +449,7 @@ for pl in [0.1,0.3,0.5,0.7,0.9]:
             
                     # unrewarded = ar.where(w.rewards[:trials-1,-1] == 0)[0]
                     
-                    rewarded = w.rewards[:trials-1,-1] == 1
+                    rewarded = rewards[:trials-1,-1] == 1
             
                     unrewarded = rewarded==False#w.rewards[:trials-1,-1] == 0
             
@@ -450,8 +462,8 @@ for pl in [0.1,0.3,0.5,0.7,0.9]:
                     #                    ar.where(own_logical_and(w.environment.hidden_states[:,1]==1, w.actions[:,0] == 0) == True)[0]))
                     # common.sort()
                     
-                    rare = own_logical_or(own_logical_and(w.environment.hidden_states[:trials-1,1]==2, w.actions[:trials-1,0] == 0),
-                                   own_logical_and(w.environment.hidden_states[:trials-1,1]==1, w.actions[:trials-1,0] == 1))
+                    rare = own_logical_or(own_logical_and(states[:trials-1,1]==2, actions[:trials-1,0] == 0),
+                                   own_logical_and(states[:trials-1,1]==1, actions[:trials-1,0] == 1))
             
                     common = rare==False#own_logical_or(own_logical_and(w.environment.hidden_states[:trials-1,1]==2, w.actions[:trials-1,0] == 1),
                              #        own_logical_and(w.environment.hidden_states[:trials-1,1]==1, w.actions[:trials-1,0] == 0))
@@ -476,15 +488,15 @@ for pl in [0.1,0.3,0.5,0.7,0.9]:
                     run_name = "twostage_agent"+str(i)+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tendency)+".json"
                     fname = os.path.join(folder, run_name)
                     
-                    actions = w.actions.numpy()
-                    observations = w.observations.numpy()
-                    rewards = w.rewards.numpy()
-                    data = {"actions": actions, "observations": observations, "rewards": rewards}
+                    # actions = w.actions.numpy()
+                    # observations = w.observations.numpy()
+                    # rewards = w.rewards.numpy()
+                    # data = {"actions": actions, "observations": observations, "rewards": rewards}
     
-                    jsonpickle_numpy.register_handlers()
-                    pickled = pickle.encode(data)
-                    with open(fname, 'w') as outfile:
-                        json.dump(pickled, outfile)
+                    # jsonpickle_numpy.register_handlers()
+                    # pickled = pickle.encode(data)
+                    # with open(fname, 'w') as outfile:
+                    #     json.dump(pickled, outfile)
             
                 stayed_arr = array(stayed)
                 

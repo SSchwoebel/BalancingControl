@@ -10,6 +10,11 @@ Created on Mon Sep 13 14:09:11 2021
 import torch as ar
 array = ar.tensor
 
+ar.set_num_threads(1)
+ar.set_num_interop_threads(1)
+print("torch threads", ar.get_num_threads())
+print(ar.__config__.parallel_info())
+
 import pyro
 import pyro.distributions as dist
 import agent as agt
@@ -32,6 +37,7 @@ import scipy as sc
 import scipy.signal as ss
 import bottleneck as bn
 import gc
+import sys
 
 #device = ar.device("cuda") if ar.cuda.is_available() else ar.device("cpu")
 #device = ar.device("cuda")
@@ -45,7 +51,7 @@ from inference_twostage import device
 folder = "data"
 
 
-def recover_parameters(i, pl, rl, dt, tend, iter_steps=200, num_particles=200):
+def recover_parameters(i, pl, rl, dt, tend, iter_steps=200, num_particles=200, plotting=True):
     
     """load data"""
     
@@ -233,58 +239,128 @@ def recover_parameters(i, pl, rl, dt, tend, iter_steps=200, num_particles=200):
     
     loss, param_dict = inferrer.infer_posterior(iter_steps=iter_steps, num_particles=num_particles)
     
-    plt.figure()
-    plt.title("ELBO")
-    plt.plot(loss)
-    plt.ylabel("ELBO")
-    plt.xlabel("iteration")
-    plt.show()
+    if plotting:
+        plt.figure()
+        plt.title("ELBO")
+        plt.plot(loss)
+        plt.ylabel("ELBO")
+        plt.xlabel("iteration")
+        plt.show()
+        
+        inferrer.plot_posteriors()
     
-    inferrer.plot_posteriors()
-    
-    print("this is inference for pl =", pl, "rl =", rl, "dt =", dt, "tend=", tend)
+        print("this is inference for pl =", pl, "rl =", rl, "dt =", dt, "tend=", tend)
     # print(param_dict)
-    return param_dict
-    
-    
-    
+    return param_dict, loss
 
-i = 0
-pl = 0.3
-rl = 0.7
-dt = 5.
-tend = 5
 
-iter_steps = 200
-num_particles = 200
+def loop_fct(param_list):
+    
+    dt, tend, i = param_list
 
-for i in [1]:#range(5):
+    iter_steps = 200
+    num_particles = 200
+    
     for pl in [0.1,0.3,0.5,0.7,0.9]:
         for rl in [0.1,0.3,0.5,0.7,0.9]:
-            for dt in [1.,3.,5.,7.]:
-                for tend in [1,2,3,4,5,10,100]:
                 
-                    inf_name = "twostage_inference"+str(i)+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tend)+".json"
+            inf_name = "twostage_inference"+str(i)+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tend)+".json"
+            
+            if inf_name not in os.listdir(folder):
+                
+                print("analysing i", i, "pl", pl, "rl", rl, "dt", dt, "tend", tend)
+                
+                param_dict, loss = recover_parameters(i, pl, rl, dt, tend, iter_steps=iter_steps, num_particles=num_particles, plotting=False)
+                
+                total_param_dict = param_dict.copy()
+                total_param_dict['pl'] = pl
+                total_param_dict['rl'] = rl
+                total_param_dict['dt'] = dt
+                total_param_dict['tend'] = tend    
+                total_param_dict['loss'] = loss                        
+                
+                fname = os.path.join(folder, inf_name)
+                
+                jsonpickle_numpy.register_handlers()
+                
+                pickled = pickle.encode(total_param_dict)
+                with open(fname, 'w') as outfile:
+                    json.dump(pickled, outfile)
                     
-                    if inf_name not in os.listdir(folder):
-                        param_dict = recover_parameters(i, pl, rl, dt, tend, iter_steps=iter_steps, num_particles=num_particles)
-                        
-                        total_param_dict = param_dict.copy()
-                        total_param_dict['pl'] = pl
-                        total_param_dict['rl'] = rl
-                        total_param_dict['dt'] = dt
-                        total_param_dict['tend'] = tend                            
-                        
-                        fname = os.path.join(folder, inf_name)
-                        
-                        jsonpickle_numpy.register_handlers()
-                        
-                        pickled = pickle.encode(total_param_dict)
-                        with open(fname, 'w') as outfile:
-                            json.dump(pickled, outfile)
-                            
-                    else:
-                        print("skipping i", i, "pl", pl, "rl", rl, "dt", dt, "tend", tend)
-                            
-                    gc.collect()
+            else:
+                print("skipping i", i, "pl", pl, "rl", rl, "dt", dt, "tend", tend)
                     
+            gc.collect()
+    
+
+if __name__=='__main__':
+
+    dec_temps = [3., 5., 7.]
+    tendencies = [1, 10, 100]
+    indices = list(range(5))
+    
+    total_par_list = []
+    
+    for l in itertools.product(dec_temps, tendencies, indices):
+        
+        total_par_list.append(l)
+        
+    print(total_par_list)
+    
+    num_threads = 10
+    
+    with Pool(num_threads) as p:
+        
+        p.map(loop_fct, total_par_list)
+        
+    # for l in total_par_list:
+    #     loop_fct(l)
+    
+
+# if __name__=='__main__':
+
+#     kwargs = dict(arg.split('=') for arg in sys.argv[1:])
+    
+#     if len(sys.argv[1:])>0:
+#         dt = float(kwargs["dt"])
+#         tend = int(kwargs["tend"])
+#         i = int(kwargs["i"])
+#     else:
+#         dt =  5.
+#         tend = 10
+#         i = 0
+    
+#     iter_steps = 1000
+#     num_particles = 12
+    
+#     for pl in [0.1,0.3,0.5,0.7,0.9]:
+#         for rl in [0.1,0.3,0.5,0.7,0.9]:
+                
+#             inf_name = "twostage_inference"+str(i)+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tend)+".json"
+            
+#             if inf_name not in os.listdir(folder):
+                
+#                 print("analysing i", i, "pl", pl, "rl", rl, "dt", dt, "tend", tend)
+                
+#                 param_dict, loss = recover_parameters(i, pl, rl, dt, tend, iter_steps=iter_steps, num_particles=num_particles, plotting=False)
+                
+#                 total_param_dict = param_dict.copy()
+#                 total_param_dict['pl'] = pl
+#                 total_param_dict['rl'] = rl
+#                 total_param_dict['dt'] 
+#                 total_param_dict['tend'] = tend    
+#                 total_param_dict['loss'] = loss                        
+                
+#                 fname = os.path.join(folder, inf_name)
+                
+#                 jsonpickle_numpy.register_handlers()
+                
+#                 pickled = pickle.encode(total_param_dict)
+#                 with open(fname, 'w') as outfile:
+#                     json.dump(pickled, outfile)
+                    
+#             else:
+#                 print("skipping i", i, "pl", pl, "rl", rl, "dt", dt, "tend", tend)
+                    
+#             gc.collect()
+                        

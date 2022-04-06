@@ -314,18 +314,31 @@ class FakeWorld(object):
         self.free_parameters = {}
 
         #container for observations
-        self.observations = observations.copy()
+        self.observations = observations
 
         #container for agents actions
-        self.actions = actions.copy()
+        self.actions = actions
 
         #container for rewards
-        self.rewards = rewards.copy()
+        self.rewards = rewards
 
         self.log_prior = log_prior
 
         self.like_actions = ar.zeros((trials,T-1))
         self.like_rewards = ar.zeros((trials,T-1))
+
+    def simulate_experiment(self, curr_trials=None):
+        """This methods evolves all the states of the world by iterating
+        through all the trials and time steps of each trial.
+        """
+        if curr_trials is not None:
+            trials = curr_trials
+        else:
+            trials = range(self.trials)
+        for tau in trials:
+            for t in range(self.T):
+                print(tau, t)
+                self.__update_model(tau, t)
 
     def __simulate_agent(self):
         """This methods evolves all the states of the world by iterating

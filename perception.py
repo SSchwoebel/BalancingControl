@@ -238,8 +238,10 @@ class FittingPerception(object):
             norm = fwd[-1].sum(axis=0)
             mask = norm > 0
             fwd[-1][:,mask] /= norm[None,mask]
-            fwd_norm.append(ar.zeros((self.npi,self.npart)).to(device))
-            fwd_norm[-1][possible_policies] = norm[possible_policies]
+            zeros = ar.zeros((self.npi, self.npart))
+            fwd_norm.append(ar.where(possible_policies[:,None], norm, zeros))
+            # fwd_norm.append(ar.zeros((self.npi,self.npart)).to(device))
+            # fwd_norm[-1][possible_policies] = norm[possible_policies]
             # if fwd_norms[1+i, pi] > 0: #???? Shouldn't this not happen?
             #     fwd_messages[:,1+i, pi] /= fwd_messages[:,1+i,pi].sum()
                                                      
