@@ -8,3 +8,4 @@ data/*
 *.gif
 *.json
 *.mp4
+.ipynb_checkpoints/
