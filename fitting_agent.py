@@ -101,7 +101,7 @@ class Perception(object):
         
         rew_messages = []
         for i, rew in enumerate(curr_rew):
-            if rew is not None:
+            if rew != -1:
                 rew_messages.append(rew_matrix[rew])
             else:
                 rew_messages.append(jnp.einsum('r,rsn->sn', self.preference, rew_matrix))
@@ -112,7 +112,7 @@ class Perception(object):
         
         obs_messages = []
         for i, obs in enumerate(curr_obs):
-            if obs is not None:
+            if obs != -1:
                 obs_messages.append(self.obs_matrix[obs])
             else:
                 no = self.obs_matrix.shape[0]
@@ -208,14 +208,14 @@ class Perception(object):
         
         return posterior_policies[self.policies[t]==a].sum()
         
-    def update_rew_counts(self, prev_rew_counts, curr_rew, post_states, t=None):
+    def update_rew_counts(self, prev_rew_counts, curr_rew, post_states, t=-1):
         
         #note to self: try implemementing with binary mask multiplication instead of separated matrices
         # maybe using jnp.where ?
         no = prev_rew_counts.shape[0]
-        if t is None:
+        if t == -1:
             for i, rew in enumerate(curr_rew):
-                if rew is not None:
+                if rew != -1:
                     rew_counts = (1-self.lambda_r)[None,None,...]*prev_rew_counts + self.lambda_r[None,None,...] \
                         + jnp.eye(no)[rew][:,None,...]*post_states[-prev_rew_counts.shape[1]:,i,...][None,:,...]
                     prev_rew_counts = rew_counts
@@ -289,7 +289,7 @@ class Agent(object):
         if t < self.T-1:
             response = self.generate_response(posterior_actions)
         else:
-            response = None
+            response = -1
         
         return response
         
@@ -361,13 +361,13 @@ class World(object):
         self.trials = 0
         
         self.results = []
-        self.curr_observed = {"obs": [None]*T, "rew": [None]*T, "state": [None]*T, "tau": None, "t": None, "response": [None]*(T-1)}
+        self.curr_observed = {"obs": [-1]*T, "rew": [-1]*T, "state": [-1]*T, "tau": -1, "t": -1, "response": [-1]*(T)}
         
     def step(self, tau, t):
         
         print(tau, t)
         if t==0:
-            self.curr_observed = {"obs": [None]*self.T, "rew": [None]*self.T, "state": [None]*self.T, "tau": None, "t": None, "response": [None]*(self.T-1)}
+            self.curr_observed = {"obs": [-1]*self.T, "rew": [-1]*self.T, "state": [-1]*self.T, "tau": -1, "t": -1, "response": [-1]*(self.T)}
             obs, rew, state = self.environment.init_trial(tau)
         else:
             obs, rew, state = self.environment.step(self.curr_observed["response"][t-1], tau)  
