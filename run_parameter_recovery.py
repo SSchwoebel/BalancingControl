@@ -258,11 +258,11 @@ tend = 5
 iter_steps = 200
 num_particles = 200
 
-for i in [0]:#range(5):
+for i in [1]:#range(5):
     for pl in [0.1,0.3,0.5,0.7,0.9]:
         for rl in [0.1,0.3,0.5,0.7,0.9]:
             for dt in [1.,3.,5.,7.]:
-                for tend in [1,2,3,4,5,10,100,1000]:
+                for tend in [1,2,3,4,5,10,100]:
                 
                     inf_name = "twostage_inference"+str(i)+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tend)+".json"
                     
