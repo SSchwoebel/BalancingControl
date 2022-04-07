@@ -349,15 +349,15 @@ def Bayesian_habit_model():
             return posterior_policies
 
         def post_actions_from_policies(posterior_policies, t):
-
-            post_actions = jnp.array([jnp.where(policies[:,t]==a, posterior_policies, 0).sum() for a in range(na)])
+            
+            post_actions = jnp.array([jnp.where((policies[:,t]==a)[...,None], posterior_policies, 0).sum(axis=0) for a in range(na)])
 
             return post_actions
 
         @jit        
         def contract_posterior_policies(posterior_policies, a, t):
 
-            return posterior_policies[policies[t]==a].sum()
+            return posterior_policies[policies[:,t]==a].sum()
 
         @jit    
         def update_rew_counts(prev_rew_counts, curr_rew, post_states, t):
@@ -438,9 +438,12 @@ def Bayesian_habit_model():
     
     _, posterior_actions = scan(step, carry, nicely_shaped_data)
     
-    posterior_responses = jnp.stack([pa.T for k, pa in enumerate(posterior_actions) if k%T != T-1])
+    posterior_responses = jnp.stack([pa for k, pa in enumerate(posterior_actions) if k%T != T-1])
     
-    pyro.sample('responses', dist.Categorical(posterior_responses), obs=flat_responses)
+    print(posterior_responses.shape)
+    
+    with pyro.plate("N", flat_responses.shape[0]) as ind:
+        pyro.sample('responses', dist.Categorical(posterior_responses[ind,:,0]), obs=flat_responses[ind])#, sample_shape=(trials*(T-1), npart))
     
     
 def guide():
@@ -452,25 +455,25 @@ def guide():
     # sample vaue of parameter from Beta distribution
     # print()
     # print(alpha_lamb_pi, beta_lamb_pi)
-    lambda_pi = pyro.sample('lambda_pi', dist.Beta(alpha_lambda_pi, beta_lambda_pi))#.to(device)
+    pyro.sample('lambda_pi', dist.Beta(alpha_lambda_pi, beta_lambda_pi))#.to(device)
 
     # tell pyro about posterior over parameters: alpha and beta of lambda which is between 0 and 1
     alpha_lambda_r = pyro.param("alpha_lambda_r", jnp.ones(1), constraint=pyro.distributions.constraints.positive)#.to(device)#greater_than_eq(1.))
     beta_lambda_r = pyro.param("beta_lambda_r", jnp.ones(1), constraint=pyro.distributions.constraints.positive)#.to(device)#greater_than_eq(1.))
     # sample initial vaue of parameter from Beta distribution
-    lambda_r = pyro.sample('lambda_r', dist.Beta(alpha_lambda_r, beta_lambda_r))#.to(device)
+    pyro.sample('lambda_r', dist.Beta(alpha_lambda_r, beta_lambda_r))#.to(device)
 
     # tell pyro about posterior over parameters: alpha and beta of lambda which is between 0 and 1
     alpha_h = pyro.param("alpha_h", jnp.ones(1), constraint=pyro.distributions.constraints.positive)#.to(device)#greater_than_eq(1.))
     beta_h = pyro.param("beta_h", jnp.ones(1), constraint=pyro.distributions.constraints.positive)#.to(device)#greater_than_eq(1.))
     # sample initial vaue of parameter from Beta distribution
-    h = pyro.sample('h', dist.Beta(alpha_h, beta_h))#.to(device)
+    pyro.sample('h', dist.Beta(alpha_h, beta_h))#.to(device)
 
     # tell pyro about posterior over parameters: mean and std of the decision temperature
     concentration_dec_temp = pyro.param("concentration_dec_temp", jnp.ones(1)*3., constraint=pyro.distributions.constraints.positive)#.to(device)#interval(0., 7.))
     rate_dec_temp = pyro.param("rate_dec_temp", jnp.ones(1), constraint=pyro.distributions.constraints.positive)#.to(device)
     # sample initial vaue of parameter from normal distribution
-    dec_temp = pyro.sample('dec_temp', dist.Gamma(concentration_dec_temp, rate_dec_temp))#.to(device)
+    pyro.sample('dec_temp', dist.Gamma(concentration_dec_temp, rate_dec_temp))#.to(device)
     
 def infer_posterior(iter_steps=1000,
                     #num_particles=10,
@@ -492,7 +495,7 @@ def infer_posterior(iter_steps=1000,
     svi_result = svi.run(rng_key, iter_steps)#, stable_update=True)
     params = svi_result.params
     loss = svi_result.losses
-    print(svi_result)
+    # print(svi_result)
     # pbar = tqdm(range(iter_steps), position=0)
     # for step in pbar:
     #     loss.append(jnp.array(svi.step()))#.to(device))
