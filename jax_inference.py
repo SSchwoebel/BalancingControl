@@ -95,16 +95,16 @@ def calc_possible_policies(data, policies):
     
     for curr_observed in data:
         
-        curr_obs = curr_observed["obs"]
-        curr_rew = curr_observed["rew"]
-        response = curr_observed["response"]
+        c_obs = curr_observed["obs"]
+        c_rew = curr_observed["rew"]
+        c_response = curr_observed["response"]
         t = curr_observed["t"]
         tau = curr_observed["tau"]
         
         if t == 0:
             all_possible_policies[tau][t] = jnp.stack(all_possible_policies[tau][t])
         if t>0:# and t < self.T - 1:
-            curr_possible_policies = policies[:,t-1]==response[t-1]
+            curr_possible_policies = policies[:,t-1]==c_response[t-1]
             curr_possible_policies = jnp.logical_and(all_possible_policies[tau][t-1], curr_possible_policies)
             all_possible_policies[tau][t] = jnp.stack(curr_possible_policies)
             
@@ -120,20 +120,37 @@ def transform_data(data):
     
     for curr_observed in data:
 
-        curr_obs = curr_observed["obs"]
-        curr_rew = curr_observed["rew"]
-        response = curr_observed["response"]
+        c_obs = curr_observed["obs"]
+        c_rew = curr_observed["rew"]
+        c_response = curr_observed["response"]
         t = curr_observed["t"]
         tau = curr_observed["tau"]
 
         shaped_data.append(jnp.stack(
-            [jnp.stack(curr_obs), 
-             jnp.stack(curr_rew), 
-             jnp.stack(response), 
+            [jnp.stack(c_obs), 
+             jnp.stack(c_rew), 
+             jnp.stack(c_response), 
              jnp.stack([tau]*T), 
              jnp.stack([t]*T)]))
         
     return jnp.stack(shaped_data)
+
+def create_flat_response_array(data):
+    
+    flat_responses = []
+    
+    for curr_observed in data:
+
+        c_obs = curr_observed["obs"]
+        c_rew = curr_observed["rew"]
+        c_response = curr_observed["response"]
+        t = curr_observed["t"]
+        tau = curr_observed["tau"]
+
+        if t < T-1:
+            flat_responses.append(c_response[t])
+        
+    return jnp.stack(flat_responses)
 
 big_trans_matrix = calc_big_trans_matrix(state_trans_matrix, policies)
 
@@ -163,6 +180,9 @@ print(all_possible_policies.shape)
 
 nicely_shaped_data = transform_data(data)
 print(nicely_shaped_data.shape)
+
+flat_responses = create_flat_response_array(data)
+print(flat_responses.shape)
 
 def Bayesian_habit_model():
     
@@ -206,7 +226,14 @@ def Bayesian_habit_model():
         
         rew_counts, pol_counts = carry
         
-        curr_obs, curr_rew, curr_response, curr_tau, curr_t = curr_data
+        curr_obs = curr_data[0]
+        curr_rew = curr_data[1]
+        curr_responses = curr_data[2]
+        curr_tau = curr_data[3]
+        curr_t = curr_data[4]
+        curr_action = curr_data[5][0]
+        
+        # curr_obs, curr_rew, curr_response, curr_tau, curr_t = curr_data
         
         #curr_obs = curr_observed["obs"]
         #curr_rew = curr_observed["rew"]
@@ -257,7 +284,6 @@ def Bayesian_habit_model():
                 #    obs_messages.append(jnp.dot(jnp.ones(no)/no, obs_matrix))
 
             return jnp.stack(messages).transpose((1,0))
-            i += 1
 
         @jit    
         def scan_fwd_messages(carry, input_message):
@@ -371,6 +397,14 @@ def Bayesian_habit_model():
             new_pol_counts = pol_counts
             return new_rew_counts, new_pol_counts
         
+        @jit
+        def sample_action(posterior_actions, curr_action):
+            pyro.sample('res_{}_{}'.format(tau, t), dist.Categorical(posterior_actions.T), obs=curr_action)
+            
+        @jit
+        def dont_sample(posterior_actions, curr_action):
+            pass
+        
         rew_messages = make_rew_messages(rew_matrix, curr_rew)
         obs_messages = make_obs_messages(curr_obs)
         fwd_messages, fwd_norms = make_fwd_messages(rew_messages, obs_messages)
@@ -395,15 +429,18 @@ def Bayesian_habit_model():
         #    rew_counts = update_rew_counts(rew_counts, curr_rew, marginal_posterior_states, t)
         #    pol_counts = update_pol_counts(pol_counts, posterior_policies)
         
-        pyro.sample('res_{}_{}'.format(tau, t), dist.Categorical(posterior_actions.T), obs=curr_response)
+        #cond(t<T-2, sample_action, dont_sample, posterior_actions, curr_action)
         
         return (new_rew_counts, new_pol_counts), posterior_actions
     
     
     carry = (init_rew_counts, init_pol_counts)
     
-    _, all_posterior_actions = scan(step, carry, nicely_shaped_data)
+    _, posterior_actions = scan(step, carry, nicely_shaped_data)
     
+    posterior_responses = jnp.stack([pa.T for k, pa in enumerate(posterior_actions) if k%T != T-1])
+    
+    pyro.sample('responses', dist.Categorical(posterior_responses), obs=flat_responses)
     
     
 def guide():
