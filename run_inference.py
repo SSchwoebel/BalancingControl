@@ -51,7 +51,7 @@ i = 0
 pl = 0.3
 rl = 0.7
 dt = 5.
-tend = 5
+tend = 100
 
 folder = "data"
 

@@ -126,7 +126,7 @@ class SingleInference(object):
         alpha_h = pyro.param("alpha_h", ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)#greater_than_eq(1.))
         beta_h = pyro.param("beta_h", ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)#greater_than_eq(1.))
         # sample initial vaue of parameter from Beta distribution
-        h = pyro.sample('h', dist.Beta(alpha_lamb_r, beta_lamb_r)).to(device)
+        h = pyro.sample('h', dist.Beta(alpha_h, beta_h)).to(device)
         
         # tell pyro about posterior over parameters: mean and std of the decision temperature
         concentration_dec_temp = pyro.param("concentration_dec_temp", ar.ones(1)*3., constraint=ar.distributions.constraints.positive).to(device)#interval(0., 7.))
