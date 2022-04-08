@@ -22,7 +22,8 @@ import matplotlib.pylab as plt
 import seaborn as sns
 
 from jax.config import config
-config.update("jax_enable_x64", True)
+# config.update("jax_enable_x64", True)
+config.update('jax_disable_jit', False)
 
 def load_data(fname):
 
@@ -184,6 +185,158 @@ print(nicely_shaped_data.shape)
 flat_responses = create_flat_response_array(data)
 print(flat_responses.shape)
 
+
+@jit
+def make_rew_messages(rew_matrix, curr_rew):
+
+    def future_func(rew):
+        return jnp.einsum('r,rsn->sn', preference, rew_matrix)
+        
+    def past_func(rew):
+        return rew_matrix[rew]
+    
+    messages = []
+    for i, rew in enumerate(curr_rew):
+        messages.append(cond(rew != -1, past_func, future_func, rew))
+        #if rew != -1:
+        #    rew_messages.append(rew_matrix[rew])
+        #else:
+        #    rew_messages.append(jnp.einsum('r,rsn->sn', preference, rew_matrix))
+
+    return jnp.stack(messages).transpose((1,0,2))
+
+@jit
+def make_obs_messages(curr_obs):
+
+    def future_func(obs):
+        return jnp.dot(jnp.ones(no)/no, obs_matrix)
+        
+    def past_func(obs):
+        return obs_matrix[obs]
+
+    messages = []
+    for i, obs in enumerate(curr_obs):
+        messages.append(cond(obs != -1, past_func, future_func, obs))
+        #if obs != -1:
+        #    obs_messages.append(obs_matrix[obs])
+        #else:
+        #    no = obs_matrix.shape[0]
+        #    obs_messages.append(jnp.dot(jnp.ones(no)/no, obs_matrix))
+
+    return jnp.stack(messages).transpose((1,0))
+
+@jit    
+def scan_fwd_messages(carry, input_message):
+
+    i, old_message = carry
+    rew_message, obs_message = input_message
+    tmp_message = jnp.einsum('hpn,shp,hn,hn->spn', old_message, big_trans_matrix[...,i], obs_message, rew_message)
+
+    norm = tmp_message.sum(axis=0)
+    message = jnp.where(norm > 0, tmp_message/norm[None,...], tmp_message)
+    #norms = jnp.where(possible_policies[:,None], norm, 0)
+    i += 1
+
+    return (i, message), (message, norm)
+
+@jit
+def make_fwd_messages(rew_messages, obs_messages):
+
+    input_messages = jnp.stack([jnp.stack([rew_messages[:,i], obs_messages[:,i][:,None]]) for i in range(T-1)])
+    init = (0, prior_states)
+
+    carry, fwd = scan(scan_fwd_messages, init, input_messages)
+    fwd_messages, fwd_norms = fwd
+    fwd_messages = jnp.concatenate([init[1][None,...], fwd_messages], axis=0).transpose((1,0,2,3))
+
+    return fwd_messages, fwd_norms
+
+@jit    
+def scan_bwd_messages(carry, input_message):
+
+    i, old_message = carry
+    rew_message, obs_message = input_message
+
+    #print("old", old_message)
+    tmp_message = jnp.einsum('hpn,shp,hn,hn->spn', old_message, big_trans_matrix[...,i].transpose((1,0,2)), obs_message, rew_message)
+    # print(tmp_message)
+
+    norm = tmp_message.sum(axis=0)
+    message = tmp_message#jnp.where(norm > 0, tmp_message/norm[None,...], tmp_message)
+    i += 1
+
+    return (i, message), (message, norm)
+
+@jit
+def make_bwd_messages(rew_messages, obs_messages):
+
+    input_messages = jnp.stack([jnp.stack([rew_messages[:,i+1], obs_messages[:,i+1][:,None]]) for i in range(T-1)])
+    init = (0, bwd_init)
+    carry = init
+    carry, bwd = scan(scan_bwd_messages, init, input_messages, reverse=True)
+    bwd_messages, bwd_norms = bwd
+    bwd_messages = jnp.concatenate([bwd_messages, init[1][None,...]], axis=0).transpose((1,0,2,3))
+
+    return bwd_messages
+
+@jit    
+def eval_posterior_policies(fwd_norms, prior_policies, dec_temp):
+
+    likelihood = (fwd_norms).prod(axis=0)#+1e-10
+    norm_const = likelihood.sum(axis=0)
+    post = jnp.power(likelihood/norm_const, dec_temp[None,:]) * prior_policies
+    posterior_policies = post / post.sum(axis=0)
+
+    return posterior_policies
+
+@jit
+def post_actions_from_policies(posterior_policies, t):
+    
+    post_actions = jnp.array([jnp.where((policies[:,t]==a)[...,None], posterior_policies, 0).sum(axis=0) for a in range(na)])
+
+    return post_actions
+
+@jit
+def update_rew_counts(prev_rew_counts, curr_rew, post_states, t, lambda_r):
+
+    #note to self: try implemementing with binary mask multiplication instead of separated matrices
+    # maybe using jnp.where ?
+    no = prev_rew_counts.shape[0]
+    #if t == -1:
+    #    for i, rew in enumerate(curr_rew):
+    #        if rew != -1:
+    #            rew_counts = (1-lambda_r)[None,None,...]*prev_rew_counts + lambda_r[None,None,...] \
+    #                + jnp.eye(no)[rew][:,None,...]*post_states[-prev_rew_counts.shape[1]:,i,...][None,:,...]
+    #            prev_rew_counts = rew_counts
+    rew = curr_rew[t]
+    new_rew_counts = (1-lambda_r)[None,None,...]*prev_rew_counts + lambda_r[None,None,...] \
+                + jnp.eye(no)[rew][:,None,None]*post_states[-prev_rew_counts.shape[1]:,t,...][None,:,:]
+
+    return new_rew_counts
+
+@jit
+def update_pol_counts(prev_pol_counts, posterior_policies, alpha, lambda_pi):
+
+    new_pol_counts = (1-lambda_pi)[None,...]*prev_pol_counts + (lambda_pi)[None,...]*alpha + posterior_policies
+
+    return new_pol_counts
+
+@jit
+def update_counts(rew_counts, curr_rew, marginal_posterior_states, t, pol_counts, 
+                  posterior_policies, lambda_r, alpha, lambda_pi):
+    new_rew_counts = update_rew_counts(rew_counts, curr_rew, marginal_posterior_states, t, lambda_r)
+    new_pol_counts = update_pol_counts(pol_counts, posterior_policies, alpha, lambda_pi)
+    
+    return new_rew_counts, new_pol_counts
+
+@jit
+def do_not_update_counts(rew_counts, curr_rew, marginal_posterior_states, t, 
+                         pol_counts, posterior_policies, lambda_r, alpha, lambda_pi):
+    new_rew_counts = rew_counts
+    new_pol_counts = pol_counts
+    return new_rew_counts, new_pol_counts
+
+
 def Bayesian_habit_model():
     
     # generative model of behavior with Normally distributed params (within subject!!)
@@ -245,157 +398,7 @@ def Bayesian_habit_model():
         total_counts = jnp.concatenate([fix_rew_counts, rew_counts], axis=1)
         rew_matrix = total_counts / total_counts.sum(axis=0)
         prior_policies = pol_counts / pol_counts.sum(axis=0)
-    
-        @jit
-        def make_rew_messages(rew_matrix, curr_rew):
 
-            def future_func(rew):
-                return jnp.einsum('r,rsn->sn', preference, rew_matrix)
-                
-            def past_func(rew):
-                return rew_matrix[rew]
-            
-            messages = []
-            for i, rew in enumerate(curr_rew):
-                messages.append(cond(rew != -1, past_func, future_func, rew))
-                #if rew != -1:
-                #    rew_messages.append(rew_matrix[rew])
-                #else:
-                #    rew_messages.append(jnp.einsum('r,rsn->sn', preference, rew_matrix))
-
-            return jnp.stack(messages).transpose((1,0,2))
-
-        @jit
-        def make_obs_messages(curr_obs):
-
-            def future_func(obs):
-                return jnp.dot(jnp.ones(no)/no, obs_matrix)
-                
-            def past_func(obs):
-                return obs_matrix[obs]
-
-            messages = []
-            for i, obs in enumerate(curr_obs):
-                messages.append(cond(obs != -1, past_func, future_func, obs))
-                #if obs != -1:
-                #    obs_messages.append(obs_matrix[obs])
-                #else:
-                #    no = obs_matrix.shape[0]
-                #    obs_messages.append(jnp.dot(jnp.ones(no)/no, obs_matrix))
-
-            return jnp.stack(messages).transpose((1,0))
-
-        @jit    
-        def scan_fwd_messages(carry, input_message):
-
-            i, old_message = carry
-            rew_message, obs_message = input_message
-            tmp_message = jnp.einsum('hpn,shp,hn,hn->spn', old_message, big_trans_matrix[...,i], obs_message, rew_message)
-
-            norm = tmp_message.sum(axis=0)
-            message = jnp.where(norm > 0, tmp_message/norm[None,...], tmp_message)
-            #norms = jnp.where(possible_policies[:,None], norm, 0)
-            i += 1
-
-            return (i, message), (message, norm)
-
-        @jit
-        def make_fwd_messages(rew_messages, obs_messages):
-
-            input_messages = jnp.stack([jnp.stack([rew_messages[:,i], obs_messages[:,i][:,None]]) for i in range(T-1)])
-            init = (0, prior_states)
-
-            carry, fwd = scan(scan_fwd_messages, init, input_messages)
-            fwd_messages, fwd_norms = fwd
-            fwd_messages = jnp.concatenate([init[1][None,...], fwd_messages], axis=0).transpose((1,0,2,3))
-
-            return fwd_messages, fwd_norms
-
-        @jit    
-        def scan_bwd_messages(carry, input_message):
-
-            i, old_message = carry
-            rew_message, obs_message = input_message
-
-            #print("old", old_message)
-            tmp_message = jnp.einsum('hpn,shp,hn,hn->spn', old_message, big_trans_matrix[...,i].transpose((1,0,2)), obs_message, rew_message)
-            # print(tmp_message)
-
-            norm = tmp_message.sum(axis=0)
-            message = tmp_message#jnp.where(norm > 0, tmp_message/norm[None,...], tmp_message)
-
-            return (i, message), (message, norm)
-
-        @jit
-        def make_bwd_messages(rew_messages, obs_messages):
-
-            input_messages = jnp.stack([jnp.stack([rew_messages[:,i+1], obs_messages[:,i+1][:,None]]) for i in range(T-1)])
-            init = (0, bwd_init)
-            carry = init
-            carry, bwd = scan(scan_bwd_messages, init, input_messages, reverse=True)
-            bwd_messages, bwd_norms = bwd
-            bwd_messages = jnp.concatenate([bwd_messages, init[1][None,...]], axis=0).transpose((1,0,2,3))
-
-            return bwd_messages
-
-        @jit    
-        def eval_posterior_policies(fwd_norms, prior_policies):
-
-            likelihood = (fwd_norms).prod(axis=0)#+1e-10
-            norm_const = likelihood.sum(axis=0)
-            post = jnp.power(likelihood/norm_const, dec_temp[None,:]) * prior_policies
-            posterior_policies = post / post.sum(axis=0)
-
-            return posterior_policies
-
-        def post_actions_from_policies(posterior_policies, t):
-            
-            post_actions = jnp.array([jnp.where((policies[:,t]==a)[...,None], posterior_policies, 0).sum(axis=0) for a in range(na)])
-
-            return post_actions
-
-        @jit        
-        def contract_posterior_policies(posterior_policies, a, t):
-
-            return posterior_policies[policies[:,t]==a].sum()
-
-        @jit    
-        def update_rew_counts(prev_rew_counts, curr_rew, post_states, t):
-
-            #note to self: try implemementing with binary mask multiplication instead of separated matrices
-            # maybe using jnp.where ?
-            no = prev_rew_counts.shape[0]
-            #if t == -1:
-            #    for i, rew in enumerate(curr_rew):
-            #        if rew != -1:
-            #            rew_counts = (1-lambda_r)[None,None,...]*prev_rew_counts + lambda_r[None,None,...] \
-            #                + jnp.eye(no)[rew][:,None,...]*post_states[-prev_rew_counts.shape[1]:,i,...][None,:,...]
-            #            prev_rew_counts = rew_counts
-            rew = curr_rew[t]
-            new_rew_counts = (1-lambda_r)[None,None,...]*prev_rew_counts + lambda_r[None,None,...] \
-                        + jnp.eye(no)[rew][:,None,None]*post_states[-prev_rew_counts.shape[1]:,t,...][None,:,:]
-
-            return new_rew_counts
-
-        @jit
-        def update_pol_counts(prev_pol_counts, posterior_policies):
-
-            new_pol_counts = (1-lambda_pi)[None,...]*prev_pol_counts + (lambda_pi)[None,...]*alpha + posterior_policies
-
-            return new_pol_counts
-        
-        @jit
-        def update_counts(rew_counts, curr_rew, marginal_posterior_states, t, pol_counts, posterior_policies):
-            new_rew_counts = update_rew_counts(rew_counts, curr_rew, marginal_posterior_states, t)
-            new_pol_counts = update_pol_counts(pol_counts, posterior_policies)
-            
-            return new_rew_counts, new_pol_counts
-        
-        @jit
-        def do_not_update_counts(rew_counts, curr_rew, marginal_posterior_states, t, pol_counts, posterior_policies):
-            new_rew_counts = rew_counts
-            new_pol_counts = pol_counts
-            return new_rew_counts, new_pol_counts
         
         @jit
         def sample_action(posterior_actions, curr_action):
@@ -417,14 +420,15 @@ def Bayesian_habit_model():
         fwd_norms = jnp.concatenate([fwd_norms, norm[-1][None,:]], axis=0)
         fwd_norms = jnp.where(possible_policies[:,None], fwd_norms, 0)
         
-        posterior_policies = eval_posterior_policies(fwd_norms, prior_policies)
+        posterior_policies = eval_posterior_policies(fwd_norms, prior_policies, dec_temp)
         
         marginal_posterior_states = jnp.einsum('stpn,pn->stn', posterior_states, posterior_policies)
         
         posterior_actions = post_actions_from_policies(posterior_policies, t)
         
         new_rew_counts, new_pol_counts = cond(t==T-1, update_counts, do_not_update_counts, 
-             rew_counts, curr_rew, marginal_posterior_states, t, pol_counts, posterior_policies)
+             rew_counts, curr_rew, marginal_posterior_states, t, pol_counts, 
+             posterior_policies, lambda_r, alpha, lambda_pi)
         #if t==T-1:
         #    rew_counts = update_rew_counts(rew_counts, curr_rew, marginal_posterior_states, t)
         #    pol_counts = update_pol_counts(pol_counts, posterior_policies)
@@ -440,7 +444,7 @@ def Bayesian_habit_model():
     
     posterior_responses = jnp.stack([pa for k, pa in enumerate(posterior_actions) if k%T != T-1])
     
-    print(posterior_responses.shape)
+    #print(posterior_responses.shape)
     
     with pyro.plate("N", flat_responses.shape[0]) as ind:
         pyro.sample('responses', dist.Categorical(posterior_responses[ind,:,0]), obs=flat_responses[ind])#, sample_shape=(trials*(T-1), npart))
@@ -492,7 +496,7 @@ def infer_posterior(iter_steps=1000,
 
     rng_key = random.PRNGKey(100)
     loss = []
-    svi_result = svi.run(rng_key, iter_steps)#, stable_update=True)
+    svi_result = svi.run(rng_key, iter_steps, stable_update=False)
     params = svi_result.params
     loss = svi_result.losses
     # print(svi_result)
