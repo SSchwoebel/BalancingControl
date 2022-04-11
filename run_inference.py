@@ -47,7 +47,7 @@ from inference_twostage import device
 ###################################
 """load data"""
 
-i = 0
+i = 1
 pl = 0.3
 rl = 0.7
 dt = 5.
@@ -237,7 +237,7 @@ agent = agt.FittingAgent(bayes_prc, [], pol,
 
 inferrer = inf.SingleInference(agent, data)
 
-loss, param_dict = inferrer.infer_posterior(iter_steps=500, num_particles=50)
+loss, param_dict = inferrer.infer_posterior(iter_steps=500, num_particles=5)
 
 plt.figure()
 plt.title("ELBO")

@@ -236,8 +236,8 @@ class SingleInference(object):
         beta_lamb_pi = pyro.param("beta_lamb_pi").data.cpu().numpy()
         alpha_lamb_r = pyro.param("alpha_lamb_r").data.cpu().numpy()
         beta_lamb_r = pyro.param("beta_lamb_r").data.cpu().numpy()
-        alpha_h = pyro.param("alpha_lamb_r").data.cpu().numpy()
-        beta_h = pyro.param("beta_lamb_r").data.cpu().numpy()
+        alpha_h = pyro.param("alpha_h").data.cpu().numpy()
+        beta_h = pyro.param("beta_h").data.cpu().numpy()
         concentration_dec_temp = pyro.param("concentration_dec_temp").data.cpu().numpy()
         rate_dec_temp = pyro.param("rate_dec_temp").data.cpu().numpy()
         
