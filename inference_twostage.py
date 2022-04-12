@@ -140,7 +140,7 @@ class SingleInference(object):
                       "concentration_dec_temp": concentration_dec_temp, "rate_dec_temp": rate_dec_temp, "dec_temp": dec_temp}
         #print(param_dict)
         
-        return param_dict
+        #return param_dict
         
         
     def infer_posterior(self,
@@ -290,3 +290,225 @@ class SingleInference(object):
         print(param_dict)
         
         
+class GroupInference(object):
+    
+    def __init__(self, agent, data):
+        
+        self.agent = agent
+        self.trials = agent.trials
+        self.T = agent.T
+        self.data = data
+        
+    def model(self):
+        # generative model of behavior with Normally distributed params (within subject!!)
+        
+        # tell pyro about prior over parameters: alpha and beta of lambda which is between 0 and 1
+        # alpha = beta = 1 equals uniform prior
+        alpha_lamb_pi = ar.ones(1).to(device)
+        beta_lamb_pi = ar.ones(1).to(device)
+        
+        # tell pyro about prior over parameters: alpha and beta of lambda which is between 0 and 1
+        # alpha = beta = 1 equals uniform prior
+        alpha_lamb_r = ar.ones(1).to(device)
+        beta_lamb_r = ar.ones(1).to(device)
+        
+        # tell pyro about prior over parameters: alpha and beta of h which is between 0 and 1
+        # alpha = beta = 1 equals uniform prior
+        alpha_h = ar.ones(1).to(device)
+        beta_h = ar.ones(1).to(device)
+        
+        # tell pyro about prior over parameters: decision temperature
+        # uniform between 0 and 20??
+        concentration_dec_temp = ar.ones(1).to(device)
+        rate_dec_temp = (ar.ones(1)*0.5).to(device)
+        
+        for ind in pyro.plate("subject", len(self.data)):
+            #print(ind)
+            lamb_pi = pyro.sample('lamb_pi_{}'.format(ind), dist.Beta(alpha_lamb_pi, beta_lamb_pi)).to(device)
+            lamb_r = pyro.sample('lamb_r_{}'.format(ind), dist.Beta(alpha_lamb_r, beta_lamb_r)).to(device)
+            h = pyro.sample('h_{}'.format(ind), dist.Beta(alpha_h, beta_h)).to(device)
+            dec_temp = pyro.sample('dec_temp_{}'.format(ind), dist.Gamma(concentration_dec_temp, rate_dec_temp)).to(device)
+        
+            param_dict = {"pol_lambda": lamb_pi, "r_lambda": lamb_r, "h": h, "dec_temp": dec_temp}
+            #print(param_dict)
+            
+            self.agent.reset(param_dict)
+            #self.agent.set_parameters(pol_lambda=lamb_pi, r_lambda=lamb_r, dec_temp=dec_temp)
+            
+            for tau in pyro.markov(range(self.trials)):
+                for t in range(self.T):
+                    
+                    if t==0:
+                        prev_response = None
+                        context = None
+                    else:
+                        prev_response = self.data[ind]["actions"][tau, t-1]
+                        context = None
+            
+                    observation = self.data[ind]["observations"][tau, t]
+            
+                    reward = self.data[ind]["rewards"][tau, t]
+            
+                    self.agent.update_beliefs(tau, t, observation, reward, prev_response, context)
+            
+                    if t < self.T-1:
+                    
+                        probs = self.agent.perception.posterior_actions[-1]
+                        #print(probs)
+                        if ar.any(ar.isnan(probs)):
+                            print(probs)
+                            print(dec_temp, lamb_pi, lamb_r)
+                
+                        curr_response = self.data[ind]["actions"][tau, t]
+                        #print(curr_response)
+                        # print(tau, t, probs, curr_response)
+                        #print(tau,t,param_dict)
+                        
+                        pyro.sample('res_{}_{}_{}'.format(ind, tau, t), dist.Categorical(probs.T), obs=curr_response)
+                    
+
+    def guide(self):
+        # approximate posterior. assume MF: each param has his own univariate Normal.
+        
+        # tell pyro about posterior over parameters: alpha and beta of lambda which is between 0 and 1
+        alpha_lamb_pi = pyro.param("alpha_lamb_pi", ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)#greater_than_eq(1.))
+        beta_lamb_pi = pyro.param("beta_lamb_pi", ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)#greater_than_eq(1.))
+        
+        # tell pyro about posterior over parameters: alpha and beta of lambda which is between 0 and 1
+        alpha_lamb_r = pyro.param("alpha_lamb_r", ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)#greater_than_eq(1.))
+        beta_lamb_r = pyro.param("beta_lamb_r", ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)#greater_than_eq(1.))
+        
+        # tell pyro about posterior over parameters: alpha and beta of lambda which is between 0 and 1
+        alpha_h = pyro.param("alpha_h", ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)#greater_than_eq(1.))
+        beta_h = pyro.param("beta_h", ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)#greater_than_eq(1.))
+        
+        # tell pyro about posterior over parameters: mean and std of the decision temperature
+        concentration_dec_temp = pyro.param("concentration_dec_temp", ar.ones(1)*3., constraint=ar.distributions.constraints.positive).to(device)#interval(0., 7.))
+        rate_dec_temp = pyro.param("rate_dec_temp", ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)
+        
+                
+        with pyro.plate("subject") as ind:
+            
+            lamb_pi = pyro.sample('lamb_pi_{}'.format(ind), dist.Beta(alpha_lamb_pi, beta_lamb_pi)).to(device)
+            lamb_r = pyro.sample('lamb_r_{}'.format(ind), dist.Beta(alpha_lamb_r, beta_lamb_r)).to(device)
+            h = pyro.sample('h_{}'.format(ind), dist.Beta(alpha_h, beta_h)).to(device)
+            dec_temp = pyro.sample('dec_temp_{}'.format(ind), dist.Gamma(concentration_dec_temp, rate_dec_temp)).to(device)
+
+        
+        param_dict = {"alpha_lamb_pi": alpha_lamb_pi, "beta_lamb_pi": beta_lamb_pi, "lamb_pi": lamb_pi,
+                      "alpha_lamb_r": alpha_lamb_r, "beta_lamb_r": beta_lamb_r, "lamb_r": lamb_r,
+                      "alpha_h": alpha_h, "beta_h": beta_h, "h": h,
+                      "concentration_dec_temp": concentration_dec_temp, "rate_dec_temp": rate_dec_temp, "dec_temp": dec_temp}
+        #print(param_dict)
+        
+        return param_dict
+        
+        
+    def infer_posterior(self,
+                        iter_steps=1000,
+                        num_particles=10,
+                        optim_kwargs={'lr': .01}):
+        """Perform SVI over free model parameters.
+        """
+
+        pyro.clear_param_store()
+
+        svi = pyro.infer.SVI(model=self.model,
+                  guide=self.guide,
+                  optim=pyro.optim.Adam(optim_kwargs),
+                  loss=pyro.infer.Trace_ELBO(num_particles=num_particles,
+                                  #set below to true once code is vectorized
+                                  vectorize_particles=True))
+
+        loss = []
+        pbar = tqdm(range(iter_steps), position=0)
+        for step in pbar:#range(iter_steps):
+            loss.append(ar.tensor(svi.step()).to(device))
+            pbar.set_description("Mean ELBO %6.2f" % ar.tensor(loss[-20:]).mean())
+            if ar.isnan(loss[-1]):
+                break
+
+        self.loss = [l.cpu() for l in loss]
+        
+        alpha_lamb_pi = pyro.param("alpha_lamb_pi").data.numpy()
+        beta_lamb_pi = pyro.param("beta_lamb_pi").data.numpy()
+        alpha_lamb_r = pyro.param("alpha_lamb_r").data.numpy()
+        beta_lamb_r = pyro.param("beta_lamb_r").data.numpy()
+        alpha_h = pyro.param("alpha_lamb_r").data.numpy()
+        beta_h = pyro.param("beta_lamb_r").data.numpy()
+        concentration_dec_temp = pyro.param("concentration_dec_temp").data.numpy()
+        rate_dec_temp = pyro.param("rate_dec_temp").data.numpy()
+        
+        param_dict = {"alpha_lamb_pi": alpha_lamb_pi, "beta_lamb_pi": beta_lamb_pi,
+                      "alpha_lamb_r": alpha_lamb_r, "beta_lamb_r": beta_lamb_r,
+                      "alpha_h": alpha_h, "beta_h": beta_h,
+                      "concentration_dec_temp": concentration_dec_temp, "rate_dec_temp": rate_dec_temp}
+        
+        return self.loss, param_dict
+    
+    def sample_posterior_marginals(self, n_samples=100):
+
+        elbo = pyro.infer.TraceEnum_ELBO()
+        post_sample_dict = {}
+
+        pbar = tqdm(range(n_samples), position=0)
+
+        for n in pbar:
+            pbar.set_description("Sample posterior depth")
+            # get marginal posterior over planning depths
+            post_samples = elbo.compute_marginals(self.model, self.guide)
+            print(post_samples)
+            for name in post_samples.keys():
+                post_sample_dict.setdefault(name, [])
+                post_sample_dict[name].append(post_samples[name].probs.detach().clone())
+
+        for name in post_sample_dict.keys():
+            post_sample_dict[name] = ar.stack(post_sample_dict[name]).numpy()
+            
+        post_sample_df = pd.DataFrame(post_sample_dict)
+
+        return post_sample_df
+    
+    def analytical_posteriors(self):
+        
+        alpha_lamb_pi = pyro.param("alpha_lamb_pi").data.cpu().numpy()
+        beta_lamb_pi = pyro.param("beta_lamb_pi").data.cpu().numpy()
+        alpha_lamb_r = pyro.param("alpha_lamb_r").data.cpu().numpy()
+        beta_lamb_r = pyro.param("beta_lamb_r").data.cpu().numpy()
+        alpha_h = pyro.param("alpha_h").data.cpu().numpy()
+        beta_h = pyro.param("beta_h").data.cpu().numpy()
+        concentration_dec_temp = pyro.param("concentration_dec_temp").data.cpu().numpy()
+        rate_dec_temp = pyro.param("rate_dec_temp").data.cpu().numpy()
+        
+        param_dict = {"alpha_lamb_pi": alpha_lamb_pi, "beta_lamb_pi": beta_lamb_pi,
+                      "alpha_lamb_r": alpha_lamb_r, "beta_lamb_r": beta_lamb_r,
+                      "alpha_h": alpha_h, "beta_h": beta_h,
+                      "concentration_dec_temp": concentration_dec_temp, "rate_dec_temp": rate_dec_temp}
+        
+        x_lamb = np.arange(0.01,1.,0.01)
+        
+        y_lamb_pi = analytical_dists.Beta(x_lamb, alpha_lamb_pi, beta_lamb_pi)
+        y_lamb_r = analytical_dists.Beta(x_lamb, alpha_lamb_r, beta_lamb_r)
+        y_h = analytical_dists.Beta(x_lamb, alpha_h, beta_h)
+        
+        x_dec_temp = np.arange(0.01,10.,0.01)
+        
+        y_dec_temp = analytical_dists.Gamma(x_dec_temp, concentration=concentration_dec_temp, rate=rate_dec_temp)
+        
+        xs = [x_lamb, x_lamb, x_lamb, x_dec_temp]
+        ys = [y_lamb_pi, y_lamb_r, y_h, y_dec_temp]
+        
+        return xs, ys, param_dict
+    
+    
+    def plot_posteriors(self):
+        
+        #df, param_dict = self.sample_posteriors()
+        
+        marginal_df = self.sample_posterior_marginals()
+        
+        # plt.figure()
+        # sns.histplot(marginal_df["h_1"])
+        # plt.show()
+        
+        return marginal_df

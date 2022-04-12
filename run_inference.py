@@ -47,7 +47,6 @@ from inference_twostage import device
 ###################################
 """load data"""
 
-i = 1
 pl = 0.3
 rl = 0.7
 dt = 5.
@@ -55,20 +54,23 @@ tend = 100
 
 folder = "data"
 
-run_name = "twostage_agent"+str(i)+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tend)+".json"
-fname = os.path.join(folder, run_name)
+data = []
 
-jsonpickle_numpy.register_handlers()
+for i in [0,1]:
+    run_name = "twostage_agent"+str(i)+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tend)+".json"
+    fname = os.path.join(folder, run_name)
     
-with open(fname, 'r') as infile:
-    loaded = json.load(infile)
+    jsonpickle_numpy.register_handlers()
+        
+    with open(fname, 'r') as infile:
+        loaded = json.load(infile)
+    
+    data_load = pickle.decode(loaded)
 
-data_load = pickle.decode(loaded)
-
-data = {}
-data["actions"] = ar.tensor(data_load["actions"]).to(device)
-data["rewards"] = ar.tensor(data_load["rewards"]).to(device)
-data["observations"] = ar.tensor(data_load["observations"]).to(device)
+    data.append({})
+    data[-1]["actions"] = ar.tensor(data_load["actions"]).to(device)
+    data[-1]["rewards"] = ar.tensor(data_load["rewards"]).to(device)
+    data[-1]["observations"] = ar.tensor(data_load["observations"]).to(device)
 
 
 ###################################
@@ -235,9 +237,9 @@ agent = agt.FittingAgent(bayes_prc, [], pol,
 ###################################
 """run inference"""
 
-inferrer = inf.SingleInference(agent, data)
+inferrer = inf.GroupInference(agent, data)
 
-loss, param_dict = inferrer.infer_posterior(iter_steps=500, num_particles=5)
+loss, param_dict = inferrer.infer_posterior(iter_steps=5, num_particles=1)
 
 plt.figure()
 plt.title("ELBO")
@@ -246,7 +248,7 @@ plt.ylabel("ELBO")
 plt.xlabel("iteration")
 plt.show()
 
-inferrer.plot_posteriors()
+marginal_df = inferrer.plot_posteriors()
 
 print("this is inference for pl =", pl, "rl =", rl, "dt =", dt, "tend=", tend)
 # print(param_dict)
