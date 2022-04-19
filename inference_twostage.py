@@ -377,16 +377,16 @@ class GroupInference(object):
         # approximate posterior. assume MF: each param has his own univariate Normal.
         
         # tell pyro about posterior over parameters: alpha and beta of lambda which is between 0 and 1
-        alpha_lamb_pi = pyro.param("alpha_lamb_pi", ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)#greater_than_eq(1.))
-        beta_lamb_pi = pyro.param("beta_lamb_pi", ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)#greater_than_eq(1.))
+        alpha_lamb_pi = pyro.param("alpha_lamb_pi", ar.ones(1)*10, constraint=ar.distributions.constraints.positive).to(device)#greater_than_eq(1.))
+        beta_lamb_pi = pyro.param("beta_lamb_pi", ar.ones(1)*10, constraint=ar.distributions.constraints.positive).to(device)#greater_than_eq(1.))
         
         # tell pyro about posterior over parameters: alpha and beta of lambda which is between 0 and 1
-        alpha_lamb_r = pyro.param("alpha_lamb_r", ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)#greater_than_eq(1.))
-        beta_lamb_r = pyro.param("beta_lamb_r", ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)#greater_than_eq(1.))
+        alpha_lamb_r = pyro.param("alpha_lamb_r", ar.ones(1)*10, constraint=ar.distributions.constraints.positive).to(device)#greater_than_eq(1.))
+        beta_lamb_r = pyro.param("beta_lamb_r", ar.ones(1)*10, constraint=ar.distributions.constraints.positive).to(device)#greater_than_eq(1.))
         
         # tell pyro about posterior over parameters: alpha and beta of lambda which is between 0 and 1
-        alpha_h = pyro.param("alpha_h", ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)#greater_than_eq(1.))
-        beta_h = pyro.param("beta_h", ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)#greater_than_eq(1.))
+        alpha_h = pyro.param("alpha_h", ar.ones(1)*10, constraint=ar.distributions.constraints.positive).to(device)#greater_than_eq(1.))
+        beta_h = pyro.param("beta_h", ar.ones(1)*10, constraint=ar.distributions.constraints.positive).to(device)#greater_than_eq(1.))
         
         # tell pyro about posterior over parameters: mean and std of the decision temperature
         concentration_dec_temp = pyro.param("concentration_dec_temp", ar.ones(1)*3., constraint=ar.distributions.constraints.positive).to(device)#interval(0., 7.))
