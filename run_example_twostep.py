@@ -374,7 +374,7 @@ for pl in [0.1,0.3,0.5,0.7,0.9]:
             
             stayed = []
             indices = []
-            for tendency in [10, 100]:#[1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
+            for tendency in [1, 2, 10, 100]:#[1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
                 print(pl, rl, dt, tendency)
                 tend = array([tendency])
             
@@ -479,7 +479,8 @@ for pl in [0.1,0.3,0.5,0.7,0.9]:
                     actions = w.actions.numpy()
                     observations = w.observations.numpy()
                     rewards = w.rewards.numpy()
-                    data = {"actions": actions, "observations": observations, "rewards": rewards}
+                    states = w.environment.hidden_states.numpy()
+                    data = {"actions": actions, "observations": observations, "rewards": rewards, "states": states}
     
                     jsonpickle_numpy.register_handlers()
                     pickled = pickle.encode(data)

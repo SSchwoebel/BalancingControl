@@ -299,6 +299,7 @@ class GroupInference(object):
         self.trials = agent.trials
         self.T = agent.T
         self.data = data
+        self.nsubs = len(data)
         
     def model(self):
         # generative model of behavior with Normally distributed params (within subject!!)
@@ -323,14 +324,18 @@ class GroupInference(object):
         concentration_dec_temp = ar.ones(1).to(device)
         rate_dec_temp = (ar.ones(1)*0.5).to(device)
         
-        for ind in pyro.plate("subject", len(self.data)):
+        lamb_pi = []
+        lamb_r = []
+        h = []
+        dec_temp = []
+        for ind in range(self.nsubs):#pyro.plate("subject", len(self.data)):
             #print(ind)
-            lamb_pi = pyro.sample('lamb_pi_{}'.format(ind), dist.Beta(alpha_lamb_pi, beta_lamb_pi)).to(device)
-            lamb_r = pyro.sample('lamb_r_{}'.format(ind), dist.Beta(alpha_lamb_r, beta_lamb_r)).to(device)
-            h = pyro.sample('h_{}'.format(ind), dist.Beta(alpha_h, beta_h)).to(device)
-            dec_temp = pyro.sample('dec_temp_{}'.format(ind), dist.Gamma(concentration_dec_temp, rate_dec_temp)).to(device)
+            lamb_pi.append(pyro.sample('lamb_pi_{}'.format(ind), dist.Beta(alpha_lamb_pi, beta_lamb_pi)).to(device))
+            lamb_r.append(pyro.sample('lamb_r_{}'.format(ind), dist.Beta(alpha_lamb_r, beta_lamb_r)).to(device))
+            h.append(pyro.sample('h_{}'.format(ind), dist.Beta(alpha_h, beta_h)).to(device))
+            dec_temp.append(pyro.sample('dec_temp_{}'.format(ind), dist.Gamma(concentration_dec_temp, rate_dec_temp)).to(device))
         
-            param_dict = {"pol_lambda": lamb_pi, "r_lambda": lamb_r, "h": h, "dec_temp": dec_temp}
+            param_dict = {"pol_lambda": lamb_pi[-1], "r_lambda": lamb_r[-1], "h": h[-1], "dec_temp": dec_temp[-1]}
             #print(param_dict)
             
             self.agent.reset(param_dict)
@@ -388,21 +393,26 @@ class GroupInference(object):
         rate_dec_temp = pyro.param("rate_dec_temp", ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)
         
                 
-        with pyro.plate("subject") as ind:
+        #with pyro.plate("subject") as ind:
+        lamb_pi = []
+        lamb_r = []
+        h = []
+        dec_temp = []
+        for ind in range(self.nsubs):
             
-            lamb_pi = pyro.sample('lamb_pi_{}'.format(ind), dist.Beta(alpha_lamb_pi, beta_lamb_pi)).to(device)
-            lamb_r = pyro.sample('lamb_r_{}'.format(ind), dist.Beta(alpha_lamb_r, beta_lamb_r)).to(device)
-            h = pyro.sample('h_{}'.format(ind), dist.Beta(alpha_h, beta_h)).to(device)
-            dec_temp = pyro.sample('dec_temp_{}'.format(ind), dist.Gamma(concentration_dec_temp, rate_dec_temp)).to(device)
+            lamb_pi.append(pyro.sample('lamb_pi_{}'.format(ind), dist.Beta(alpha_lamb_pi, beta_lamb_pi)).to(device))
+            lamb_r.append(pyro.sample('lamb_r_{}'.format(ind), dist.Beta(alpha_lamb_r, beta_lamb_r)).to(device))
+            h.append(pyro.sample('h_{}'.format(ind), dist.Beta(alpha_h, beta_h)).to(device))
+            dec_temp.append(pyro.sample('dec_temp_{}'.format(ind), dist.Gamma(concentration_dec_temp, rate_dec_temp)).to(device))
 
         
-        param_dict = {"alpha_lamb_pi": alpha_lamb_pi, "beta_lamb_pi": beta_lamb_pi, "lamb_pi": lamb_pi,
-                      "alpha_lamb_r": alpha_lamb_r, "beta_lamb_r": beta_lamb_r, "lamb_r": lamb_r,
-                      "alpha_h": alpha_h, "beta_h": beta_h, "h": h,
-                      "concentration_dec_temp": concentration_dec_temp, "rate_dec_temp": rate_dec_temp, "dec_temp": dec_temp}
+        # param_dict = {"alpha_lamb_pi": alpha_lamb_pi, "beta_lamb_pi": beta_lamb_pi, "lamb_pi": lamb_pi,
+        #               "alpha_lamb_r": alpha_lamb_r, "beta_lamb_r": beta_lamb_r, "lamb_r": lamb_r,
+        #               "alpha_h": alpha_h, "beta_h": beta_h, "h": h,
+        #               "concentration_dec_temp": concentration_dec_temp, "rate_dec_temp": rate_dec_temp, "dec_temp": dec_temp}
         #print(param_dict)
         
-        return param_dict
+        #return param_dict
         
         
     def infer_posterior(self,
