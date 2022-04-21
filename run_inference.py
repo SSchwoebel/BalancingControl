@@ -56,7 +56,7 @@ folder = "data"
 
 data = []
 
-for i in [1]:
+for i in [1]:#, 1, 2, 3, 4
     run_name = "twostage_agent"+str(i)+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tend)+".json"
     fname = os.path.join(folder, run_name)
     
@@ -78,7 +78,7 @@ for i in [1]:
     unrewarded = rewarded==False
     
     rare = ar.logical_or(ar.logical_and(data[-1]["states"][:-1,1]==2, data[-1]["actions"][:-1,0] == 0),
-                   ar.logical_and(data[-1]["states"][:-1,1]==1, data[-1]["actions"][:-1,0] == 1))
+                    ar.logical_and(data[-1]["states"][:-1,1]==1, data[-1]["actions"][:-1,0] == 1))
 
     common = rare==False
 
@@ -90,7 +90,7 @@ for i in [1]:
     unrewarded_rare = ar.where(ar.logical_and(unrewarded,rare) == True)[0]
     
     index_list = [rewarded_common, rewarded_rare,
-                 unrewarded_common, unrewarded_rare]
+                  unrewarded_common, unrewarded_rare]
 
     stayed = [(data[-1]["actions"][index_list[i],0] == data[-1]["actions"][index_list[i]+1,0]).sum()/float(len(index_list[i])) for i in range(4)]
     
@@ -109,53 +109,53 @@ rl = 0.7
 dt = 5.
 tend = 1
 
-for i in [0]:
-    run_name = "twostage_agent"+str(i)+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tend)+".json"
-    fname = os.path.join(folder, run_name)
+# for i in [0, 1, 2, 3]:
+#     run_name = "twostage_agent"+str(i)+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tend)+".json"
+#     fname = os.path.join(folder, run_name)
     
-    jsonpickle_numpy.register_handlers()
+#     jsonpickle_numpy.register_handlers()
         
-    with open(fname, 'r') as infile:
-        loaded = json.load(infile)
+#     with open(fname, 'r') as infile:
+#         loaded = json.load(infile)
     
-    data_load = pickle.decode(loaded)
+#     data_load = pickle.decode(loaded)
 
-    data.append({})
-    data[-1]["actions"] = ar.tensor(data_load["actions"]).to(device)
-    data[-1]["rewards"] = ar.tensor(data_load["rewards"]).to(device)
-    data[-1]["observations"] = ar.tensor(data_load["observations"]).to(device)
-    data[-1]["states"] = ar.tensor(data_load["states"]).to(device)
+#     data.append({})
+#     data[-1]["actions"] = ar.tensor(data_load["actions"]).to(device)
+#     data[-1]["rewards"] = ar.tensor(data_load["rewards"]).to(device)
+#     data[-1]["observations"] = ar.tensor(data_load["observations"]).to(device)
+#     data[-1]["states"] = ar.tensor(data_load["states"]).to(device)
     
-    rewarded = data[-1]["rewards"][:-1,-1] == 1
+#     rewarded = data[-1]["rewards"][:-1,-1] == 1
 
-    unrewarded = rewarded==False
+#     unrewarded = rewarded==False
     
-    rare = ar.logical_or(ar.logical_and(data[-1]["states"][:-1,1]==2, data[-1]["actions"][:-1,0] == 0),
-                   ar.logical_and(data[-1]["states"][:-1,1]==1, data[-1]["actions"][:-1,0] == 1))
+#     rare = ar.logical_or(ar.logical_and(data[-1]["states"][:-1,1]==2, data[-1]["actions"][:-1,0] == 0),
+#                    ar.logical_and(data[-1]["states"][:-1,1]==1, data[-1]["actions"][:-1,0] == 1))
 
-    common = rare==False
+#     common = rare==False
 
-    names = ["rewarded common", "rewarded rare", "unrewarded common", "unrewarded rare"]
+#     names = ["rewarded common", "rewarded rare", "unrewarded common", "unrewarded rare"]
     
-    rewarded_common = ar.where(ar.logical_and(rewarded,common) == True)[0]
-    rewarded_rare = ar.where(ar.logical_and(rewarded,rare) == True)[0]
-    unrewarded_common = ar.where(ar.logical_and(unrewarded,common) == True)[0]
-    unrewarded_rare = ar.where(ar.logical_and(unrewarded,rare) == True)[0]
+#     rewarded_common = ar.where(ar.logical_and(rewarded,common) == True)[0]
+#     rewarded_rare = ar.where(ar.logical_and(rewarded,rare) == True)[0]
+#     unrewarded_common = ar.where(ar.logical_and(unrewarded,common) == True)[0]
+#     unrewarded_rare = ar.where(ar.logical_and(unrewarded,rare) == True)[0]
     
-    index_list = [rewarded_common, rewarded_rare,
-                 unrewarded_common, unrewarded_rare]
+#     index_list = [rewarded_common, rewarded_rare,
+#                  unrewarded_common, unrewarded_rare]
 
-    stayed = [(data[-1]["actions"][index_list[i],0] == data[-1]["actions"][index_list[i]+1,0]).sum()/float(len(index_list[i])) for i in range(4)]
+#     stayed = [(data[-1]["actions"][index_list[i],0] == data[-1]["actions"][index_list[i]+1,0]).sum()/float(len(index_list[i])) for i in range(4)]
     
-    plt.figure()
-    g = sns.barplot(data=stayed)
-    g.set_xticklabels(names, rotation=45, horizontalalignment='right', fontsize=16)
-    plt.ylim([0,1])
-    plt.yticks(ar.arange(0,1.1,0.2),fontsize=16)
-    plt.title("habit and goal-directed", fontsize=18)
-    plt.savefig("habit_and_goal.svg",dpi=300)
-    plt.ylabel("stay probability")
-    plt.show()
+#     plt.figure()
+#     g = sns.barplot(data=stayed)
+#     g.set_xticklabels(names, rotation=45, horizontalalignment='right', fontsize=16)
+#     plt.ylim([0,1])
+#     plt.yticks(ar.arange(0,1.1,0.2),fontsize=16)
+#     plt.title("habit and goal-directed", fontsize=18)
+#     plt.savefig("habit_and_goal.svg",dpi=300)
+#     plt.ylabel("stay probability")
+#     plt.show()
 
 
 ###################################
@@ -299,12 +299,18 @@ set up agent
 
 pol_par = alphas
 
+data_obs = ar.stack([d["observations"] for d in data])
+data_rew = ar.stack([d["rewards"] for d in data])
+data_act = ar.stack([d["actions"] for d in data])
+
 # perception
-bayes_prc = prc.FittingPerception(A, B, C_agent, transition_matrix_context, 
+bayes_prc = prc.GroupPerception(A, B, C_agent, transition_matrix_context, 
                                        state_prior, utility, prior_pi, pol,
+                                       data_obs, data_rew, data_act,
                                        alpha_0, C_alphas, T=T, trials=trials,
                                        pol_lambda=0, r_lambda=0,
-                                       non_decaying=3, dec_temp=1)
+                                       non_decaying=3, dec_temp=1,
+                                       nsubs = len(data))
 
 agent = agt.FittingAgent(bayes_prc, [], pol,
                   trials = trials, T = T,
@@ -324,7 +330,7 @@ agent = agt.FittingAgent(bayes_prc, [], pol,
 
 inferrer = inf.GroupInference(agent, data)
 
-loss = inferrer.infer_posterior(iter_steps=100, num_particles=10)#, param_dict
+loss = inferrer.infer_posterior(iter_steps=200, num_particles=10)#, param_dict
 
 plt.figure()
 plt.title("ELBO")
@@ -335,7 +341,7 @@ plt.show()
 
 # inferrer.plot_posteriors()
 
-samples, reordered_sample_dict, sample_df = inferrer.plot_posteriors(n_samples=100)#
+samples, reordered_sample_dict, sample_df = inferrer.plot_posteriors(n_samples=50)#
 
 #print("this is inference for pl =", pl, "rl =", rl, "dt =", dt, "tend=", tend)
 # print(param_dict)

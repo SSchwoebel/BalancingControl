@@ -104,36 +104,11 @@ class FittingAgent(object):
         self.perception.reset()
 
 
-    def update_beliefs(self, tau, t, observation, reward, response, context=None):
+    def update_beliefs(self, tau, t, context=None):
         
-        #print(observation)
-        self.observations[tau,t] = observation
-        self.rewards[tau,t] = reward
-        if context is not None:
-            self.context_obs[tau] = context
-
-        if t == 0:
-            self.possible_polcies = ar.ones(self.npi, dtype=bool)#ar.arange(0,self.npi,1, dtype=ar.long).to(device)
-        else:
-            #TODO!
-            # wow so inefficient. probably rather remove for fitting...
-            possible_policies = self.policies[:,t-1]==response
-            prev_pols = ar.zeros(self.npi, dtype=bool).to(device)
-            prev_pols[:] = False
-            prev_pols[self.possible_polcies] = True
-            new_pols = own_logical_and(possible_policies, prev_pols).to(device)
-            self.possible_polcies = new_pols#ar.where(new_pols==True)[0].to(device)
-            
-            # TODO once 1D intersect exists
-            #self.possible_polcies = ar.intersect1d(self.possible_polcies, possible_policies)
-           #self.log_probability += ln(self.posterior_actions[tau,t-1,response])
 
         self.perception.update_beliefs_states(
-                                         tau, t,
-                                         observation,
-                                         reward,
-                                         #self.policies,
-                                         self.possible_polcies)
+                                         tau, t)
 
         #update beliefs about policies
         self.perception.update_beliefs_policies(tau, t) #self.posterior_policies[tau, t], self.likelihood[tau,t]
@@ -163,8 +138,7 @@ class FittingAgent(object):
         #if reward > 0:
         # check later if stuff still works!
         if self.learn_rew and t==self.T-1:
-            self.perception.update_beliefs_dirichlet_rew_params(tau, t, \
-                                                            reward)
+            self.perception.update_beliefs_dirichlet_rew_params(tau, t)
 
     def generate_response(self, tau, t):
 

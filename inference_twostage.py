@@ -330,48 +330,34 @@ class GroupInference(object):
         concentration_dec_temp = ar.ones(1).to(device)
         rate_dec_temp = (ar.ones(1)*0.5).to(device)
         
-        lamb_pi = []
-        lamb_r = []
-        h = []
-        dec_temp = []
-        for ind in range(self.nsubs):#pyro.plate("subject", len(self.data)):
-            #print(ind)
+        #for ind in range(self.nsubs):#pyro.plate("subject", len(self.data)):
+        with pyro.plate('subject', self.nsubs) as ind:
+            # print(ind)
             
-            alpha_lamb_pi = pyro.sample('alpha_lamb_pi_{}'.format(ind), dist.LogNormal(mu_lamb_pi, sig_lamb_pi)).to(device)
-            beta_lamb_pi = pyro.sample('beta_lamb_pi_{}'.format(ind), dist.LogNormal(mu_lamb_pi, sig_lamb_pi)).to(device)
+            alpha_lamb_pi = pyro.sample('alpha_lamb_pi', dist.LogNormal(mu_lamb_pi, sig_lamb_pi)).to(device)
+            beta_lamb_pi = pyro.sample('beta_lamb_pi', dist.LogNormal(mu_lamb_pi, sig_lamb_pi)).to(device)
             
-            alpha_lamb_r = pyro.sample('alpha_lamb_r_{}'.format(ind), dist.LogNormal(mu_lamb_r, sig_lamb_r)).to(device)
-            beta_lamb_r = pyro.sample('beta_lamb_r_{}'.format(ind), dist.LogNormal(mu_lamb_r, sig_lamb_r)).to(device)
+            alpha_lamb_r = pyro.sample('alpha_lamb_r', dist.LogNormal(mu_lamb_r, sig_lamb_r)).to(device)
+            beta_lamb_r = pyro.sample('beta_lamb_r', dist.LogNormal(mu_lamb_r, sig_lamb_r)).to(device)
             
-            alpha_h = pyro.sample('alpha_lamb_h_{}'.format(ind), dist.LogNormal(mu_h, sig_h)).to(device)
-            beta_h = pyro.sample('beta_lamb_h_{}'.format(ind), dist.LogNormal(mu_h, sig_h)).to(device)
+            alpha_h = pyro.sample('alpha_lamb_h', dist.LogNormal(mu_h, sig_h)).to(device)
+            beta_h = pyro.sample('beta_lamb_h', dist.LogNormal(mu_h, sig_h)).to(device)
         
-            lamb_pi.append(pyro.sample('lamb_pi_{}'.format(ind), dist.Beta(alpha_lamb_pi, beta_lamb_pi)).to(device))
-            lamb_r.append(pyro.sample('lamb_r_{}'.format(ind), dist.Beta(alpha_lamb_r, beta_lamb_r)).to(device))
-            h.append(pyro.sample('h_{}'.format(ind), dist.Beta(alpha_h, beta_h)).to(device))
-            dec_temp.append(pyro.sample('dec_temp_{}'.format(ind), dist.Gamma(concentration_dec_temp, rate_dec_temp)).to(device))
+            lamb_pi = pyro.sample('lamb_pi', dist.Beta(alpha_lamb_pi, beta_lamb_pi)).to(device)
+            lamb_r = pyro.sample('lamb_r', dist.Beta(alpha_lamb_r, beta_lamb_r)).to(device)
+            h = pyro.sample('h', dist.Beta(alpha_h, beta_h)).to(device)
+            dec_temp = pyro.sample('dec_temp', dist.Gamma(concentration_dec_temp, rate_dec_temp)).to(device)
         
-            param_dict = {"pol_lambda": lamb_pi[-1], "r_lambda": lamb_r[-1], "h": h[-1], "dec_temp": dec_temp[-1]}
-            #print(param_dict)
+            param_dict = {"pol_lambda": lamb_pi, "r_lambda": lamb_r, "h": h, "dec_temp": dec_temp}
+            # print(param_dict)
             
             self.agent.reset(param_dict)
             #self.agent.set_parameters(pol_lambda=lamb_pi, r_lambda=lamb_r, dec_temp=dec_temp)
             
             for tau in pyro.markov(range(self.trials)):
                 for t in range(self.T):
-                    
-                    if t==0:
-                        prev_response = None
-                        context = None
-                    else:
-                        prev_response = self.data[ind]["actions"][tau, t-1]
-                        context = None
             
-                    observation = self.data[ind]["observations"][tau, t]
-            
-                    reward = self.data[ind]["rewards"][tau, t]
-            
-                    self.agent.update_beliefs(tau, t, observation, reward, prev_response, context)
+                    self.agent.update_beliefs(tau, t)
             
                     if t < self.T-1:
                     
@@ -381,33 +367,40 @@ class GroupInference(object):
                             print(probs)
                             print(dec_temp, lamb_pi, lamb_r)
                 
-                        curr_response = self.data[ind]["actions"][tau, t]
+                        curr_response = self.agent.perception.responses[:,tau,t]
                         #print(curr_response)
                         # print(tau, t, probs, curr_response)
                         #print(tau,t,param_dict)
+                        draw_probs = probs.permute(2,0,1)
                         
-                        pyro.sample('res_{}_{}_{}'.format(ind, tau, t), dist.Categorical(probs.T), obs=curr_response)
+                        pyro.sample('res_{}_{}'.format(tau, t), dist.Categorical(draw_probs), obs=curr_response)
                     
 
     def guide(self):
         # approximate posterior. assume MF: each param has his own univariate Normal.
         
-        mu_lamb_pi = pyro.param('mu_lamb_pi', ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)
-        sig_lamb_pi = pyro.param('sig_lamb_pi', ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)
+        mu_lamb_pi_alpha = pyro.param('mu_lamb_pi_alpha', ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)
+        sig_lamb_pi_alpha = pyro.param('sig_lamb_pi_alpha', ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)
+        mu_lamb_pi_beta = pyro.param('mu_lamb_pi_beta', ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)
+        sig_lamb_pi_beta = pyro.param('sig_lamb_pi_beta', ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)
         # alpha_lamb_pi = ar.ones(1).to(device)
         # beta_lamb_pi = ar.ones(1).to(device)
         
         # tell pyro about prior over parameters: alpha and beta of lambda which is between 0 and 1
         # alpha = beta = 1 equals uniform prior
-        mu_lamb_r = pyro.param('mu_lamb_r', ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)
-        sig_lamb_r = pyro.param('sig_lamb_r', ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)
+        mu_lamb_r_alpha = pyro.param('mu_lamb_r_alpha', ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)
+        sig_lamb_r_alpha = pyro.param('sig_lamb_r_alpha', ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)
+        mu_lamb_r_beta = pyro.param('mu_lamb_r_beta', ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)
+        sig_lamb_r_beta = pyro.param('sig_lamb_r_beta', ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)
         # alpha_lamb_r = ar.ones(1).to(device)
         # beta_lamb_r = ar.ones(1).to(device)
         
         # tell pyro about prior over parameters: alpha and beta of h which is between 0 and 1
         # alpha = beta = 1 equals uniform prior
-        mu_h = pyro.param('mu_h', ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)
-        sig_h = pyro.param('sig_h', ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)
+        mu_h_alpha = pyro.param('mu_h_alpha', ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)
+        sig_h_alpha = pyro.param('sig_h_alpha', ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)
+        mu_h_beta = pyro.param('mu_h_beta', ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)
+        sig_h_beta = pyro.param('sig_h_beta', ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)
         # alpha_h = ar.ones(1).to(device)
         # beta_h = ar.ones(1).to(device)
         
@@ -433,21 +426,22 @@ class GroupInference(object):
         lamb_r = []
         h = []
         dec_temp = []
-        for ind in range(self.nsubs):
+        #for ind in range(self.nsubs):
+        with pyro.plate('subject', self.nsubs) as ind:
             
-            alpha_lamb_pi = pyro.sample('alpha_lamb_pi_{}'.format(ind), dist.LogNormal(mu_lamb_pi, sig_lamb_pi)).to(device)
-            beta_lamb_pi = pyro.sample('beta_lamb_pi_{}'.format(ind), dist.LogNormal(mu_lamb_pi, sig_lamb_pi)).to(device)
+            alpha_lamb_pi = pyro.sample('alpha_lamb_pi', dist.LogNormal(mu_lamb_pi_alpha, sig_lamb_pi_alpha)).to(device)
+            beta_lamb_pi = pyro.sample('beta_lamb_pi', dist.LogNormal(mu_lamb_pi_beta, sig_lamb_pi_beta)).to(device)
             
-            alpha_lamb_r = pyro.sample('alpha_lamb_r_{}'.format(ind), dist.LogNormal(mu_lamb_r, sig_lamb_r)).to(device)
-            beta_lamb_r = pyro.sample('beta_lamb_r_{}'.format(ind), dist.LogNormal(mu_lamb_r, sig_lamb_r)).to(device)
+            alpha_lamb_r = pyro.sample('alpha_lamb_r', dist.LogNormal(mu_lamb_r_alpha, sig_lamb_r_alpha)).to(device)
+            beta_lamb_r = pyro.sample('beta_lamb_r', dist.LogNormal(mu_lamb_r_beta, sig_lamb_r_beta)).to(device)
             
-            alpha_h = pyro.sample('alpha_lamb_h_{}'.format(ind), dist.LogNormal(mu_h, sig_h)).to(device)
-            beta_h = pyro.sample('beta_lamb_h_{}'.format(ind), dist.LogNormal(mu_h, sig_h)).to(device)
+            alpha_h = pyro.sample('alpha_lamb_h', dist.LogNormal(mu_h_alpha, sig_h_alpha)).to(device)
+            beta_h = pyro.sample('beta_lamb_h', dist.LogNormal(mu_h_beta, sig_h_beta)).to(device)
             
-            lamb_pi.append(pyro.sample('lamb_pi_{}'.format(ind), dist.Beta(alpha_lamb_pi, beta_lamb_pi)).to(device))
-            lamb_r.append(pyro.sample('lamb_r_{}'.format(ind), dist.Beta(alpha_lamb_r, beta_lamb_r)).to(device))
-            h.append(pyro.sample('h_{}'.format(ind), dist.Beta(alpha_h, beta_h)).to(device))
-            dec_temp.append(pyro.sample('dec_temp_{}'.format(ind), dist.Gamma(concentration_dec_temp, rate_dec_temp)).to(device))
+            lamb_pi.append(pyro.sample('lamb_pi', dist.Beta(alpha_lamb_pi, beta_lamb_pi)).to(device))
+            lamb_r.append(pyro.sample('lamb_r', dist.Beta(alpha_lamb_r, beta_lamb_r)).to(device))
+            h.append(pyro.sample('h', dist.Beta(alpha_h, beta_h)).to(device))
+            dec_temp.append(pyro.sample('dec_temp', dist.Gamma(concentration_dec_temp, rate_dec_temp)).to(device))
 
         
         # param_dict = {"alpha_lamb_pi": alpha_lamb_pi, "beta_lamb_pi": beta_lamb_pi, "lamb_pi": lamb_pi,
@@ -569,15 +563,15 @@ class GroupInference(object):
         all_keys = []
         for key in samples.keys():
             if key[:3] != 'res':
-                reordered_sample_dict[key[:-2]] = np.array([])
-                all_keys.append(key[:-2])
+                reordered_sample_dict[key] = np.array([])
+                all_keys.append(key)
                 
         reordered_sample_dict['subject'] = np.array([])
         
-        nsubs = len(self.data)
-        for sub in range(nsubs):
+        #nsubs = len(self.data)
+        for sub in range(self.nsubs):
             for key in set(all_keys):
-                reordered_sample_dict[key] = np.append(reordered_sample_dict[key], samples[key+"_"+str(sub)].detach().numpy()).squeeze()
+                reordered_sample_dict[key] = np.append(reordered_sample_dict[key], samples[key][:,sub].detach().numpy())#.squeeze()
             reordered_sample_dict['subject'] = np.append(reordered_sample_dict['subject'], [sub]*n_samples).squeeze()
 
         # for key in samples.keys():

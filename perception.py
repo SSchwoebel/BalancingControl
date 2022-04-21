@@ -22,6 +22,385 @@ except:
     device = ar.device("cpu")
 
 
+class GroupPerception(object):
+    def __init__(self,
+                 generative_model_observations,
+                 generative_model_states,
+                 generative_model_rewards,
+                 transition_matrix_context,
+                 prior_states,
+                 prior_rewards,
+                 prior_policies,
+                 policies,
+                 observations,
+                 rewards,
+                 responses,
+                 alpha_0 = None,
+                 dirichlet_rew_params = None,
+                 generative_model_context = None,
+                 T=5, trials=10, pol_lambda=0, r_lambda=0, non_decaying=0,
+                 dec_temp=1., npart=1, nsubs=1):
+        
+        self.generative_model_observations = generative_model_observations
+        self.generative_model_states = generative_model_states
+        self.prior_rewards = prior_rewards
+        self.prior_states = prior_states
+        self.T = T
+        self.trials = trials
+        self.nh = prior_states.shape[0]
+        self.pol_lambda = pol_lambda
+        self.r_lambda = r_lambda
+        self.non_decaying = non_decaying
+        self.dec_temp = dec_temp
+        self.policies = policies
+        self.npi = policies.shape[0]
+        self.actions = ar.unique(policies)
+        self.na = len(self.actions)
+        
+        self.npart = npart
+        self.nsubs = nsubs
+        self.alpha_0 = alpha_0
+        self.dirichlet_rew_params_init = dirichlet_rew_params#ar.stack([dirichlet_rew_params]*self.npart, dim=-1)
+        self.dirichlet_pol_params_init = ar.zeros((self.nsubs, self.npi,self.npart)).to(device) + self.alpha_0#ar.stack([dirichlet_pol_params]*self.npart, dim=-1)
+        
+        self.dirichlet_rew_params = [ar.stack([ar.stack([self.dirichlet_rew_params_init]*self.npart, dim=-1)]*self.nsubs).to(device)]
+        self.dirichlet_pol_params = [self.dirichlet_pol_params_init]
+        
+        #self.prior_policies_init = self.dirichlet_pol_params[0] / self.dirichlet_pol_params[0].sum(axis=0)[None,...]
+        self.prior_policies = [self.dirichlet_pol_params[0] / self.dirichlet_pol_params[0].sum(axis=1)[:,None,...]]
+        
+        #self.generative_model_rewards_init = self.dirichlet_rew_params[0] / self.dirichlet_rew_params[0].sum(axis=0)[None,...]
+        self.generative_model_rewards = [self.dirichlet_rew_params[0] / self.dirichlet_rew_params[0].sum(axis=1)[:,None,...]]
+        
+        # obs_messages = []
+        # for n in range(nsubs):
+        #     sub_messages = []
+        #     for tau in range(trials):
+        #         trial_messages = []
+        #         for t in range(T):
+        #             prev_obs = [self.generative_model_observations[o] for o in observations[n,tau, -t-1:]]
+        #             obs = prev_obs + [ar.zeros((self.nh)).to(device)+1./self.nh]*(self.T-t-1)
+        #             obs = [ar.stack(obs).T.to(device)]*npart
+        #             trial_messages.append(ar.stack(obs,dim=-1).to(device))
+                    
+        #         sub_messages.append(ar.stack(trial_messages))
+        #     obs_messages.append(ar.stack(sub_messages))
+                    
+        # self.obs_messages = ar.stack(obs_messages)
+        # print(self.obs_messages.shape)
+        
+        self.obs_messages = []
+        
+        self.rew_messages = []
+        
+        # possible_policies = []
+        # for n in range(nsubs):
+        #     sub_policies = []
+        #     for tau in range(trials):
+        #         trial_policies = []
+        #         for t in range(T):
+        #             if t == 0:
+        #                 trial_policies.append(ar.ones(self.npi, dtype=bool))
+        #             else:
+        #                 response = actions[n,tau,t-1]
+        #                 possible_pols = policies[:,t-1]==response
+        #                 prev_pols = trial_policies[-1]
+        #                 new_pols = ar.logical_and(possible_pols, prev_pols).to(device)
+        #                 trial_policies.append(new_pols)
+        #         sub_policies.append(ar.stack(trial_policies))
+        #     possible_policies.append(ar.stack(sub_policies))
+                    
+        # self.possible_policies = ar.stack(possible_policies)
+        self.possible_policies = []
+        
+        self.observations = observations
+        self.rewards = rewards
+        self.responses = responses
+        
+        #self.instantiate_messages()
+        self.bwd_messages = []
+        self.fwd_messages = []
+        self.fwd_norms = []
+        
+        self.posterior_states = []
+        self.posterior_policies = []
+        self.posterior_actions = []
+        
+        self.big_trans_matrix = ar.stack([ar.stack([generative_model_states[:,:,policies[pi,t]] for pi in range(self.npi)]) for t in range(self.T-1)]).T.to(device)
+        #print(self.big_trans_matrix.shape)
+        
+    def reset(self):
+        
+        if len(self.dec_temp.shape) > 1:
+            self.nsubs = self.dec_temp.shape[1]
+            self.npart = self.dec_temp.shape[0]
+            self.alpha_0 = self.alpha_0.permute(1,0)
+            self.pol_lambda = self.pol_lambda.permute(1,0)
+            self.r_lambda = self.r_lambda.permute(1,0)
+            self.dec_temp = self.dec_temp.permute(1,0)
+        else:
+            self.nsubs = self.dec_temp.shape[0]
+            self.npart = 1
+            self.alpha_0 = self.alpha_0[:,None]
+            self.pol_lambda = self.pol_lambda[:,None]
+            self.r_lambda = self.r_lambda[:,None]
+            self.dec_temp = self.dec_temp[:,None]
+        
+        self.dirichlet_pol_params_init = ar.zeros((self.nsubs, self.npi,self.npart)).to(device) + self.alpha_0[:,None,:].to(device)
+        
+        self.dirichlet_rew_params = [ar.stack([ar.stack([self.dirichlet_rew_params_init]*self.npart, dim=-1)]*self.nsubs).to(device)]
+        self.dirichlet_pol_params = [self.dirichlet_pol_params_init]
+        
+        self.prior_policies = [self.dirichlet_pol_params[0] / self.dirichlet_pol_params[0].sum(axis=1)[:,None,...]]
+        
+        self.generative_model_rewards = [self.dirichlet_rew_params[0] / self.dirichlet_rew_params[0].sum(axis=1)[:,None,...]]
+        
+        #self.instantiate_messages()
+        self.bwd_messages = []
+        self.fwd_messages = []
+        self.fwd_norms = []
+        self.rew_messages = []
+        self.obs_messages = []
+        self.possible_policies = []
+        
+        self.posterior_states = []
+        self.posterior_policies = []
+        self.posterior_actions = []
+        
+    def make_current_messages(self, tau, t):
+        
+        rew_messages = []
+        for n in range(self.nsubs):
+            
+            rew_messages.append(ar.stack([ar.stack([self.generative_model_rewards[-1][n,r,:,i].to(device) for r in self.rewards[n,tau, -t-1:]] \
+                                                          + [self.prior_rewards.matmul(self.generative_model_rewards[-1][n,:,:,i].to(device)).to(device)]*(self.T-t-1)).T.to(device) for i in range(self.npart)], dim=-1).to(device))
+            
+        self.rew_messages.append(ar.stack(rew_messages))
+        
+        obs_messages = []
+        for n in range(self.nsubs):
+            prev_obs = [self.generative_model_observations[o] for o in self.observations[n,tau, -t-1:]]
+            obs = prev_obs + [ar.zeros((self.nh)).to(device)+1./self.nh]*(self.T-t-1)
+            obs = [ar.stack(obs).T.to(device)]*self.npart
+            obs_messages.append(ar.stack(obs,dim=-1).to(device))
+                    
+        self.obs_messages.append(ar.stack(obs_messages))
+        
+        possible_policies = []
+        for n in range(self.nsubs):
+            if t == 0:
+                possible_policies.append(ar.ones(self.npi, dtype=bool))
+            else:
+                response = self.responses[n,tau,t-1]
+                possible_pols = self.policies[:,t-1]==response
+                prev_pols = self.possible_policies[-1][n]
+                new_pols = ar.logical_and(possible_pols, prev_pols).to(device)
+                possible_policies.append(new_pols)
+                    
+        self.possible_policies.append(ar.stack(possible_policies))
+                
+    def update_messages(self, tau, t):
+        
+        # bwd_messages = ar.zeros((self.nh, self.T,self.npi)) #+ 1./self.nh
+        # bwd_messages[:,-1,:] = 1./self.nh
+        bwd = [ar.zeros((self.nsubs, self.nh, self.npi, self.npart)).to(device)+1./self.nh]
+        # fwd_messages = ar.zeros((self.nh, self.T, self.npi))
+        # fwd_messages[:,0,:] = self.prior_states[:,None]
+        fwd = [ar.zeros((self.nsubs, self.nh, self.npi, self.npart)).to(device)+self.prior_states[None,:,None,None]]
+        # fwd_norms = ar.zeros((self.T+1, self.npi))
+        # fwd_norms[0,:] = 1.
+        fwd_norm = [ar.ones(self.nsubs, self.npi, self.npart).to(device)]
+        
+        self.make_current_messages(tau,t)
+        
+        obs_messages = self.obs_messages[-1]
+        rew_messages = self.rew_messages[-1]
+                
+        for i in range(self.T-2,-1,-1):
+            tmp = ar.einsum('Nhpn,shp,Nhn,Nhn->Nspn',bwd[-1],self.big_trans_matrix[...,i],obs_messages[:,:,i+1],rew_messages[:,:,i+1]).to(device)
+            #bwd_messages[:,i,:] = ar.einsum('hp,shp,h,h->sp',bwd_messages[:,i+1,:],self.big_trans_matrix[...,i],obs_messages[:,i+1],rew_messages[:,i+1])
+            # bwd_messages[:,-2-i,pi] = bwd_messages[:,-1-i,pi]*\
+            #                             obs_messages[:,t-i]*\
+            #                             rew_messages[:, t-i]
+            # bwd_messages[:,-2-i,pi] = bwd_messages[:,-2-i,pi]\
+            #      .matmul(self.generative_model_states[:,:,u])
+            #bwd_messages[:,i,:] = test[-1]
+            norm = tmp.sum(axis=1)
+            bwd.append(ar.where(norm[:,None,...]>0, tmp/norm[:,None,...], tmp))
+            # norm = bwd_messages[:,i,:].sum(axis=0)
+            # mask = norm > 0
+            # bwd_messages[:,i,:][:,mask] /= norm[None,mask]
+            
+        bwd.reverse()
+        bwd_messages = ar.stack(bwd).permute(1, 2, 0, 3, 4).to(device)
+            
+        #     norm = bwd_messages[-1].sum(axis=0)
+        #     mask = norm > 0
+        #     bwd_messages[-1][:,mask] /= norm[None,mask]
+            
+        # bwd_messages = ar.stack(bwd_messages).permute((1,0,2))
+ 
+        for i in range(self.T-1):
+            tmp = ar.einsum('Nspn,shp,Nsn,Nsn->Nhpn',fwd[-1],self.big_trans_matrix[...,i],obs_messages[:,:,i],rew_messages[:,:,i]).to(device)
+            # fwd_messages[:, 1+i, pi] = fwd_messages[:,i, pi]*\
+            #                              obs_messages[:, i]*\
+            #                              rew_messages[:, i]
+            # fwd_messages[:, 1+i, pi] = self.generative_model_states[:,:,u].\
+            #                              matmul(fwd_messages[:, 1+i, pi])
+            norm = fwd[-1].sum(axis=1)
+            fwd.append(ar.where(norm[:,None,...]>0, tmp/norm[:,None,...], tmp))
+            zeros = ar.zeros((self.nsubs, self.npi, self.npart))
+            fwd_norm.append(ar.where(self.possible_policies[-1][:,:,None], norm, zeros))
+            # fwd_norm.append(ar.zeros((self.npi,self.npart)).to(device))
+            # fwd_norm[-1][possible_policies] = norm[possible_policies]
+            # if fwd_norms[1+i, pi] > 0: #???? Shouldn't this not happen?
+            #     fwd_messages[:,1+i, pi] /= fwd_messages[:,1+i,pi].sum()
+                                                     
+            # else:
+            #     fwd_messages[:,:,pi] = 0#1./self.nh
+        
+        fwd_messages = ar.stack(fwd).permute(1, 2, 0, 3, 4).to(device)
+        
+        # for pi, cs in enumerate(self.policies):
+        #     if self.prior_policies[-1][pi] > 1e-15 and pi in possible_policies:
+                
+        #         for i, u in enumerate(ar.flip(cs[:], [0])):
+        #             bwd_messages[:,-2-i,pi] = bwd_messages[:,-1-i,pi]*\
+        #                                         obs_messages[:,t-i]*\
+        #                                         rew_messages[:, t-i]
+        #             bwd_messages[:,-2-i,pi] = bwd_messages[:,-2-i,pi]\
+        #                  .matmul(self.generative_model_states[:,:,u])
+     
+        #             norm = bwd_messages[:,-2-i,pi].sum()
+        #             if norm > 0:
+        #                 bwd_messages[:,-2-i, pi] /= norm
+     
+        #         for i, u in enumerate(cs[:]):
+        #             fwd_messages[:, 1+i, pi] = fwd_messages[:,i, pi]*\
+        #                                          obs_messages[:, i]*\
+        #                                          rew_messages[:, i]
+        #             fwd_messages[:, 1+i, pi] = self.generative_model_states[:,:,u].\
+        #                                          matmul(fwd_messages[:, 1+i, pi])
+        #             fwd_norms[1+i,pi] = fwd_messages[:,1+i,pi].sum()
+        #             if fwd_norms[1+i, pi] > 0: #???? Shouldn't this not happen?
+        #                 fwd_messages[:,1+i, pi] /= fwd_messages[:,1+i,pi].sum()
+                                                     
+        #     else:
+        #         fwd_messages[:,:,pi] = 0#1./self.nh
+                
+        posterior = fwd_messages*bwd_messages*obs_messages[:,:,:,None,:]*rew_messages[:,:,:,None,:]
+        norm = posterior.sum(axis = 1)
+        #fwd_norms[-1] = norm[-1]
+        fwd_norm.append(norm[:,-1])
+        fwd_norms = ar.stack(fwd_norm, dim=1).to(device)
+        # print(tau,t,self.fwd_norms[tau,t])
+        non_zero = norm > 0
+        posterior = ar.where(non_zero[:,None,...], posterior/norm[:,None,...], posterior)
+        # posterior[:,non_zero] /= norm[non_zero]
+            
+        self.bwd_messages.append(bwd_messages)
+        self.fwd_messages.append(fwd_messages)
+        self.fwd_norms.append(fwd_norms)
+        self.posterior_states.append(posterior)
+        
+        return posterior
+
+    def update_beliefs_states(self, tau, t):
+        #estimate expected state distribution
+        # if t == 0:
+        #     self.instantiate_messages(policies)
+            
+        self.update_messages(tau, t)
+        
+        #return posterior#ar.nan_to_num(posterior)
+    
+    def update_beliefs_policies(self, tau, t):
+
+        #print((prior_policies>1e-4).sum())
+        
+        likelihood = (self.fwd_norms[-1]+1e-10).prod(axis=1).to(device)
+        norm = likelihood.sum(axis=1)
+        # print("like", likelihood)
+        # Fe = ar.log((self.fwd_norms[-1]+1e-10).prod(axis=0))
+        # softplus = ar.nn.Softplus(beta=self.dec_temp)
+        # likelihood = softplus(Fe)
+        # posterior_policies = likelihood * self.prior_policies[-1] / (likelihood * self.prior_policies[-1]).sum(axis=0)
+        likelihood = ar.pow(likelihood/norm[:,None,...],self.dec_temp[:,None,...]).to(device) #* ar.pow(norm,self.dec_temp)
+        # print("softmax", likelihood)
+        # print("norm1", ar.pow(norm,self.dec_temp))
+        posterior_policies = likelihood * self.prior_policies[-1] / (likelihood * self.prior_policies[-1]).sum(axis=1)[:,None,...]
+        # print("unnorm", likelihood * self.prior_policies[-1])
+        # print("norm", (likelihood * self.prior_policies[-1]).sum(axis=0))
+        # print("post", posterior_policies)
+        #likelihood /= likelihood.sum(axis=0)[None,:]
+        #posterior/= posterior.sum(axis=0)[None,:]
+        #posterior = ar.nan_to_num(posterior)
+        #posterior = softmax(ln(self.fwd_norms).sum(axis = 0)+ln(self.prior_policies))
+
+        #ar.testing.assert_allclose(post, posterior)
+        
+        self.posterior_policies.append(posterior_policies)
+        
+        if t<self.T-1:
+            posterior_actions = ar.zeros((self.nsubs, self.na,self.npart)).to(device)
+            for a in range(self.na):
+                posterior_actions[:, a] = posterior_policies[:, self.policies[:,t] == a, :].sum(axis=1)
+                
+            self.posterior_actions.append(posterior_actions)
+
+        #return posterior, likelihood
+    
+    
+    def update_beliefs_dirichlet_pol_params(self, tau, t):
+        assert(t == self.T-1)
+        chosen_pol = ar.argmax(self.posterior_policies[-1], axis=1).to(device)
+        # print(self.posterior_policies)
+        #print(chosen_pol)
+#        self.dirichlet_pol_params[chosen_pol,:] += posterior_context.sum(axis=0)/posterior_context.sum()
+        dirichlet_pol_params = (1-self.pol_lambda[:,None,:]) * self.dirichlet_pol_params[-1] + (1 - (1-self.pol_lambda[:,None,:]))*self.dirichlet_pol_params_init + self.posterior_policies[-1]
+        # dirichlet_pol_params[(chosen_pol,list(range(self.npart)))] += 1#posterior_context
+        
+        prior_policies = dirichlet_pol_params / dirichlet_pol_params.sum(axis=1)[:,None,...]#ar.exp(scs.digamma(self.dirichlet_pol_params) - scs.digamma(self.dirichlet_pol_params.sum(axis=0))[None,:])
+        #prior_policies /= prior_policies.sum(axis=0)[None,:]
+        
+        self.dirichlet_pol_params.append(dirichlet_pol_params.to(device))
+        self.prior_policies.append(prior_policies.to(device))
+
+        #return dirichlet_pol_params, prior_policies
+
+    def update_beliefs_dirichlet_rew_params(self, tau, t):
+        posterior_states = self.posterior_states[-1]
+        posterior_policies = self.posterior_policies[-1]
+        states = (posterior_states[:,:,t,:,:] * posterior_policies[:,None,:,:]).sum(axis=2)
+        reward = self.rewards[:,tau,t]
+        rew_indicies = (list(range(self.nsubs)), reward)
+        # c = ar.argmax(posterior_context)
+        # self.dirichlet_rew_params[reward,:,c] += states[:,c]
+        
+#         self.dirichlet_rew_params[tau,t,:,self.non_decaying:,:] = (1-self.r_lambda) * self.dirichlet_rew_params[tau,t,:,self.non_decaying:,:] +1 - (1-self.r_lambda)
+#         self.dirichlet_rew_params[tau,t,reward,:,:] += states * posterior_context[None,:]
+#         for c in range(self.nc):
+#             for state in range(self.nh):
+#                 #self.generative_model_rewards[:,state,c] = self.dirichlet_rew_params[:,state,c] / self.dirichlet_rew_params[:,state,c].sum()
+#                 self.generative_model_rewards[tau,t,:,state,c] = self.dirichlet_rew_params[tau,t,:,state,c]#\
+#                 # ar.exp(scs.digamma(self.dirichlet_rew_params[:,state,c])\
+#                 #         -scs.digamma(self.dirichlet_rew_params[:,state,c].sum()))
+#                 self.generative_model_rewards[tau,t,:,state,c] /= self.generative_model_rewards[tau,t,:,state,c].sum()
+#             self.rew_messages[tau,t+1:,:,t+1:,c] = self.prior_rewards.matmul(self.generative_model_rewards[tau,t,:,:,c])[None,:,None]
+        
+        dirichlet_rew_params = self.dirichlet_rew_params[0].clone().to(device)
+        dirichlet_rew_params[:,:,self.non_decaying:,:] = (1-self.r_lambda)[:,None,None,:] * self.dirichlet_rew_params[-1][:,:,self.non_decaying:,:] +1 - (1-self.r_lambda)[:,None,None,:]
+
+        for s in range(self.nsubs):
+            dirichlet_rew_params[s,reward[s],:,:] += states[s] #* posterior_context[None,:]
+        
+        generative_model_rewards = dirichlet_rew_params / dirichlet_rew_params.sum(axis=1)[:,None,...]
+        self.dirichlet_rew_params.append(dirichlet_rew_params.to(device))
+        self.generative_model_rewards.append(generative_model_rewards.to(device))
+            
+        #return dirichlet_rew_params
+        
+        
 class FittingPerception(object):
     def __init__(self,
                  generative_model_observations,
