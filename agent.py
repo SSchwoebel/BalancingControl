@@ -104,11 +104,16 @@ class FittingAgent(object):
         self.perception.reset()
 
 
-    def update_beliefs(self, tau, t, context=None):
+    def update_beliefs(self, tau, t, observation, reward, prev_response, context):
         
+        if t==0:
+            self.possible_policies = ar.ones(self.npi, dtype=bool)[:,None]
+        else:
+            curr_policies = (self.policies[:,t-1] == prev_response[0])[:,None]
+            self.possible_policies = ar.logical_and(self.possible_policies, curr_policies)
 
         self.perception.update_beliefs_states(
-                                         tau, t)
+                                         tau, t, observation, reward, self.possible_policies)
 
         #update beliefs about policies
         self.perception.update_beliefs_policies(tau, t) #self.posterior_policies[tau, t], self.likelihood[tau,t]
@@ -138,7 +143,7 @@ class FittingAgent(object):
         #if reward > 0:
         # check later if stuff still works!
         if self.learn_rew and t==self.T-1:
-            self.perception.update_beliefs_dirichlet_rew_params(tau, t)
+            self.perception.update_beliefs_dirichlet_rew_params(tau, t, reward)
 
     def generate_response(self, tau, t):
 

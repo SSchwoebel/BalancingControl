@@ -50,13 +50,13 @@ from inference_twostage import device
 pl = 0.3
 rl = 0.7
 dt = 5.
-tend = 100
+tend = 1
 
 folder = "data"
 
 data = []
 
-for i in [1]:#, 1, 2, 3, 4
+for i in [2]:#, 1, 2, 3, 4
     run_name = "twostage_agent"+str(i)+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tend)+".json"
     fname = os.path.join(folder, run_name)
     
@@ -104,12 +104,12 @@ for i in [1]:#, 1, 2, 3, 4
     plt.ylabel("stay probability")
     plt.show()
     
-pl = 0.3
-rl = 0.7
-dt = 5.
-tend = 1
+# pl = 0.3
+# rl = 0.7
+# dt = 5.
+# tend = 100
 
-# for i in [0, 1, 2, 3]:
+# for i in [0, 1]:#, 2, 3]:
 #     run_name = "twostage_agent"+str(i)+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tend)+".json"
 #     fname = os.path.join(folder, run_name)
     
@@ -131,7 +131,7 @@ tend = 1
 #     unrewarded = rewarded==False
     
 #     rare = ar.logical_or(ar.logical_and(data[-1]["states"][:-1,1]==2, data[-1]["actions"][:-1,0] == 0),
-#                    ar.logical_and(data[-1]["states"][:-1,1]==1, data[-1]["actions"][:-1,0] == 1))
+#                     ar.logical_and(data[-1]["states"][:-1,1]==1, data[-1]["actions"][:-1,0] == 1))
 
 #     common = rare==False
 
@@ -143,7 +143,7 @@ tend = 1
 #     unrewarded_rare = ar.where(ar.logical_and(unrewarded,rare) == True)[0]
     
 #     index_list = [rewarded_common, rewarded_rare,
-#                  unrewarded_common, unrewarded_rare]
+#                   unrewarded_common, unrewarded_rare]
 
 #     stayed = [(data[-1]["actions"][index_list[i],0] == data[-1]["actions"][index_list[i]+1,0]).sum()/float(len(index_list[i])) for i in range(4)]
     
@@ -299,18 +299,20 @@ set up agent
 
 pol_par = alphas
 
-data_obs = ar.stack([d["observations"] for d in data])
-data_rew = ar.stack([d["rewards"] for d in data])
-data_act = ar.stack([d["actions"] for d in data])
+data_obs = ar.stack([d["observations"] for d in data], dim=-1)
+data_rew = ar.stack([d["rewards"] for d in data], dim=-1)
+data_act = ar.stack([d["actions"] for d in data], dim=-1)
+
+structured_data = {"observations": data_obs, "rewards": data_rew, "actions": data_act}
 
 # perception
-bayes_prc = prc.GroupPerception(A, B, C_agent, transition_matrix_context, 
+bayes_prc = prc.Group2Perception(A, B, C_agent, transition_matrix_context, 
                                        state_prior, utility, prior_pi, pol,
-                                       data_obs, data_rew, data_act,
+                                       #data_obs, data_rew, data_act,
                                        alpha_0, C_alphas, T=T, trials=trials,
                                        pol_lambda=0, r_lambda=0,
-                                       non_decaying=3, dec_temp=1,
-                                       nsubs = len(data))
+                                       non_decaying=3, dec_temp=1,)
+                                       #nsubs = len(data))
 
 agent = agt.FittingAgent(bayes_prc, [], pol,
                   trials = trials, T = T,
@@ -328,9 +330,9 @@ agent = agt.FittingAgent(bayes_prc, [], pol,
 ###################################
 """run inference"""
 
-inferrer = inf.GroupInference(agent, data)
+inferrer = inf.GroupInference(agent, structured_data)
 
-loss = inferrer.infer_posterior(iter_steps=200, num_particles=10)#, param_dict
+loss = inferrer.infer_posterior(iter_steps=150, num_particles=10)#, param_dict
 
 plt.figure()
 plt.title("ELBO")

@@ -299,7 +299,7 @@ class GroupInference(object):
         self.trials = agent.trials
         self.T = agent.T
         self.data = data
-        self.nsubs = len(data)
+        self.nsubs = len(data['rewards'][0,0])
         
     def model(self):
         # generative model of behavior with Normally distributed params (within subject!!)
@@ -354,10 +354,22 @@ class GroupInference(object):
             self.agent.reset(param_dict)
             #self.agent.set_parameters(pol_lambda=lamb_pi, r_lambda=lamb_r, dec_temp=dec_temp)
             
+            
             for tau in pyro.markov(range(self.trials)):
                 for t in range(self.T):
+                    
+                    if t==0:
+                        prev_response = None
+                        context = None
+                    else:
+                        prev_response = self.data["actions"][tau, t-1]
+                        context = None
             
-                    self.agent.update_beliefs(tau, t)
+                    observation = self.data["observations"][tau, t]
+            
+                    reward = self.data["rewards"][tau, t]
+            
+                    self.agent.update_beliefs(tau, t, observation, reward, prev_response, context)
             
                     if t < self.T-1:
                     
@@ -367,13 +379,35 @@ class GroupInference(object):
                             print(probs)
                             print(dec_temp, lamb_pi, lamb_r)
                 
-                        curr_response = self.agent.perception.responses[:,tau,t]
+                        curr_response = self.data["actions"][tau, t]
                         #print(curr_response)
                         # print(tau, t, probs, curr_response)
                         #print(tau,t,param_dict)
-                        draw_probs = probs.permute(2,0,1)
+                        # print(curr_response.shape)
+                        # print(probs.shape)
                         
-                        pyro.sample('res_{}_{}'.format(tau, t), dist.Categorical(draw_probs), obs=curr_response)
+                        pyro.sample('res_{}_{}'.format(tau, t), dist.Categorical(probs.permute(1,2,0)), obs=curr_response)
+            
+            # for tau in pyro.markov(range(self.trials)):
+            #     for t in range(self.T):
+            
+            #         self.agent.update_beliefs(tau, t)
+            
+            #         if t < self.T-1:
+                    
+            #             probs = self.agent.perception.posterior_actions[-1]
+            #             #print(probs)
+            #             if ar.any(ar.isnan(probs)):
+            #                 print(probs)
+            #                 print(dec_temp, lamb_pi, lamb_r)
+                
+            #             curr_response = self.agent.perception.responses[:,tau,t]
+            #             #print(curr_response)
+            #             # print(tau, t, probs, curr_response)
+            #             #print(tau,t,param_dict)
+            #             draw_probs = probs.permute(2,0,1)
+                        
+            #             pyro.sample('res_{}_{}'.format(tau, t), dist.Categorical(draw_probs), obs=curr_response)
                     
 
     def guide(self):
@@ -422,10 +456,6 @@ class GroupInference(object):
         
                 
         #with pyro.plate("subject") as ind:
-        lamb_pi = []
-        lamb_r = []
-        h = []
-        dec_temp = []
         #for ind in range(self.nsubs):
         with pyro.plate('subject', self.nsubs) as ind:
             
@@ -438,10 +468,10 @@ class GroupInference(object):
             alpha_h = pyro.sample('alpha_lamb_h', dist.LogNormal(mu_h_alpha, sig_h_alpha)).to(device)
             beta_h = pyro.sample('beta_lamb_h', dist.LogNormal(mu_h_beta, sig_h_beta)).to(device)
             
-            lamb_pi.append(pyro.sample('lamb_pi', dist.Beta(alpha_lamb_pi, beta_lamb_pi)).to(device))
-            lamb_r.append(pyro.sample('lamb_r', dist.Beta(alpha_lamb_r, beta_lamb_r)).to(device))
-            h.append(pyro.sample('h', dist.Beta(alpha_h, beta_h)).to(device))
-            dec_temp.append(pyro.sample('dec_temp', dist.Gamma(concentration_dec_temp, rate_dec_temp)).to(device))
+            lamb_pi = pyro.sample('lamb_pi', dist.Beta(alpha_lamb_pi, beta_lamb_pi)).to(device)
+            lamb_r = pyro.sample('lamb_r', dist.Beta(alpha_lamb_r, beta_lamb_r)).to(device)
+            h = pyro.sample('h', dist.Beta(alpha_h, beta_h)).to(device)
+            dec_temp = pyro.sample('dec_temp', dist.Gamma(concentration_dec_temp, rate_dec_temp)).to(device)
 
         
         # param_dict = {"alpha_lamb_pi": alpha_lamb_pi, "beta_lamb_pi": beta_lamb_pi, "lamb_pi": lamb_pi,
