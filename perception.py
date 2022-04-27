@@ -87,20 +87,18 @@ class Group2Perception(object):
         
     def reset(self):
         if len(self.dec_temp.shape) > 1:
-            self.nsubs = self.dec_temp.shape[1]
             self.npart = self.dec_temp.shape[0]
+            self.nsubs = self.dec_temp.shape[1]
         else:
             self.nsubs = self.dec_temp.shape[0]
             self.npart = 1
-            self.alpha_0 = self.alpha_0[:,None]
-            self.pol_lambda = self.pol_lambda[:,None]
-            self.r_lambda = self.r_lambda[:,None]
-            self.dec_temp = self.dec_temp[:,None]
-        
-        self.npart = self.dec_temp.shape[0]
+            self.alpha_0 = self.alpha_0[None,:]
+            self.pol_lambda = self.pol_lambda[None,:]
+            self.r_lambda = self.r_lambda[None,:]
+            self.dec_temp = self.dec_temp[None,:]
         
         # print(self.alpha_0.shape)
-        # print(self.npart)
+        # print(self.npart, self.nsubs)
         self.dirichlet_pol_params_init = ar.zeros((self.npi,self.npart, self.nsubs)).to(device) + self.alpha_0[None,...].to(device)
         
         self.dirichlet_rew_params = [ar.stack([ar.stack([self.dirichlet_rew_params_init for k in range(self.npart)], dim=-1) for j in range(self.nsubs)], dim=-1)]
@@ -310,7 +308,7 @@ class Group2Perception(object):
         # softplus = ar.nn.Softplus(beta=self.dec_temp)
         # likelihood = softplus(Fe)
         # posterior_policies = likelihood * self.prior_policies[-1] / (likelihood * self.prior_policies[-1]).sum(axis=0)
-        likelihood = ar.pow(likelihood/norm,self.dec_temp[None,:]).to(device) #* ar.pow(norm,self.dec_temp)
+        likelihood = ar.pow(likelihood/norm[None,...],self.dec_temp[None,...]).to(device) #* ar.pow(norm,self.dec_temp)
         # print("softmax", likelihood)
         # print("norm1", ar.pow(norm,self.dec_temp))
         posterior_policies = likelihood * self.prior_policies[-1] / (likelihood * self.prior_policies[-1]).sum(axis=0)

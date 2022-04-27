@@ -474,13 +474,13 @@ class GroupInference(object):
             dec_temp = pyro.sample('dec_temp', dist.Gamma(concentration_dec_temp, rate_dec_temp)).to(device)
 
         
-        # param_dict = {"alpha_lamb_pi": alpha_lamb_pi, "beta_lamb_pi": beta_lamb_pi, "lamb_pi": lamb_pi,
-        #               "alpha_lamb_r": alpha_lamb_r, "beta_lamb_r": beta_lamb_r, "lamb_r": lamb_r,
-        #               "alpha_h": alpha_h, "beta_h": beta_h, "h": h,
-        #               "concentration_dec_temp": concentration_dec_temp, "rate_dec_temp": rate_dec_temp, "dec_temp": dec_temp}
+        param_dict = {"alpha_lamb_pi": alpha_lamb_pi, "beta_lamb_pi": beta_lamb_pi, "lamb_pi": lamb_pi,
+                      "alpha_lamb_r": alpha_lamb_r, "beta_lamb_r": beta_lamb_r, "lamb_r": lamb_r,
+                      "alpha_h": alpha_h, "beta_h": beta_h, "h": h,
+                      "concentration_dec_temp": concentration_dec_temp, "rate_dec_temp": rate_dec_temp, "dec_temp": dec_temp}
         #print(param_dict)
         
-        #return param_dict
+        return param_dict
         
         
     def infer_posterior(self,
@@ -525,7 +525,7 @@ class GroupInference(object):
         
         return self.loss#, param_dict
     
-    def sample_posterior_marginals(self, n_samples=5):
+    def sample_posterior_predictive(self, n_samples=5):
 
         elbo = pyro.infer.Trace_ELBO()
         post_sample_dict = {}
@@ -548,8 +548,69 @@ class GroupInference(object):
         #     post_sample_dict[name] = ar.stack(post_sample_dict[name]).numpy()
             
         # post_sample_df = pd.DataFrame(post_sample_dict)
+        
+        
+        reordered_sample_dict = {}
+        all_keys = []
+        for key in samples.keys():
+            if key[:3] != 'res':
+                reordered_sample_dict[key] = np.array([])
+                all_keys.append(key)
+                
+        reordered_sample_dict['subject'] = np.array([])
+        
+        #nsubs = len(self.data)
+        for sub in range(self.nsubs):
+            for key in set(all_keys):
+                reordered_sample_dict[key] = np.append(reordered_sample_dict[key], samples[key][:,sub].detach().numpy())#.squeeze()
+            reordered_sample_dict['subject'] = np.append(reordered_sample_dict['subject'], [sub]*n_samples).squeeze()
 
-        return samples
+        # for key in samples.keys():
+        #     if key[:3] != 'res':
+        #         sub = int(key[-1])
+        #         reordered_sample_dict[key[:-2]] = np.append(reordered_sample_dict[key[:-2]], samples[key].detach().numpy()).squeeze()
+        #         reordered_sample_dict['subject'] = np.append(reordered_sample_dict['subject'], [sub]).squeeze()
+                
+        sample_df = pd.DataFrame(reordered_sample_dict)
+
+        return sample_df
+    
+    def sample_posterior(self, n_samples=5):
+        # keys = ["lamb_pi", "lamb_r", "h", "dec_temp"]
+        
+        lamb_pi_global = np.zeros((n_samples, self.nsubs))
+        lamb_r_global = np.zeros((n_samples, self.nsubs))
+        h_global = np.zeros((n_samples, self.nsubs))
+        dec_temp_global = np.zeros((n_samples, self.nsubs))
+        
+        for i in range(n_samples):
+            sample = self.guide()
+            for key in sample.keys():
+                sample.setdefault(key, ar.ones(1))
+            lamb_pi = sample["lamb_pi"]
+            lamb_r = sample["lamb_r"]
+            h = sample["h"]
+            dec_temp = sample["dec_temp"]
+            
+            lamb_pi_global[i] = lamb_pi.detach().numpy()
+            lamb_r_global[i] = lamb_r.detach().numpy()
+            h_global[i] = h.detach().numpy()
+            dec_temp_global[i] = dec_temp.detach().numpy()
+        
+        lamb_pi_flat = np.array([lamb_pi_global[i,n] for i in range(n_samples) for n in range(self.nsubs)])
+        lamb_r_flat = np.array([lamb_r_global[i,n] for i in range(n_samples) for n in range(self.nsubs)])
+        h_flat = np.array([h_global[i,n] for i in range(n_samples) for n in range(self.nsubs)])
+        dec_temp_flat = np.array([dec_temp_global[i,n] for i in range(n_samples) for n in range(self.nsubs)])
+        
+        subs_flat = np.array([n for i in range(n_samples) for n in range(self.nsubs)])
+        
+        
+        sample_dict = {"lamb_pi": lamb_pi_flat, "lamb_r": lamb_r_flat,
+                       "h": h_flat, "dec_temp": dec_temp_flat, "subject": subs_flat}
+        
+        sample_df = pd.DataFrame(sample_dict)
+        
+        return sample_df
     
     def analytical_posteriors(self):
         
@@ -587,30 +648,9 @@ class GroupInference(object):
         
         #df, param_dict = self.sample_posteriors()
         
-        samples = self.sample_posterior_marginals(n_samples=n_samples)
+        #sample_df = self.sample_posterior_marginals(n_samples=n_samples)
         
-        reordered_sample_dict = {}
-        all_keys = []
-        for key in samples.keys():
-            if key[:3] != 'res':
-                reordered_sample_dict[key] = np.array([])
-                all_keys.append(key)
-                
-        reordered_sample_dict['subject'] = np.array([])
-        
-        #nsubs = len(self.data)
-        for sub in range(self.nsubs):
-            for key in set(all_keys):
-                reordered_sample_dict[key] = np.append(reordered_sample_dict[key], samples[key][:,sub].detach().numpy())#.squeeze()
-            reordered_sample_dict['subject'] = np.append(reordered_sample_dict['subject'], [sub]*n_samples).squeeze()
-
-        # for key in samples.keys():
-        #     if key[:3] != 'res':
-        #         sub = int(key[-1])
-        #         reordered_sample_dict[key[:-2]] = np.append(reordered_sample_dict[key[:-2]], samples[key].detach().numpy()).squeeze()
-        #         reordered_sample_dict['subject'] = np.append(reordered_sample_dict['subject'], [sub]).squeeze()
-                
-        sample_df = pd.DataFrame(reordered_sample_dict)
+        sample_df = self.sample_posterior(n_samples=n_samples)
         
         plt.figure()
         sns.displot(data=sample_df, x='h', hue='subject')
@@ -632,4 +672,4 @@ class GroupInference(object):
         # sns.histplot(marginal_df["h_1"])
         # plt.show()
         
-        return samples, reordered_sample_dict, sample_df
+        return sample_df
