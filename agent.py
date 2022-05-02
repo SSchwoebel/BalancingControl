@@ -98,7 +98,7 @@ class FittingAgent(object):
         self.control_probs  = ar.zeros((self.trials, self.T, self.na)).to(device)
         self.log_probability = 0
         if hasattr(self.perception, 'generative_model_context'):
-            self.context_obs = ar.zeros(trials, dtype=int).to(device)
+            self.context_obs = ar.zeros(self.trials, dtype=int).to(device)
 
         self.set_parameters(**param_dict)
         self.perception.reset()
@@ -194,6 +194,8 @@ class FittingAgent(object):
             self.perception.dec_temp = kwargs['dec_temp']
         if 'h' in kwargs.keys():
             self.perception.alpha_0 = 1./kwargs['h']
+        elif 'alpha_0' in kwargs.keys():
+            self.perception.alpha_0 = kwargs['alpha_0']
 
 class BayesianPlanner(object):
 
