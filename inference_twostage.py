@@ -23,6 +23,8 @@ import agent as agt
 import perception as prc
 import action_selection as asl
 
+pyro.clear_param_store()
+
 #device = ar.device("cuda") if ar.cuda.is_available() else ar.device("cpu")
 #device = ar.device("cuda")
 device = ar.device("cpu")
@@ -822,7 +824,7 @@ class Group2Inference(object):
                         ar.eye(npar).repeat(self.nsubs, 1, 1),
                         constraint=constraints.lower_cholesky)
 
-        with pyro.plate('runs', self.nsubs):
+        with pyro.plate('subject', self.nsubs):
             locs = pyro.sample("locs", dist.MultivariateNormal(m_locs, scale_tril=st_locs))
 
         return {'tau': tau, 'mu': mu, 'locs': locs, "pol_lambda": ar.sigmoid(locs[...,0]), 
@@ -1026,3 +1028,11 @@ class Group2Inference(object):
         # plt.show()
         
         return sample_df
+    
+    def save_parameters(self, fname):
+        
+        pyro.get_param_store().save(fname)
+        
+    def load_parameters(self, fname):
+        
+        pyro.get_param_store().load(fname)

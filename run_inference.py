@@ -10,7 +10,7 @@ Created on Mon Sep 13 14:09:11 2021
 import torch as ar
 array = ar.tensor
 
-ar.set_num_threads(4)
+ar.set_num_threads(1)
 print("torch threads", ar.get_num_threads())
 
 import pyro
@@ -49,6 +49,8 @@ from inference_twostage import device
 
 
 folder = "data"
+
+true_vals = []
 
 data = []
 
@@ -106,6 +108,8 @@ for i in [1, 2]:#, 1, 2, 3, 4
     plt.ylabel("stay probability")
     plt.show()
     
+    true_vals.append({"lamb_pi": pl, "lamb_r": rl, "dec_temp": dt, "h": 1./tend})
+    
 pl = 0.3
 rl = 0.7
 dt = 5.
@@ -159,6 +163,65 @@ for i in [0, 1]:#, 2, 3]:
     plt.savefig("habit_and_goal.svg",dpi=300)
     plt.ylabel("stay probability")
     plt.show()
+    
+    true_vals.append({"lamb_pi": pl, "lamb_r": rl, "dec_temp": dt, "h": 1./tend})
+    
+    
+pl = 0.3
+rl = 0.7
+dt = 5.
+tend = 100
+
+# 0, 1
+for i in [0, 1]:#, 2, 3]:
+    run_name = "twostage_agent"+str(i)+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tend)+".json"
+    fname = os.path.join(folder, run_name)
+    
+    jsonpickle_numpy.register_handlers()
+        
+    with open(fname, 'r') as infile:
+        loaded = json.load(infile)
+    
+    data_load = pickle.decode(loaded)
+
+    data.append({})
+    data[-1]["actions"] = ar.tensor(data_load["actions"]).to(device)
+    data[-1]["rewards"] = ar.tensor(data_load["rewards"]).to(device)
+    data[-1]["observations"] = ar.tensor(data_load["observations"]).to(device)
+    data[-1]["states"] = ar.tensor(data_load["states"]).to(device)
+    
+    rewarded = data[-1]["rewards"][:-1,-1] == 1
+
+    unrewarded = rewarded==False
+    
+    rare = ar.logical_or(ar.logical_and(data[-1]["states"][:-1,1]==2, data[-1]["actions"][:-1,0] == 0),
+                    ar.logical_and(data[-1]["states"][:-1,1]==1, data[-1]["actions"][:-1,0] == 1))
+
+    common = rare==False
+
+    names = ["rewarded common", "rewarded rare", "unrewarded common", "unrewarded rare"]
+    
+    rewarded_common = ar.where(ar.logical_and(rewarded,common) == True)[0]
+    rewarded_rare = ar.where(ar.logical_and(rewarded,rare) == True)[0]
+    unrewarded_common = ar.where(ar.logical_and(unrewarded,common) == True)[0]
+    unrewarded_rare = ar.where(ar.logical_and(unrewarded,rare) == True)[0]
+    
+    index_list = [rewarded_common, rewarded_rare,
+                  unrewarded_common, unrewarded_rare]
+
+    stayed = [(data[-1]["actions"][index_list[i],0] == data[-1]["actions"][index_list[i]+1,0]).sum()/float(len(index_list[i])) for i in range(4)]
+    
+    plt.figure()
+    g = sns.barplot(data=stayed)
+    g.set_xticklabels(names, rotation=45, horizontalalignment='right', fontsize=16)
+    plt.ylim([0,1])
+    plt.yticks(ar.arange(0,1.1,0.2),fontsize=16)
+    plt.title("habit and goal-directed", fontsize=18)
+    plt.savefig("habit_and_goal.svg",dpi=300)
+    plt.ylabel("stay probability")
+    plt.show()
+    
+    true_vals.append({"lamb_pi": pl, "lamb_r": rl, "dec_temp": dt, "h": 1./tend})
 
 
 ###################################
@@ -333,9 +396,16 @@ agent = agt.FittingAgent(bayes_prc, [], pol,
 ###################################
 """run inference"""
 
+# inferrer = inf.SingleInference(agent, data[0])
+
 inferrer = inf.Group2Inference(agent, structured_data)
 
-loss = inferrer.infer_posterior(iter_steps=500, num_particles=30)#, param_dict
+loss = inferrer.infer_posterior(iter_steps=300, num_particles=30)#, param_dict
+
+storage_name = 'test.save'
+storage_name = os.path.join(folder, storage_name)
+inferrer.save_parameters(storage_name)
+# inferrer.load_parameters(storage_name)
 
 plt.figure()
 plt.title("ELBO")
@@ -344,9 +414,62 @@ plt.ylabel("ELBO")
 plt.xlabel("iteration")
 plt.show()
 
-# inferrer.plot_posteriors()
+inferrer.plot_posteriors()
 
 sample_df = inferrer.plot_posteriors(n_samples=1000)
+
+inferred_values = []
+
+for i in range(len(data)):
+    mean_pl = sample_df[sample_df['subject']==i]['lamb_pi'].mean()
+    mean_rl = sample_df[sample_df['subject']==i]['lamb_r'].mean()
+    mean_dt = sample_df[sample_df['subject']==i]['dec_temp'].mean()
+    mean_h = sample_df[sample_df['subject']==i]['h'].mean()
+    
+    inferred_values.append({"lamb_pi": mean_pl, "lamb_r": mean_rl, "dec_temp": mean_dt, "h": mean_h})
+    
+true_pl = [val['lamb_pi'] for val in true_vals]
+true_rl = [val['lamb_r'] for val in true_vals]
+true_dt = [val['dec_temp'] for val in true_vals]
+true_h = [val['h'] for val in true_vals]
+
+inferred_pl = [val['lamb_pi'] for val in inferred_values]
+inferred_rl = [val['lamb_r'] for val in inferred_values]
+inferred_dt = [val['dec_temp'] for val in inferred_values]
+inferred_h = [val['h'] for val in inferred_values]
+
+
+plt.figure()
+sns.scatterplot(x=true_pl, y=inferred_pl)
+plt.xlim([0,1])
+plt.ylim([0,1])
+plt.xlabel("true lamb_pi")
+plt.ylabel("inferred lamb_pi")
+plt.show()
+
+plt.figure()
+sns.scatterplot(x=true_rl, y=inferred_rl)
+plt.xlim([0,1])
+plt.ylim([0,1])
+plt.xlabel("true lamb_r")
+plt.ylabel("inferred lamb_r")
+plt.show()
+
+plt.figure()
+sns.scatterplot(x=true_dt, y=inferred_dt)
+plt.xlim([0,10])
+plt.ylim([0,10])
+plt.xlabel("true dec_temp")
+plt.ylabel("inferred dec_temp")
+plt.show()
+
+plt.figure()
+sns.scatterplot(x=true_h, y=inferred_h)
+plt.xlim([0,1])
+plt.ylim([0,1])
+plt.xlabel("true h")
+plt.ylabel("inferred h")
+plt.show()
 
 #print("this is inference for pl =", pl, "rl =", rl, "dt =", dt, "tend=", tend)
 # print(param_dict)
