@@ -698,7 +698,8 @@ class Group2Inference(object):
         self.T = agent.T
         self.data = data
         self.nsubs = len(data['rewards'][0,0])
-        
+        self.svi = None
+        self.loss = []
 
     def model(self):
         """
@@ -831,33 +832,38 @@ class Group2Inference(object):
                 "r_lambda": ar.sigmoid(locs[...,1]), "dec_temp": ar.exp(locs[...,2]), 
                 "h": ar.sigmoid(locs[...,3])}
 
+    def init_svi(self, optim_kwargs={'lr': .01},
+                 num_particles=10):
         
-        
-    def infer_posterior(self,
-                        iter_steps=1000,
-                        num_particles=10,
-                        optim_kwargs={'lr': .01}):
-        """Perform SVI over free model parameters.
-        """
-
         pyro.clear_param_store()
-
-        svi = pyro.infer.SVI(model=self.model,
+    
+        self.svi = pyro.infer.SVI(model=self.model,
                   guide=self.guide,
                   optim=pyro.optim.Adam(optim_kwargs),
                   loss=pyro.infer.Trace_ELBO(num_particles=num_particles,
                                   #set below to true once code is vectorized
                                   vectorize_particles=True))
+        
+        
+    def infer_posterior(self,
+                        iter_steps=1000, optim_kwargs={'lr': .01},
+                                     num_particles=10):
+        """Perform SVI over free model parameters.
+        """
+
+        #pyro.clear_param_store()
+        if self.svi is None:
+            self.init_svi(optim_kwargs, num_particles)
 
         loss = []
         pbar = tqdm(range(iter_steps), position=0)
         for step in pbar:#range(iter_steps):
-            loss.append(ar.tensor(svi.step()).to(device))
+            loss.append(ar.tensor(self.svi.step()).to(device))
             pbar.set_description("Mean ELBO %6.2f" % ar.tensor(loss[-20:]).mean())
             if ar.isnan(loss[-1]):
                 break
-
-        self.loss = [l.cpu() for l in loss]
+        
+        self.loss += [l.cpu() for l in loss]
         
         # alpha_lamb_pi = pyro.param("alpha_lamb_pi").data.numpy()
         # beta_lamb_pi = pyro.param("beta_lamb_pi").data.numpy()
@@ -873,7 +879,7 @@ class Group2Inference(object):
         #               "alpha_h": alpha_h, "beta_h": beta_h,
         #               "concentration_dec_temp": concentration_dec_temp, "rate_dec_temp": rate_dec_temp}
         
-        return self.loss#, param_dict
+        # return self.loss#, param_dict
     
     def sample_posterior_predictive(self, n_samples=5):
 
