@@ -760,8 +760,9 @@ class Group2Inference(object):
                         probs = self.agent.perception.posterior_actions[-1]
                         #print(probs)
                         if ar.any(ar.isnan(probs)):
-                            print(probs)
-                            print(param_dict)
+                            #print(probs)
+                            #print(param_dict)
+                            print(tau,t)
                 
                         curr_response = self.data["actions"][tau, t]
                         #print(curr_response)

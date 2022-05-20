@@ -36,6 +36,7 @@ import seaborn as sns
 import pandas as pd
 import os
 import scipy as sc
+from scipy.io import loadmat
 import scipy.signal as ss
 import bottleneck as bn
 import gc
@@ -370,7 +371,7 @@ recalc_rho = False
 for pl in [0.1,0.3,0.5,0.7,0.9]:
     for rl in [0.1,0.3,0.5,0.7,0.9]:
         # TODO: wht does dt=9 not work?? gives control prob of nan
-        for dt in [1.,3.,5.,7.]:
+        for dt in [2., 6.]:#[1.,3.,5.,7.]:
             
             stayed = []
             indices = []
@@ -403,7 +404,7 @@ for pl in [0.1,0.3,0.5,0.7,0.9]:
             
                 fname = os.path.join(folder, Rho_data_fname)
                 
-                rew_probs = sc.io.loadmat(fname)['dawrandomwalks']
+                rew_probs = loadmat(fname)['dawrandomwalks']
                 assert trials==rew_probs.shape[-1]
                 
                 never_reward = ns-nb

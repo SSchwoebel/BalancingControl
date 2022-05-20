@@ -10,7 +10,7 @@ Created on Mon Sep 13 14:09:11 2021
 import torch as ar
 array = ar.tensor
 
-ar.set_num_threads(1)
+ar.set_num_threads(6)
 print("torch threads", ar.get_num_threads())
 
 import pyro
@@ -54,69 +54,13 @@ true_vals = []
 
 data = []
 
-pl = 0.7
-rl = 0.3
-dt = 5.
-tend = 1
-
-# 1, 2
-for i in [1, 2]:#, 1, 2, 3, 4
-    run_name = "twostage_agent"+str(i)+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tend)+".json"
-    fname = os.path.join(folder, run_name)
-    
-    jsonpickle_numpy.register_handlers()
-        
-    with open(fname, 'r') as infile:
-        loaded = json.load(infile)
-    
-    data_load = pickle.decode(loaded)
-
-    data.append({})
-    data[-1]["actions"] = ar.tensor(data_load["actions"]).to(device)
-    data[-1]["rewards"] = ar.tensor(data_load["rewards"]).to(device)
-    data[-1]["observations"] = ar.tensor(data_load["observations"]).to(device)
-    data[-1]["states"] = ar.tensor(data_load["states"]).to(device)
-    
-    rewarded = data[-1]["rewards"][:-1,-1] == 1
-
-    unrewarded = rewarded==False
-    
-    rare = ar.logical_or(ar.logical_and(data[-1]["states"][:-1,1]==2, data[-1]["actions"][:-1,0] == 0),
-                    ar.logical_and(data[-1]["states"][:-1,1]==1, data[-1]["actions"][:-1,0] == 1))
-
-    common = rare==False
-
-    names = ["rewarded common", "rewarded rare", "unrewarded common", "unrewarded rare"]
-    
-    rewarded_common = ar.where(ar.logical_and(rewarded,common) == True)[0]
-    rewarded_rare = ar.where(ar.logical_and(rewarded,rare) == True)[0]
-    unrewarded_common = ar.where(ar.logical_and(unrewarded,common) == True)[0]
-    unrewarded_rare = ar.where(ar.logical_and(unrewarded,rare) == True)[0]
-    
-    index_list = [rewarded_common, rewarded_rare,
-                  unrewarded_common, unrewarded_rare]
-
-    stayed = [(data[-1]["actions"][index_list[i],0] == data[-1]["actions"][index_list[i]+1,0]).sum()/float(len(index_list[i])) for i in range(4)]
-    
-    plt.figure()
-    g = sns.barplot(data=stayed)
-    g.set_xticklabels(names, rotation=45, horizontalalignment='right', fontsize=16)
-    plt.ylim([0,1])
-    plt.yticks(ar.arange(0,1.1,0.2),fontsize=16)
-    plt.title("habit and goal-directed", fontsize=18)
-    plt.savefig("habit_and_goal.svg",dpi=300)
-    plt.ylabel("stay probability")
-    plt.show()
-    
-    true_vals.append({"lamb_pi": pl, "lamb_r": rl, "dec_temp": dt, "h": 1./tend})
-    
-# pl = 0.3
-# rl = 0.7
+# pl = 0.7
+# rl = 0.3
 # dt = 5.
 # tend = 1
 
-# # 0, 1
-# for i in [0, 1]:#, 2, 3]:
+# # 1, 2
+# for i in [1, 2]:#, 1, 2, 3, 4
 #     run_name = "twostage_agent"+str(i)+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tend)+".json"
 #     fname = os.path.join(folder, run_name)
     
@@ -166,62 +110,64 @@ for i in [1, 2]:#, 1, 2, 3, 4
     
 #     true_vals.append({"lamb_pi": pl, "lamb_r": rl, "dec_temp": dt, "h": 1./tend})
     
-    
-# pl = 0.3
-# rl = 0.7
-# dt = 5.
-# tend = 100
 
-# # 0, 1
-# for i in [0, 1]:#, 2, 3]:
-#     run_name = "twostage_agent"+str(i)+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tend)+".json"
-#     fname = os.path.join(folder, run_name)
+for i in range(1):    
+    for pl in [0.1,0.3,0.5,0.7,0.9]:
+        for rl in [0.1,0.3,0.5,0.7,0.9]:
+            # TODO: wht does dt=9 not work?? gives control prob of nan
+            for dt in [2.,5.]:
+                for tend in [1, 2, 10]:
+                    
+                    run_name = "twostage_agent"+str(i)+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tend)+".json"
+                    fname = os.path.join(folder, run_name)
+                    
+                    jsonpickle_numpy.register_handlers()
+                        
+                    with open(fname, 'r') as infile:
+                        loaded = json.load(infile)
+                    
+                    data_load = pickle.decode(loaded)
     
-#     jsonpickle_numpy.register_handlers()
-        
-#     with open(fname, 'r') as infile:
-#         loaded = json.load(infile)
+                    data.append({})
+                    data[-1]["actions"] = ar.tensor(data_load["actions"]).to(device)
+                    data[-1]["rewards"] = ar.tensor(data_load["rewards"]).to(device)
+                    data[-1]["observations"] = ar.tensor(data_load["observations"]).to(device)
+                    data[-1]["states"] = ar.tensor(data_load["states"]).to(device)
+                    
+                    # rewarded = data[-1]["rewards"][:-1,-1] == 1
     
-#     data_load = pickle.decode(loaded)
-
-#     data.append({})
-#     data[-1]["actions"] = ar.tensor(data_load["actions"]).to(device)
-#     data[-1]["rewards"] = ar.tensor(data_load["rewards"]).to(device)
-#     data[-1]["observations"] = ar.tensor(data_load["observations"]).to(device)
-#     data[-1]["states"] = ar.tensor(data_load["states"]).to(device)
+                    # unrewarded = rewarded==False
+                    
+                    # rare = ar.logical_or(ar.logical_and(data[-1]["states"][:-1,1]==2, data[-1]["actions"][:-1,0] == 0),
+                    #                 ar.logical_and(data[-1]["states"][:-1,1]==1, data[-1]["actions"][:-1,0] == 1))
     
-#     rewarded = data[-1]["rewards"][:-1,-1] == 1
-
-#     unrewarded = rewarded==False
+                    # common = rare==False
     
-#     rare = ar.logical_or(ar.logical_and(data[-1]["states"][:-1,1]==2, data[-1]["actions"][:-1,0] == 0),
-#                     ar.logical_and(data[-1]["states"][:-1,1]==1, data[-1]["actions"][:-1,0] == 1))
-
-#     common = rare==False
-
-#     names = ["rewarded common", "rewarded rare", "unrewarded common", "unrewarded rare"]
+                    # names = ["rewarded common", "rewarded rare", "unrewarded common", "unrewarded rare"]
+                    
+                    # rewarded_common = ar.where(ar.logical_and(rewarded,common) == True)[0]
+                    # rewarded_rare = ar.where(ar.logical_and(rewarded,rare) == True)[0]
+                    # unrewarded_common = ar.where(ar.logical_and(unrewarded,common) == True)[0]
+                    # unrewarded_rare = ar.where(ar.logical_and(unrewarded,rare) == True)[0]
+                    
+                    # index_list = [rewarded_common, rewarded_rare,
+                    #               unrewarded_common, unrewarded_rare]
     
-#     rewarded_common = ar.where(ar.logical_and(rewarded,common) == True)[0]
-#     rewarded_rare = ar.where(ar.logical_and(rewarded,rare) == True)[0]
-#     unrewarded_common = ar.where(ar.logical_and(unrewarded,common) == True)[0]
-#     unrewarded_rare = ar.where(ar.logical_and(unrewarded,rare) == True)[0]
-    
-#     index_list = [rewarded_common, rewarded_rare,
-#                   unrewarded_common, unrewarded_rare]
-
-#     stayed = [(data[-1]["actions"][index_list[i],0] == data[-1]["actions"][index_list[i]+1,0]).sum()/float(len(index_list[i])) for i in range(4)]
-    
-#     plt.figure()
-#     g = sns.barplot(data=stayed)
-#     g.set_xticklabels(names, rotation=45, horizontalalignment='right', fontsize=16)
-#     plt.ylim([0,1])
-#     plt.yticks(ar.arange(0,1.1,0.2),fontsize=16)
-#     plt.title("habit and goal-directed", fontsize=18)
-#     plt.savefig("habit_and_goal.svg",dpi=300)
-#     plt.ylabel("stay probability")
-#     plt.show()
-    
-#     true_vals.append({"lamb_pi": pl, "lamb_r": rl, "dec_temp": dt, "h": 1./tend})
+                    # stayed = [(data[-1]["actions"][index_list[i],0] == data[-1]["actions"][index_list[i]+1,0]).sum()/float(len(index_list[i])) for i in range(4)]
+                    
+                    # plt.figure()
+                    # g = sns.barplot(data=stayed)
+                    # g.set_xticklabels(names, rotation=45, horizontalalignment='right', fontsize=16)
+                    # plt.ylim([0,1])
+                    # plt.yticks(ar.arange(0,1.1,0.2),fontsize=16)
+                    # plt.title("habit and goal-directed", fontsize=18)
+                    # plt.savefig("habit_and_goal.svg",dpi=300)
+                    # plt.ylabel("stay probability")
+                    # plt.show()
+                    
+                    true_vals.append({"lamb_pi": pl, "lamb_r": rl, "dec_temp": dt, "h": 1./tend})
+                    
+print('analyzing '+str(len(true_vals))+' data sets')
 
 
 ###################################
@@ -400,27 +346,29 @@ agent = agt.FittingAgent(bayes_prc, [], pol,
 
 inferrer = inf.Group2Inference(agent, structured_data)
 
-num_steps = 150
-size_chunk = 50
+num_steps = 500
+size_chunk = num_steps
 
 for i in range(num_steps//size_chunk):
-    inferrer.infer_posterior(iter_steps=size_chunk, num_particles=30)#, param_dict
+    print('taking steps '+str(i*(size_chunk)+1)+' to '+str((i+1)*(size_chunk))+' out of total '+str(num_steps))
+    inferrer.infer_posterior(iter_steps=size_chunk, num_particles=15)#, param_dict
     
     total_num_iter_so_far = i*size_chunk
-    storage_name = 'inferred_'+str(total_num_iter_so_far)+'.save'
+    storage_name = 'h_recovered_'+str(total_num_iter_so_far)+'.save'#h_recovered
     storage_name = os.path.join(folder, storage_name)
     inferrer.save_parameters(storage_name)
-# inferrer.load_parameters(storage_name)
+    # inferrer.load_parameters(storage_name)
+    
+    loss = inferrer.loss
+    plt.figure()
+    plt.title("ELBO")
+    plt.plot(loss)
+    plt.ylabel("ELBO")
+    plt.xlabel("iteration")
+    plt.show()
 
-loss = inferrer.loss
-plt.figure()
-plt.title("ELBO")
-plt.plot(loss)
-plt.ylabel("ELBO")
-plt.xlabel("iteration")
-plt.show()
-
-sample_df = inferrer.plot_posteriors(n_samples=1000)
+n_samples=1000
+sample_df = inferrer.sample_posterior(n_samples=n_samples) #inferrer.plot_posteriors(n_samples=1000)
 
 inferred_values = []
 
@@ -442,6 +390,31 @@ inferred_rl = [val['lamb_r'] for val in inferred_values]
 inferred_dt = [val['dec_temp'] for val in inferred_values]
 inferred_h = [val['h'] for val in inferred_values]
 
+total_df = sample_df.copy()
+total_df['true_lamb_pi'] = ar.tensor(true_pl).repeat(n_samples)
+total_df['true_lamb_r'] = ar.tensor(true_rl).repeat(n_samples)
+total_df['true_dec_temp'] = ar.tensor(true_dt).repeat(n_samples)
+total_df['true_h'] = ar.tensor(true_h).repeat(n_samples)
+
+sample_file = 'h_recovered_samples.csv'
+fname = os.path.join(folder, sample_file)
+total_df.to_csv(fname)
+
+plt.figure()
+sns.violinplot(data=total_df, x='true_lamb_pi', y='lamb_pi')
+plt.show()
+
+plt.figure()
+sns.violinplot(data=total_df, x='true_lamb_r', y='lamb_r')
+plt.show()
+
+plt.figure()
+sns.violinplot(data=total_df, x='true_dec_temp', y='dec_temp')
+plt.show()
+
+plt.figure()
+sns.violinplot(data=total_df, x='true_h', y='h')
+plt.show()
 
 plt.figure()
 sns.scatterplot(x=true_pl, y=inferred_pl)
