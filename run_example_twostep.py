@@ -96,16 +96,16 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
                          [ b1,  0,  0,  0,  0,  0,  0,],
                          [nb1,  0,  0,  0,  0,  0,  0,],
                          [  0,  1,  0,  1,  0,  0,  0,],
-                         [  0,  0,  1,  0,  1,  0,  0,],
-                         [  0,  0,  0,  0,  0,  1,  0,],
+                         [  0,  0,  0,  0,  1,  0,  0,],
+                         [  0,  0,  1,  0,  0,  1,  0,],
                          [  0,  0,  0,  0,  0,  0,  1,],])
 
     B[:,:,1] = array([[  0,  0,  0,  0,  0,  0,  0,],
                          [nb2,  0,  0,  0,  0,  0,  0,],
                          [ b2,  0,  0,  0,  0,  0,  0,],
                          [  0,  0,  0,  1,  0,  0,  0,],
-                         [  0,  0,  0,  0,  1,  0,  0,],
-                         [  0,  1,  0,  0,  0,  1,  0,],
+                         [  0,  1,  0,  0,  1,  0,  0,],
+                         [  0,  0,  0,  0,  0,  1,  0,],
                          [  0,  0,  1,  0,  0,  0,  1,],])
 
     # create reward generation
@@ -218,7 +218,7 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
                                                state_prior, utility, prior_pi, pol,
                                                alpha_0, C_alphas, T=T, trials=trials,
                                                pol_lambda=pol_lambda, r_lambda=r_lambda,
-                                               non_decaying=3, dec_temp=dec_temp)
+                                               non_decaying=(ns-nb), dec_temp=dec_temp)
 
         bayes_pln = agt.FittingAgent(bayes_prc, ac_sel, pol,
                           trials = trials, T = T,
@@ -380,24 +380,44 @@ for pl in [0.1,0.3,0.5,0.7,0.9]:
             
                 init = array([0.6, 0.4, 0.6, 0.4])
             
-                Rho_fname = 'twostep_rho.json'
+                # Rho_fname = 'twostep_rho.json'
             
-                jsonpickle_numpy.register_handlers()
+                # jsonpickle_numpy.register_handlers()
             
-                fname = os.path.join(folder, Rho_fname)
+                # fname = os.path.join(folder, Rho_fname)
             
-                if Rho_fname not in os.listdir(folder) or recalc_rho==True:
-                    Rho[:] = generate_randomwalk(trials, nr, ns, nb, sigma, init)
-                    pickled = pickle.encode(Rho)
-                    with open(fname, 'w') as outfile:
-                        json.dump(pickled, outfile)
-                else:
-                    with open(fname, 'r') as infile:
-                        data = json.load(infile)
-                    if arr_type == "numpy":
-                        Rho[:] = pickle.decode(data)[:trials]
-                    else:
-                        Rho[:] = ar.from_numpy(pickle.decode(data))[:trials]
+                # if Rho_fname not in os.listdir(folder) or recalc_rho==True:
+                #     Rho[:] = generate_randomwalk(trials, nr, ns, nb, sigma, init)
+                #     pickled = pickle.encode(Rho)
+                #     with open(fname, 'w') as outfile:
+                #         json.dump(pickled, outfile)
+                # else:
+                #     with open(fname, 'r') as infile:
+                #         data = json.load(infile)
+                #     if arr_type == "numpy":
+                #         Rho[:] = pickle.decode(data)[:trials]
+                #     else:
+                #         Rho[:] = ar.from_numpy(pickle.decode(data))[:trials]
+                
+                Rho_data_fname = 'dawrandomwalks.mat'
+            
+                fname = os.path.join(folder, Rho_data_fname)
+                
+                rew_probs = sc.io.loadmat(fname)['dawrandomwalks']
+                assert trials==rew_probs.shape[-1]
+                
+                never_reward = ns-nb
+
+                Rho = ar.zeros((trials, nr, ns))
+
+                Rho[:,1,:never_reward] = 0.
+                Rho[:,0,:never_reward] = 1.
+                
+                Rho[:,1,never_reward:never_reward+2] = ar.from_numpy(rew_probs[0,:,:]).permute((1,0))
+                Rho[:,0,never_reward:never_reward+2] = ar.from_numpy(1-rew_probs[0,:,:]).permute((1,0))
+                
+                Rho[:,1,never_reward+2:] = ar.from_numpy(rew_probs[1,:,:]).permute((1,0))
+                Rho[:,0,never_reward+2:] = ar.from_numpy(1-rew_probs[1,:,:]).permute((1,0))
             
                 plt.figure(figsize=(10,5))
                 for i in range(4):

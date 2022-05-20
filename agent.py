@@ -109,7 +109,7 @@ class FittingAgent(object):
         if t==0:
             self.possible_policies = ar.ones(self.npi, dtype=bool)[:,None]
         else:
-            curr_policies = (self.policies[:,t-1] == prev_response[0])[:,None]#[0]
+            curr_policies = (self.policies[:,t-1] == prev_response)[:,None]#[0]
             self.possible_policies = ar.logical_and(self.possible_policies, curr_policies)
 
         self.perception.update_beliefs_states(
