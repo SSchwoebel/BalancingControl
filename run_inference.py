@@ -116,7 +116,7 @@ for i in range(1):
         for rl in [0.1,0.3,0.5,0.7,0.9]:
             # TODO: wht does dt=9 not work?? gives control prob of nan
             for dt in [2.,5.]:
-                for tend in [1, 2, 10]:
+                for tend in [1]:#, 2, 10]:
                     
                     run_name = "twostage_agent"+str(i)+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tend)+".json"
                     fname = os.path.join(folder, run_name)
@@ -165,7 +165,7 @@ for i in range(1):
                     # plt.ylabel("stay probability")
                     # plt.show()
                     
-                    true_vals.append({"lamb_pi": pl, "lamb_r": rl, "dec_temp": dt, "h": 1./tend})
+                    true_vals.append({"lamb_pi": pl, "lamb_r": rl, "dec_temp": dt,})# "h": 1./tend})
                     
 print('analyzing '+str(len(true_vals))+' data sets')
 
@@ -354,7 +354,7 @@ for i in range(num_steps//size_chunk):
     inferrer.infer_posterior(iter_steps=size_chunk, num_particles=15)#, param_dict
     
     total_num_iter_so_far = i*size_chunk
-    storage_name = 'h_recovered_'+str(total_num_iter_so_far)+'.save'#h_recovered
+    storage_name = 'recovered_'+str(total_num_iter_so_far)+'.save'#h_recovered
     storage_name = os.path.join(folder, storage_name)
     inferrer.save_parameters(storage_name)
     # inferrer.load_parameters(storage_name)
@@ -365,6 +365,7 @@ for i in range(num_steps//size_chunk):
     plt.plot(loss)
     plt.ylabel("ELBO")
     plt.xlabel("iteration")
+    plt.savefig('recovered_ELBO')
     plt.show()
 
 n_samples=1000
@@ -376,27 +377,27 @@ for i in range(len(data)):
     mean_pl = sample_df[sample_df['subject']==i]['lamb_pi'].mean()
     mean_rl = sample_df[sample_df['subject']==i]['lamb_r'].mean()
     mean_dt = sample_df[sample_df['subject']==i]['dec_temp'].mean()
-    mean_h = sample_df[sample_df['subject']==i]['h'].mean()
+    # mean_h = sample_df[sample_df['subject']==i]['h'].mean()
     
-    inferred_values.append({"lamb_pi": mean_pl, "lamb_r": mean_rl, "dec_temp": mean_dt, "h": mean_h})
+    inferred_values.append({"lamb_pi": mean_pl, "lamb_r": mean_rl, "dec_temp": mean_dt})#, "h": mean_h})
     
 true_pl = [val['lamb_pi'] for val in true_vals]
 true_rl = [val['lamb_r'] for val in true_vals]
 true_dt = [val['dec_temp'] for val in true_vals]
-true_h = [val['h'] for val in true_vals]
+# true_h = [val['h'] for val in true_vals]
 
 inferred_pl = [val['lamb_pi'] for val in inferred_values]
 inferred_rl = [val['lamb_r'] for val in inferred_values]
 inferred_dt = [val['dec_temp'] for val in inferred_values]
-inferred_h = [val['h'] for val in inferred_values]
+# inferred_h = [val['h'] for val in inferred_values]
 
 total_df = sample_df.copy()
 total_df['true_lamb_pi'] = ar.tensor(true_pl).repeat(n_samples)
 total_df['true_lamb_r'] = ar.tensor(true_rl).repeat(n_samples)
 total_df['true_dec_temp'] = ar.tensor(true_dt).repeat(n_samples)
-total_df['true_h'] = ar.tensor(true_h).repeat(n_samples)
+# total_df['true_h'] = ar.tensor(true_h).repeat(n_samples)
 
-sample_file = 'h_recovered_samples.csv'
+sample_file = 'recovered_samples.csv'
 fname = os.path.join(folder, sample_file)
 total_df.to_csv(fname)
 
@@ -412,9 +413,9 @@ plt.figure()
 sns.violinplot(data=total_df, x='true_dec_temp', y='dec_temp')
 plt.show()
 
-plt.figure()
-sns.violinplot(data=total_df, x='true_h', y='h')
-plt.show()
+# plt.figure()
+# sns.violinplot(data=total_df, x='true_h', y='h')
+# plt.show()
 
 plt.figure()
 sns.scatterplot(x=true_pl, y=inferred_pl)
@@ -440,13 +441,13 @@ plt.xlabel("true dec_temp")
 plt.ylabel("inferred dec_temp")
 plt.show()
 
-plt.figure()
-sns.scatterplot(x=true_h, y=inferred_h)
-plt.xlim([0,1])
-plt.ylim([0,1])
-plt.xlabel("true h")
-plt.ylabel("inferred h")
-plt.show()
+# plt.figure()
+# sns.scatterplot(x=true_h, y=inferred_h)
+# plt.xlim([0,1])
+# plt.ylim([0,1])
+# plt.xlabel("true h")
+# plt.ylabel("inferred h")
+# plt.show()
 
 #print("this is inference for pl =", pl, "rl =", rl, "dt =", dt, "tend=", tend)
 # print(param_dict)

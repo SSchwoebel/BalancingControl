@@ -706,7 +706,7 @@ class Group2Inference(object):
         Generative model of behavior with a NormalGamma
         prior over free model parameters.
         """
-        npar = 4  # number of parameters
+        npar = 3  # number of parameters
 
         # define hyper priors over model parameters
         a = pyro.param('a', ar.ones(npar), constraint=constraints.positive)
@@ -731,13 +731,14 @@ class Group2Inference(object):
             locs = pyro.sample('locs', dist.TransformedDistribution(base_dist, [transform]))
         
             param_dict = {"pol_lambda": ar.sigmoid(locs[...,0]), 
-                          "r_lambda": ar.sigmoid(locs[...,1]), "dec_temp": ar.exp(locs[...,2]),
-                          "h": ar.sigmoid(locs[...,3])}
+                          "r_lambda": ar.sigmoid(locs[...,1]), "dec_temp": ar.exp(locs[...,2]),}
+                          #"h": ar.sigmoid(locs[...,3])}
             # print(param_dict)
             
             self.agent.reset(param_dict)
             #self.agent.set_parameters(pol_lambda=lamb_pi, r_lambda=lamb_r, dec_temp=dec_temp)
-            
+            # print(self.agent.perception.alpha_0)
+            # print(self.agent.perception.dirichlet_pol_params_init)
             
             for tau in pyro.markov(range(self.trials)):
                 for t in range(self.T):
@@ -798,7 +799,7 @@ class Group2Inference(object):
     def guide(self):
         # approximate posterior. assume MF: each param has his own univariate Normal.
         
-        npar = 4
+        npar = 3
         trns = biject_to(constraints.positive)
 
         m_hyp = pyro.param('m_hyp', ar.zeros(2*npar))
@@ -830,8 +831,8 @@ class Group2Inference(object):
             locs = pyro.sample("locs", dist.MultivariateNormal(m_locs, scale_tril=st_locs))
 
         return {'tau': tau, 'mu': mu, 'locs': locs, "pol_lambda": ar.sigmoid(locs[...,0]), 
-                "r_lambda": ar.sigmoid(locs[...,1]), "dec_temp": ar.exp(locs[...,2]), 
-                "h": ar.sigmoid(locs[...,3])}
+                "r_lambda": ar.sigmoid(locs[...,1]), "dec_temp": ar.exp(locs[...,2]), }
+                #"h": ar.sigmoid(locs[...,3])}
 
     def init_svi(self, optim_kwargs={'lr': .01},
                  num_particles=10):
@@ -946,24 +947,24 @@ class Group2Inference(object):
                 sample.setdefault(key, ar.ones(1))
             lamb_pi = sample["r_lambda"]
             lamb_r = sample["pol_lambda"]
-            alpha_0 = sample["h"]
+            #alpha_0 = sample["h"]
             dec_temp = sample["dec_temp"]
             
             lamb_pi_global[i] = lamb_pi.detach().numpy()
             lamb_r_global[i] = lamb_r.detach().numpy()
-            alpha_0_global[i] = alpha_0.detach().numpy()
+            #alpha_0_global[i] = alpha_0.detach().numpy()
             dec_temp_global[i] = dec_temp.detach().numpy()
         
         lamb_pi_flat = np.array([lamb_pi_global[i,n] for i in range(n_samples) for n in range(self.nsubs)])
         lamb_r_flat = np.array([lamb_r_global[i,n] for i in range(n_samples) for n in range(self.nsubs)])
-        alpha_0_flat = np.array([alpha_0_global[i,n] for i in range(n_samples) for n in range(self.nsubs)])
+        #alpha_0_flat = np.array([alpha_0_global[i,n] for i in range(n_samples) for n in range(self.nsubs)])
         dec_temp_flat = np.array([dec_temp_global[i,n] for i in range(n_samples) for n in range(self.nsubs)])
         
         subs_flat = np.array([n for i in range(n_samples) for n in range(self.nsubs)])
         
         
         sample_dict = {"lamb_pi": lamb_pi_flat, "lamb_r": lamb_r_flat,
-                       "h": alpha_0_flat, 
+                       #h": alpha_0_flat, 
                        "dec_temp": dec_temp_flat, "subject": subs_flat}
         
         sample_df = pd.DataFrame(sample_dict)

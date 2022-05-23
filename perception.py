@@ -92,7 +92,7 @@ class Group2Perception(object):
         else:
             self.nsubs = self.dec_temp.shape[0]
             self.npart = 1
-            self.alpha_0 = self.alpha_0[None,:]
+            #self.alpha_0 = self.alpha_0[None,:]
             self.pol_lambda = self.pol_lambda[None,:]
             self.r_lambda = self.r_lambda[None,:]
             self.dec_temp = self.dec_temp[None,:]
