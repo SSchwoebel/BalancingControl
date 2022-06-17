@@ -10,7 +10,7 @@ Created on Mon Sep 13 14:09:11 2021
 import torch as ar
 array = ar.tensor
 
-ar.set_num_threads(6)
+ar.set_num_threads(2)
 print("torch threads", ar.get_num_threads())
 
 import pyro
@@ -63,12 +63,12 @@ data = []
 # for i in [1, 2]:#, 1, 2, 3, 4
 #     run_name = "twostage_agent"+str(i)+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tend)+".json"
 #     fname = os.path.join(folder, run_name)
-    
+
 #     jsonpickle_numpy.register_handlers()
-        
+
 #     with open(fname, 'r') as infile:
 #         loaded = json.load(infile)
-    
+
 #     data_load = pickle.decode(loaded)
 
 #     data.append({})
@@ -76,28 +76,28 @@ data = []
 #     data[-1]["rewards"] = ar.tensor(data_load["rewards"]).to(device)
 #     data[-1]["observations"] = ar.tensor(data_load["observations"]).to(device)
 #     data[-1]["states"] = ar.tensor(data_load["states"]).to(device)
-    
+
 #     rewarded = data[-1]["rewards"][:-1,-1] == 1
 
 #     unrewarded = rewarded==False
-    
+
 #     rare = ar.logical_or(ar.logical_and(data[-1]["states"][:-1,1]==2, data[-1]["actions"][:-1,0] == 0),
 #                     ar.logical_and(data[-1]["states"][:-1,1]==1, data[-1]["actions"][:-1,0] == 1))
 
 #     common = rare==False
 
 #     names = ["rewarded common", "rewarded rare", "unrewarded common", "unrewarded rare"]
-    
+
 #     rewarded_common = ar.where(ar.logical_and(rewarded,common) == True)[0]
 #     rewarded_rare = ar.where(ar.logical_and(rewarded,rare) == True)[0]
 #     unrewarded_common = ar.where(ar.logical_and(unrewarded,common) == True)[0]
 #     unrewarded_rare = ar.where(ar.logical_and(unrewarded,rare) == True)[0]
-    
+
 #     index_list = [rewarded_common, rewarded_rare,
 #                   unrewarded_common, unrewarded_rare]
 
 #     stayed = [(data[-1]["actions"][index_list[i],0] == data[-1]["actions"][index_list[i]+1,0]).sum()/float(len(index_list[i])) for i in range(4)]
-    
+
 #     plt.figure()
 #     g = sns.barplot(data=stayed)
 #     g.set_xticklabels(names, rotation=45, horizontalalignment='right', fontsize=16)
@@ -107,54 +107,54 @@ data = []
 #     plt.savefig("habit_and_goal.svg",dpi=300)
 #     plt.ylabel("stay probability")
 #     plt.show()
-    
-#     true_vals.append({"lamb_pi": pl, "lamb_r": rl, "dec_temp": dt, "h": 1./tend})
-    
 
-for i in range(1):    
-    for pl in [0.1,0.3,0.5,0.7,0.9]:
-        for rl in [0.1,0.3,0.5,0.7,0.9]:
+#     true_vals.append({"lamb_pi": pl, "lamb_r": rl, "dec_temp": dt, "h": 1./tend})
+
+
+for i in range(1):
+    for pl in [0.3, 0.7]:#[0.1,0.3,0.5,0.7,0.9]:
+        for rl in [0.7]:#[0.1,0.3,0.5,0.7,0.9]:
             # TODO: wht does dt=9 not work?? gives control prob of nan
-            for dt in [2.,5.]:
+            for dt in [5.]:#[2.,5.]:
                 for tend in [1]:#, 2, 10]:
-                    
+
                     run_name = "twostage_agent"+str(i)+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tend)+".json"
                     fname = os.path.join(folder, run_name)
-                    
+
                     jsonpickle_numpy.register_handlers()
-                        
+
                     with open(fname, 'r') as infile:
                         loaded = json.load(infile)
-                    
+
                     data_load = pickle.decode(loaded)
-    
+
                     data.append({})
                     data[-1]["actions"] = ar.tensor(data_load["actions"]).to(device)
                     data[-1]["rewards"] = ar.tensor(data_load["rewards"]).to(device)
                     data[-1]["observations"] = ar.tensor(data_load["observations"]).to(device)
                     data[-1]["states"] = ar.tensor(data_load["states"]).to(device)
-                    
+
                     # rewarded = data[-1]["rewards"][:-1,-1] == 1
-    
+
                     # unrewarded = rewarded==False
-                    
+
                     # rare = ar.logical_or(ar.logical_and(data[-1]["states"][:-1,1]==2, data[-1]["actions"][:-1,0] == 0),
                     #                 ar.logical_and(data[-1]["states"][:-1,1]==1, data[-1]["actions"][:-1,0] == 1))
-    
+
                     # common = rare==False
-    
+
                     # names = ["rewarded common", "rewarded rare", "unrewarded common", "unrewarded rare"]
-                    
+
                     # rewarded_common = ar.where(ar.logical_and(rewarded,common) == True)[0]
                     # rewarded_rare = ar.where(ar.logical_and(rewarded,rare) == True)[0]
                     # unrewarded_common = ar.where(ar.logical_and(unrewarded,common) == True)[0]
                     # unrewarded_rare = ar.where(ar.logical_and(unrewarded,rare) == True)[0]
-                    
+
                     # index_list = [rewarded_common, rewarded_rare,
                     #               unrewarded_common, unrewarded_rare]
-    
+
                     # stayed = [(data[-1]["actions"][index_list[i],0] == data[-1]["actions"][index_list[i]+1,0]).sum()/float(len(index_list[i])) for i in range(4)]
-                    
+
                     # plt.figure()
                     # g = sns.barplot(data=stayed)
                     # g.set_xticklabels(names, rotation=45, horizontalalignment='right', fontsize=16)
@@ -164,9 +164,9 @@ for i in range(1):
                     # plt.savefig("habit_and_goal.svg",dpi=300)
                     # plt.ylabel("stay probability")
                     # plt.show()
-                    
+
                     true_vals.append({"lamb_pi": pl, "lamb_r": rl, "dec_temp": dt,})# "h": 1./tend})
-                    
+
 print('analyzing '+str(len(true_vals))+' data sets')
 
 
@@ -198,7 +198,7 @@ for u in ut:
     for i in range(1,nr):
         utility[-1][i] = u/(nr-1)#u/nr*i
     utility[-1][0] = (1.-u)
-    
+
 utility = utility[-1]
 
 """
@@ -247,7 +247,7 @@ B[:,:,1] = array([[  0,  0,  0,  0,  0,  0,  0,],
 
 # agent's beliefs about reward generation
 
-C_alphas = ar.zeros((nr, ns)).to(device) 
+C_alphas = ar.zeros((nr, ns)).to(device)
 C_alphas += learn_rew
 C_alphas[0,:3] = 100
 for i in range(1,nr):
@@ -283,7 +283,7 @@ npi = pol.shape[0]
 prior_pi = ar.ones(npi).to(device)
 prior_pi /= npi #ar.zeros(npi) + 1e-3/(npi-1)
 #prior_pi[170] = 1. - 1e-3
-alphas = ar.zeros((npi)).to(device) 
+alphas = ar.zeros((npi)).to(device)
 alphas += learn_pol
 alpha_0 = array([learn_pol]).to(device)
 #    for i in range(nb):
@@ -318,7 +318,7 @@ data_act = ar.stack([d["actions"] for d in data], dim=-1)
 structured_data = {"observations": data_obs, "rewards": data_rew, "actions": data_act}
 
 # perception
-bayes_prc = prc.Group2Perception(A, B, C_agent, transition_matrix_context, 
+bayes_prc = prc.Group2Perception(A, B, C_agent, transition_matrix_context,
                                        state_prior, utility, prior_pi, pol,
                                        #data_obs, data_rew, data_act,
                                        alpha_0, C_alphas, T=T, trials=trials,
@@ -344,21 +344,21 @@ agent = agt.FittingAgent(bayes_prc, [], pol,
 
 # inferrer = inf.SingleInference(agent, data[0])
 
-inferrer = inf.Group2Inference(agent, structured_data)
+inferrer = inf.GroupInference(agent, structured_data)
 
-num_steps = 500
+num_steps = 50
 size_chunk = num_steps
 
 for i in range(num_steps//size_chunk):
     print('taking steps '+str(i*(size_chunk)+1)+' to '+str((i+1)*(size_chunk))+' out of total '+str(num_steps))
     inferrer.infer_posterior(iter_steps=size_chunk, num_particles=15)#, param_dict
-    
+
     total_num_iter_so_far = i*size_chunk
     storage_name = 'recovered_'+str(total_num_iter_so_far)+'.save'#h_recovered
     storage_name = os.path.join(folder, storage_name)
     inferrer.save_parameters(storage_name)
     # inferrer.load_parameters(storage_name)
-    
+
     loss = inferrer.loss
     plt.figure()
     plt.title("ELBO")
@@ -378,9 +378,9 @@ for i in range(len(data)):
     mean_rl = sample_df[sample_df['subject']==i]['lamb_r'].mean()
     mean_dt = sample_df[sample_df['subject']==i]['dec_temp'].mean()
     # mean_h = sample_df[sample_df['subject']==i]['h'].mean()
-    
+
     inferred_values.append({"lamb_pi": mean_pl, "lamb_r": mean_rl, "dec_temp": mean_dt})#, "h": mean_h})
-    
+
 true_pl = [val['lamb_pi'] for val in true_vals]
 true_rl = [val['lamb_r'] for val in true_vals]
 true_dt = [val['dec_temp'] for val in true_vals]
@@ -396,6 +396,19 @@ total_df['true_lamb_pi'] = ar.tensor(true_pl).repeat(n_samples)
 total_df['true_lamb_r'] = ar.tensor(true_rl).repeat(n_samples)
 total_df['true_dec_temp'] = ar.tensor(true_dt).repeat(n_samples)
 # total_df['true_h'] = ar.tensor(true_h).repeat(n_samples)
+
+# new_df = sample_df.copy()
+# new_df['true_lamb_pi'] = ar.zeros(len(data)*n_samples) - 1
+# new_df['true_lamb_r'] = ar.zeros(len(data)*n_samples) - 1
+# new_df['true_dec_temp'] = ar.zeros(len(data)*n_samples) - 1
+
+# for i in range(len(data)):
+#     new_df.loc[new_df['subject']==i,'true_lamb_pi'] = true_vals[i]['lamb_pi']
+#     new_df.loc[new_df['subject']==i,'true_lamb_r']= true_vals[i]['lamb_r']
+#     new_df.loc[new_df['subject']==i,'true_dec_temp'] = true_vals[i]['dec_temp']
+
+# import numpy
+# print(numpy.allclose(total_df['true_lamb_pi'], new_df['true_lamb_pi']))
 
 sample_file = 'recovered_samples.csv'
 fname = os.path.join(folder, sample_file)
