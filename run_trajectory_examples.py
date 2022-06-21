@@ -59,9 +59,12 @@ def show_sampling_trajectory(samples, RT, npi, j=0, crit_factor = 0.5):
     plt.show()
     
     plt.figure()
-    plt.plot([post[0]]*(6000), '--', color='gray', label='true posterior action 1', linewidth=3)
-    plt.plot(estimated_q[:,0], label='sampled posterior action 1', linewidth=3)
-    plt.plot(estimated_q[:,1:], linewidth=3)#, label='sampled posterior other actions'
+    plt.plot([post[0]]*(6000), '--', color='gray', label='true posterior policy 1', linewidth=3)
+    plt.plot(estimated_q[:,0], label='sampled posterior policy 1', linewidth=3)
+    plt.plot(estimated_q[:,1], label='sampled posterior policy 2', linewidth=3)#
+    if npi>2:
+        plt.plot(estimated_q[:,1], label='sampled posterior other policies', linewidth=3)#
+        
     #plt.plot([post[1]]*RT, '--', color='gray')
     plt.xlim([0,6000])
     plt.ylim([0,1])
@@ -114,7 +117,7 @@ post /= post.sum()
 
 trials = 2
 
-f = 0.5
+f = 0.6
 
 for i in range(20):
 
