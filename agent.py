@@ -105,11 +105,11 @@ class FittingAgent(object):
 
 
     def update_beliefs(self, tau, t, observation, reward, prev_response, context):
-        
+
         if t==0:
             self.possible_policies = ar.ones(self.npi, dtype=bool)[:,None]
         else:
-            curr_policies = (self.policies[:,t-1] == prev_response[0])[:,None]#[0]
+            curr_policies = (self.policies[:,t-1][:,None] == prev_response)#[0]
             self.possible_policies = ar.logical_and(self.possible_policies, curr_policies)
 
         self.perception.update_beliefs_states(
@@ -176,16 +176,16 @@ class FittingAgent(object):
         # TODO attention this now only works for one context...
         posterior_policies = post[:].to(device)#self.posterior_policies[tau, t, :, 0]#ar.einsum('pc,c->p', self.posterior_policies[tau, t], self.posterior_context[tau, t])
         #posterior_policies /= posterior_policies.sum()
-        
+
         #estimate action probability
         #control_prob = ar.zeros(self.na)
         for a in range(self.na):
             self.posterior_actions[tau,t,a] = posterior_policies[self.policies[:,t] == a].sum()
 
         #return self.control_probs[tau,t]
-    
+
     def set_parameters(self, **kwargs):
-        
+
         if 'pol_lambda' in kwargs.keys():
             self.perception.pol_lambda = kwargs['pol_lambda']
         if 'r_lambda' in kwargs.keys():
@@ -297,7 +297,7 @@ class BayesianPlanner(object):
 
 
     def update_beliefs(self, tau, t, observation, reward, response, context=None):
-        
+
         self.observations[tau,t] = observation
         self.rewards[tau,t] = reward
         if context is not None:
@@ -314,7 +314,7 @@ class BayesianPlanner(object):
             prev_pols[self.possible_polcies] = True
             new_pols = own_logical_and(possible_policies, prev_pols)
             self.possible_polcies = ar.where(new_pols==True)[0]
-            
+
             # TODO once 1D intersect exists
             #self.possible_polcies = ar.intersect1d(self.possible_polcies, possible_policies)
             self.log_probability += ln(self.posterior_actions[tau,t-1,response])
@@ -341,7 +341,7 @@ class BayesianPlanner(object):
 
         # check here what to do with the greater and equal sign
         if self.nc>1 and t>=0:
-            
+
             if hasattr(self, 'context_obs'):
                 c_obs = self.context_obs[tau]
             else:
@@ -418,16 +418,16 @@ class BayesianPlanner(object):
         # TODO attention this now only works for one context...
         posterior_policies = post[:,0]#self.posterior_policies[tau, t, :, 0]#ar.einsum('pc,c->p', self.posterior_policies[tau, t], self.posterior_context[tau, t])
         #posterior_policies /= posterior_policies.sum()
-        
+
         #estimate action probability
         #control_prob = ar.zeros(self.na)
         for a in range(self.na):
             self.posterior_actions[tau,t,a] = posterior_policies[self.policies[:,t] == a].sum()
 
         #return self.control_probs[tau,t]
-    
+
     def set_parameters(self, **kwargs):
-        
+
         if 'pol_lambda' in kwargs.keys():
             self.perception.pol_lambda = kwargs['pol_lambda']
         if 'r_lambda' in kwargs.keys():

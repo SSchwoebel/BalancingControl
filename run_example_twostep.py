@@ -13,7 +13,7 @@ if arr_type == "numpy":
 else:
     import torch as ar
     array = ar.tensor
-    
+
 import numpy as np
 
 #from plotting import *
@@ -94,20 +94,36 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
     nb2 = 1.-b2
 
     B[:,:,0] = array([[  0,  0,  0,  0,  0,  0,  0,],
-                         [ b1,  0,  0,  0,  0,  0,  0,],
-                         [nb1,  0,  0,  0,  0,  0,  0,],
-                         [  0,  1,  0,  1,  0,  0,  0,],
-                         [  0,  0,  0,  0,  1,  0,  0,],
-                         [  0,  0,  1,  0,  0,  1,  0,],
-                         [  0,  0,  0,  0,  0,  0,  1,],])
+                          [ b1,  0,  0,  0,  0,  0,  0,],
+                          [nb1,  0,  0,  0,  0,  0,  0,],
+                          [  0,  1,  0,  1,  0,  0,  0,],
+                          [  0,  0,  0,  0,  1,  0,  0,],
+                          [  0,  0,  1,  0,  0,  1,  0,],
+                          [  0,  0,  0,  0,  0,  0,  1,],])
 
     B[:,:,1] = array([[  0,  0,  0,  0,  0,  0,  0,],
-                         [nb2,  0,  0,  0,  0,  0,  0,],
-                         [ b2,  0,  0,  0,  0,  0,  0,],
-                         [  0,  0,  0,  1,  0,  0,  0,],
-                         [  0,  1,  0,  0,  1,  0,  0,],
-                         [  0,  0,  0,  0,  0,  1,  0,],
-                         [  0,  0,  1,  0,  0,  0,  1,],])
+                          [nb2,  0,  0,  0,  0,  0,  0,],
+                          [ b2,  0,  0,  0,  0,  0,  0,],
+                          [  0,  0,  0,  1,  0,  0,  0,],
+                          [  0,  1,  0,  0,  1,  0,  0,],
+                          [  0,  0,  0,  0,  0,  1,  0,],
+                          [  0,  0,  1,  0,  0,  0,  1,],])
+
+    # B[:,:,0] = array([[  0,  0,  0,  0,  0,  0,  0,],
+    #                      [ b1,  0,  0,  0,  0,  0,  0,],
+    #                      [nb1,  0,  0,  0,  0,  0,  0,],
+    #                      [  0,  1,  0,  1,  0,  0,  0,],
+    #                      [  0,  0,  1,  0,  1,  0,  0,],
+    #                      [  0,  0,  0,  0,  0,  1,  0,],
+    #                      [  0,  0,  0,  0,  0,  0,  1,],])
+
+    # B[:,:,1] = array([[  0,  0,  0,  0,  0,  0,  0,],
+    #                      [nb2,  0,  0,  0,  0,  0,  0,],
+    #                      [ b2,  0,  0,  0,  0,  0,  0,],
+    #                      [  0,  0,  0,  1,  0,  0,  0,],
+    #                      [  0,  0,  0,  0,  1,  0,  0,],
+    #                      [  0,  1,  0,  0,  0,  1,  0,],
+    #                      [  0,  0,  1,  0,  0,  0,  1,],])
 
     # create reward generation
 #
@@ -215,11 +231,11 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
         #pol_par = alphas
 
         # perception
-        bayes_prc = prc.FittingPerception(A, B, C_agent, transition_matrix_context, 
+        bayes_prc = prc.Group2Perception(A, B, C_agent, transition_matrix_context,
                                                state_prior, utility, prior_pi, pol,
                                                alpha_0, C_alphas, T=T, trials=trials,
                                                pol_lambda=pol_lambda, r_lambda=r_lambda,
-                                               non_decaying=(ns-nb), dec_temp=dec_temp)
+                                               non_decaying=(ns-nb), dec_temp=dec_temp, nsubs=1)
 
         bayes_pln = agt.FittingAgent(bayes_prc, ac_sel, pol,
                           trials = trials, T = T,
@@ -253,7 +269,7 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
     create world
     """
 
-    w = world.World(environment, bayes_pln, trials = trials, T = T)
+    w = world.GroupWorld(environment, bayes_pln, trials = trials, T = T)
 
     """
     simulate experiment
@@ -371,22 +387,22 @@ recalc_rho = False
 for pl in [0.1,0.3,0.5,0.7,0.9]:
     for rl in [0.1,0.3,0.5,0.7,0.9]:
         # TODO: wht does dt=9 not work?? gives control prob of nan
-        for dt in [2., 6.]:#[1.,3.,5.,7.]:
-            
+        for dt in [1.]:#[2., 5.]:#[1.,3.,5.,7.]:
+
             stayed = []
             indices = []
-            for tendency in [1, 2, 10, 100]:#[1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
+            for tendency in [1, 2, 5, 10, 20, 100]:#[1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
                 print(pl, rl, dt, tendency)
                 tend = array([tendency])
-            
-                init = array([0.6, 0.4, 0.6, 0.4])
-            
+
+                # init = array([0.6, 0.4, 0.6, 0.4])
+
                 # Rho_fname = 'twostep_rho.json'
-            
+
                 # jsonpickle_numpy.register_handlers()
-            
+
                 # fname = os.path.join(folder, Rho_fname)
-            
+
                 # if Rho_fname not in os.listdir(folder) or recalc_rho==True:
                 #     Rho[:] = generate_randomwalk(trials, nr, ns, nb, sigma, init)
                 #     pickled = pickle.encode(Rho)
@@ -399,27 +415,27 @@ for pl in [0.1,0.3,0.5,0.7,0.9]:
                 #         Rho[:] = pickle.decode(data)[:trials]
                 #     else:
                 #         Rho[:] = ar.from_numpy(pickle.decode(data))[:trials]
-                
+
                 Rho_data_fname = 'dawrandomwalks.mat'
-            
+
                 fname = os.path.join(folder, Rho_data_fname)
-                
+
                 rew_probs = loadmat(fname)['dawrandomwalks']
                 assert trials==rew_probs.shape[-1]
-                
+
                 never_reward = ns-nb
 
                 Rho = ar.zeros((trials, nr, ns))
 
                 Rho[:,1,:never_reward] = 0.
                 Rho[:,0,:never_reward] = 1.
-                
+
                 Rho[:,1,never_reward:never_reward+2] = ar.from_numpy(rew_probs[0,:,:]).permute((1,0))
                 Rho[:,0,never_reward:never_reward+2] = ar.from_numpy(1-rew_probs[0,:,:]).permute((1,0))
-                
+
                 Rho[:,1,never_reward+2:] = ar.from_numpy(rew_probs[1,:,:]).permute((1,0))
                 Rho[:,0,never_reward+2:] = ar.from_numpy(1-rew_probs[1,:,:]).permute((1,0))
-            
+
                 plt.figure(figsize=(10,5))
                 for i in range(4):
                     plt.plot(Rho[:,1,3+i], label="$p_{}$".format(i+1), linewidth=4)
@@ -432,7 +448,7 @@ for pl in [0.1,0.3,0.5,0.7,0.9]:
                 plt.legend(fontsize=18, bbox_to_anchor=(1.04,1))
                 plt.savefig("twostep_prob.svg",dpi=300)
                 plt.show()
-            
+
                 worlds = []
                 l = []
                 learn_pol = tend
@@ -441,75 +457,75 @@ for pl in [0.1,0.3,0.5,0.7,0.9]:
                 r_lambda = ar.tensor([rl])#0.6
                 dec_temp = ar.tensor([dt])#4.
                 l.append([learn_pol, avg, Rho, learn_habit, pol_lambda, r_lambda, dec_temp])
-            
+
                 par_list = []
-            
+
                 for p in itertools.product(l, utility):
                     par_list.append(p[0]+[p[1]])
-            
+
                 par_list = par_list*repetitions
-            
+
                 for i, pars in enumerate(par_list):
                     worlds.append(run_agent(pars))
-            
+
                     w = worlds[-1]
-            
+
                     # rewarded = ar.where(w.rewards[:trials-1,-1] == 1)[0]
-            
+
                     # unrewarded = ar.where(w.rewards[:trials-1,-1] == 0)[0]
-                    
+
                     rewarded = w.rewards[:trials-1,-1] == 1
-            
+
                     unrewarded = rewarded==False#w.rewards[:trials-1,-1] == 0
-            
+
                     # TODO: go back to ar.logical_and when on pytorch version 1.5
                     # rare = ar.cat((ar.where(own_logical_and(w.environment.hidden_states[:,1]==2, w.actions[:,0] == 0) == True)[0],
                     #                  ar.where(own_logical_and(w.environment.hidden_states[:,1]==1, w.actions[:,0] == 1) == True)[0]))
                     # rare.sort()
-            
+
                     # common = ar.cat((ar.where(own_logical_and(w.environment.hidden_states[:,1]==2, w.actions[:,0] == 1) == True)[0],
                     #                    ar.where(own_logical_and(w.environment.hidden_states[:,1]==1, w.actions[:,0] == 0) == True)[0]))
                     # common.sort()
-                    
+
                     rare = own_logical_or(own_logical_and(w.environment.hidden_states[:trials-1,1]==2, w.actions[:trials-1,0] == 0),
                                    own_logical_and(w.environment.hidden_states[:trials-1,1]==1, w.actions[:trials-1,0] == 1))
-            
+
                     common = rare==False#own_logical_or(own_logical_and(w.environment.hidden_states[:trials-1,1]==2, w.actions[:trials-1,0] == 1),
                              #        own_logical_and(w.environment.hidden_states[:trials-1,1]==1, w.actions[:trials-1,0] == 0))
-            
+
                     names = ["rewarded common", "rewarded rare", "unrewarded common", "unrewarded rare"]
-            
+
                     # index_list = [ar.intersect1d(rewarded, common), ar.intersect1d(rewarded, rare),
                     #              ar.intersect1d(unrewarded, common), ar.intersect1d(unrewarded, rare)]
-                    
+
                     rewarded_common = ar.where(own_logical_and(rewarded,common) == True)[0]
                     rewarded_rare = ar.where(own_logical_and(rewarded,rare) == True)[0]
                     unrewarded_common = ar.where(own_logical_and(unrewarded,common) == True)[0]
                     unrewarded_rare = ar.where(own_logical_and(unrewarded,rare) == True)[0]
-                    
+
                     index_list = [rewarded_common, rewarded_rare,
                                  unrewarded_common, unrewarded_rare]
-            
+
                     stayed_list = [(w.actions[index_list[i],0] == w.actions[index_list[i]+1,0]).sum()/float(len(index_list[i])) for i in range(4)]
-            
+
                     stayed.append(stayed_list)
 
-                    run_name = "twostage_agent"+str(i)+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tendency)+".json"
+                    run_name = "twostage_agent_daw_alph0_every"+str(i)+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tendency)+".json"
                     fname = os.path.join(folder, run_name)
-                    
+
                     actions = w.actions.numpy()
                     observations = w.observations.numpy()
                     rewards = w.rewards.numpy()
                     states = w.environment.hidden_states.numpy()
                     data = {"actions": actions, "observations": observations, "rewards": rewards, "states": states}
-    
+
                     jsonpickle_numpy.register_handlers()
                     pickled = pickle.encode(data)
                     with open(fname, 'w') as outfile:
                         json.dump(pickled, outfile)
-            
+
                 stayed_arr = array(stayed)
-                
+
                 plt.figure()
                 g = sns.barplot(data=stayed_arr)
                 g.set_xticklabels(names, rotation=45, horizontalalignment='right', fontsize=16)
@@ -529,14 +545,14 @@ for pl in [0.1,0.3,0.5,0.7,0.9]:
 #    stayed_unrew = ((w.actions[unrewarded,0] - w.actions[unrewarded+1,0]) == 0).sum()/len(unrewarded)
 
                 #print(gc.get_count())
-            
+
                 pickled = 0
                 #worlds = 0
-            
+
                 #print(gc.get_count())
-            
+
                 gc.collect()
-            
+
                 #print(gc.get_count())
 
 

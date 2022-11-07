@@ -85,6 +85,8 @@ class Group2Perception(object):
         self.big_trans_matrix = ar.stack([ar.stack([generative_model_states[:,:,policies[pi,t]] for pi in range(self.npi)]) for t in range(self.T-1)]).T.to(device)
         #print(self.big_trans_matrix.shape)
 
+        # self.reset()
+
     def reset(self):
         if len(self.dec_temp.shape) > 1:
             self.npart = self.dec_temp.shape[0]
@@ -340,10 +342,12 @@ class Group2Perception(object):
 
     def update_beliefs_dirichlet_pol_params(self, tau, t):
         assert(t == self.T-1)
-        chosen_pol = ar.argmax(self.posterior_policies[-1], axis=0).to(device)
+        chosen = ar.eye(self.npi)[ar.argmax(self.posterior_policies[-1], axis=0)].to(device)
+        chosen_pol = chosen.permute((2,0,1))
+        # print(chosen_pol.shape)
         #print(chosen_pol)
 #        self.dirichlet_pol_params[chosen_pol,:] += posterior_context.sum(axis=0)/posterior_context.sum()
-        dirichlet_pol_params = (1-self.pol_lambda) * self.dirichlet_pol_params[-1] + (1 - (1-self.pol_lambda))*self.dirichlet_pol_params_init + self.posterior_policies[-1]
+        dirichlet_pol_params = (1-self.pol_lambda)[None,:,:] * self.dirichlet_pol_params[-1] + (1 - (1-self.pol_lambda))[None,:,:]*self.dirichlet_pol_params_init + chosen_pol#*self.dirichlet_pol_params_init
         #dirichlet_pol_params[(chosen_pol[0],list(range(self.npart)))] += 1#posterior_context
 
         prior_policies = dirichlet_pol_params / dirichlet_pol_params.sum(axis=0)[None,...]#ar.exp(scs.digamma(self.dirichlet_pol_params) - scs.digamma(self.dirichlet_pol_params.sum(axis=0))[None,:])

@@ -10,7 +10,7 @@ Created on Mon Sep 13 14:09:11 2021
 import torch as ar
 array = ar.tensor
 
-ar.set_num_threads(2)
+ar.set_num_threads(1)
 print("torch threads", ar.get_num_threads())
 
 import pyro
@@ -33,10 +33,12 @@ import pandas as pd
 import os
 import scipy as sc
 import scipy.signal as ss
+from scipy.stats import pearsonr
 import bottleneck as bn
 import gc
 import sys
-
+from numpy import eye
+from statsmodels.stats.multitest import multipletests
 #device = ar.device("cuda") if ar.cuda.is_available() else ar.device("cpu")
 #device = ar.device("cuda")
 #device = ar.device("cpu")
@@ -111,14 +113,14 @@ data = []
 #     true_vals.append({"lamb_pi": pl, "lamb_r": rl, "dec_temp": dt, "h": 1./tend})
 
 
-for i in range(1):
-    for pl in [0.3, 0.7]:#[0.1,0.3,0.5,0.7,0.9]:
-        for rl in [0.7]:#[0.1,0.3,0.5,0.7,0.9]:
+for i in range(1,2):
+    for pl in [0.1,0.3,0.5,0.7,0.9]:
+        for rl in [0.1,0.3,0.5,0.7,0.9]:
             # TODO: wht does dt=9 not work?? gives control prob of nan
-            for dt in [5.]:#[2.,5.]:
-                for tend in [1]:#, 2, 10]:
+            for dt in [2.,4.]:#[2.,5.]:
+                for tend in [1,10]:#, 2, 10]:
 
-                    run_name = "twostage_agent"+str(i)+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tend)+".json"
+                    run_name = "twostage_agent_daw_alph0_every"+str(i)+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tend)+".json"
                     fname = os.path.join(folder, run_name)
 
                     jsonpickle_numpy.register_handlers()
@@ -165,7 +167,7 @@ for i in range(1):
                     # plt.ylabel("stay probability")
                     # plt.show()
 
-                    true_vals.append({"lamb_pi": pl, "lamb_r": rl, "dec_temp": dt,})# "h": 1./tend})
+                    true_vals.append({"lamb_pi": pl, "lamb_r": rl, "dec_temp": dt, "h": 1./tend})
 
 print('analyzing '+str(len(true_vals))+' data sets')
 
@@ -218,20 +220,36 @@ b2 = 0.7
 nb2 = 1.-b2
 
 B[:,:,0] = array([[  0,  0,  0,  0,  0,  0,  0,],
-                     [ b1,  0,  0,  0,  0,  0,  0,],
-                     [nb1,  0,  0,  0,  0,  0,  0,],
-                     [  0,  1,  0,  1,  0,  0,  0,],
-                     [  0,  0,  0,  0,  1,  0,  0,],
-                     [  0,  0,  1,  0,  0,  1,  0,],
-                     [  0,  0,  0,  0,  0,  0,  1,],])
+                      [ b1,  0,  0,  0,  0,  0,  0,],
+                      [nb1,  0,  0,  0,  0,  0,  0,],
+                      [  0,  1,  0,  1,  0,  0,  0,],
+                      [  0,  0,  0,  0,  1,  0,  0,],
+                      [  0,  0,  1,  0,  0,  1,  0,],
+                      [  0,  0,  0,  0,  0,  0,  1,],])
 
 B[:,:,1] = array([[  0,  0,  0,  0,  0,  0,  0,],
-                     [nb2,  0,  0,  0,  0,  0,  0,],
-                     [ b2,  0,  0,  0,  0,  0,  0,],
-                     [  0,  0,  0,  1,  0,  0,  0,],
-                     [  0,  1,  0,  0,  1,  0,  0,],
-                     [  0,  0,  0,  0,  0,  1,  0,],
-                     [  0,  0,  1,  0,  0,  0,  1,],])
+                      [nb2,  0,  0,  0,  0,  0,  0,],
+                      [ b2,  0,  0,  0,  0,  0,  0,],
+                      [  0,  0,  0,  1,  0,  0,  0,],
+                      [  0,  1,  0,  0,  1,  0,  0,],
+                      [  0,  0,  0,  0,  0,  1,  0,],
+                      [  0,  0,  1,  0,  0,  0,  1,],])
+
+# B[:,:,0] = array([[  0,  0,  0,  0,  0,  0,  0,],
+#                      [ b1,  0,  0,  0,  0,  0,  0,],
+#                      [nb1,  0,  0,  0,  0,  0,  0,],
+#                      [  0,  1,  0,  1,  0,  0,  0,],
+#                      [  0,  0,  1,  0,  1,  0,  0,],
+#                      [  0,  0,  0,  0,  0,  1,  0,],
+#                      [  0,  0,  0,  0,  0,  0,  1,],])
+
+# B[:,:,1] = array([[  0,  0,  0,  0,  0,  0,  0,],
+#                      [nb2,  0,  0,  0,  0,  0,  0,],
+#                      [ b2,  0,  0,  0,  0,  0,  0,],
+#                      [  0,  0,  0,  1,  0,  0,  0,],
+#                      [  0,  0,  0,  0,  1,  0,  0,],
+#                      [  0,  1,  0,  0,  0,  1,  0,],
+#                      [  0,  0,  1,  0,  0,  0,  1,],])
 
 # create reward generation
 #
@@ -340,21 +358,13 @@ agent = agt.FittingAgent(bayes_prc, [], pol,
 
 
 ###################################
-"""run inference"""
+"""inference convenience functions"""
 
-# inferrer = inf.SingleInference(agent, data[0])
+def infer(inferrer, iter_steps, prefix, total_num_iter_so_far):
 
-inferrer = inf.GroupInference(agent, structured_data)
+    inferrer.infer_posterior(iter_steps=iter_steps, num_particles=15, optim_kwargs={'lr': .01})#, param_dict
 
-num_steps = 50
-size_chunk = num_steps
-
-for i in range(num_steps//size_chunk):
-    print('taking steps '+str(i*(size_chunk)+1)+' to '+str((i+1)*(size_chunk))+' out of total '+str(num_steps))
-    inferrer.infer_posterior(iter_steps=size_chunk, num_particles=15)#, param_dict
-
-    total_num_iter_so_far = i*size_chunk
-    storage_name = 'recovered_'+str(total_num_iter_so_far)+'.save'#h_recovered
+    storage_name = prefix+'recovered_'+str(total_num_iter_so_far+iter_steps)+'.save'#h_recovered
     storage_name = os.path.join(folder, storage_name)
     inferrer.save_parameters(storage_name)
     # inferrer.load_parameters(storage_name)
@@ -368,99 +378,212 @@ for i in range(num_steps//size_chunk):
     plt.savefig('recovered_ELBO')
     plt.show()
 
-n_samples=1000
-sample_df = inferrer.sample_posterior(n_samples=n_samples) #inferrer.plot_posteriors(n_samples=1000)
+def sample_posterior(inferrer, prefix, total_num_iter_so_far, n_samples=500):
 
-inferred_values = []
+    sample_df = inferrer.sample_posterior(n_samples=n_samples) #inferrer.plot_posteriors(n_samples=1000)
+    # inferrer.plot_posteriors(n_samples=n_samples)
 
-for i in range(len(data)):
-    mean_pl = sample_df[sample_df['subject']==i]['lamb_pi'].mean()
-    mean_rl = sample_df[sample_df['subject']==i]['lamb_r'].mean()
-    mean_dt = sample_df[sample_df['subject']==i]['dec_temp'].mean()
-    # mean_h = sample_df[sample_df['subject']==i]['h'].mean()
+    inferred_values = []
 
-    inferred_values.append({"lamb_pi": mean_pl, "lamb_r": mean_rl, "dec_temp": mean_dt})#, "h": mean_h})
+    for i in range(len(data)):
+        mean_pl = sample_df[sample_df['subject']==i]['lamb_pi'].mean()
+        mean_rl = sample_df[sample_df['subject']==i]['lamb_r'].mean()
+        mean_dt = sample_df[sample_df['subject']==i]['dec_temp'].mean()
+        if infer_h:
+            mean_h = sample_df[sample_df['subject']==i]['h'].mean()
 
-true_pl = [val['lamb_pi'] for val in true_vals]
-true_rl = [val['lamb_r'] for val in true_vals]
-true_dt = [val['dec_temp'] for val in true_vals]
-# true_h = [val['h'] for val in true_vals]
+            inferred_values.append({"lamb_pi": mean_pl, "lamb_r": mean_rl, "dec_temp": mean_dt, "h": mean_h})
+        else:
+            inferred_values.append({"lamb_pi": mean_pl, "lamb_r": mean_rl, "dec_temp": mean_dt})
 
-inferred_pl = [val['lamb_pi'] for val in inferred_values]
-inferred_rl = [val['lamb_r'] for val in inferred_values]
-inferred_dt = [val['dec_temp'] for val in inferred_values]
-# inferred_h = [val['h'] for val in inferred_values]
+    true_pl = [val['lamb_pi'] for val in true_vals]
+    true_rl = [val['lamb_r'] for val in true_vals]
+    true_dt = [val['dec_temp'] for val in true_vals]
+    if infer_h:
+        true_h = [val['h'] for val in true_vals]
 
-total_df = sample_df.copy()
-total_df['true_lamb_pi'] = ar.tensor(true_pl).repeat(n_samples)
-total_df['true_lamb_r'] = ar.tensor(true_rl).repeat(n_samples)
-total_df['true_dec_temp'] = ar.tensor(true_dt).repeat(n_samples)
-# total_df['true_h'] = ar.tensor(true_h).repeat(n_samples)
+    inferred_pl = [val['lamb_pi'] for val in inferred_values]
+    inferred_rl = [val['lamb_r'] for val in inferred_values]
+    inferred_dt = [val['dec_temp'] for val in inferred_values]
+    if infer_h:
+        inferred_h = [val['h'] for val in inferred_values]
 
-# new_df = sample_df.copy()
-# new_df['true_lamb_pi'] = ar.zeros(len(data)*n_samples) - 1
-# new_df['true_lamb_r'] = ar.zeros(len(data)*n_samples) - 1
-# new_df['true_dec_temp'] = ar.zeros(len(data)*n_samples) - 1
+    total_df = sample_df.copy()
+    total_df['true_lamb_pi'] = ar.tensor(true_pl).repeat(n_samples)
+    total_df['true_lamb_r'] = ar.tensor(true_rl).repeat(n_samples)
+    total_df['true_dec_temp'] = ar.tensor(true_dt).repeat(n_samples)
+    total_df['inferred_lamb_pi'] = ar.tensor(inferred_pl).repeat(n_samples)
+    total_df['inferred_lamb_r'] = ar.tensor(inferred_rl).repeat(n_samples)
+    total_df['inferred_dec_temp'] = ar.tensor(inferred_dt).repeat(n_samples)
+    if infer_h:
+        total_df['true_h'] = ar.tensor(true_h).repeat(n_samples)
+        total_df['inferred_h'] = ar.tensor(inferred_h).repeat(n_samples)
 
-# for i in range(len(data)):
-#     new_df.loc[new_df['subject']==i,'true_lamb_pi'] = true_vals[i]['lamb_pi']
-#     new_df.loc[new_df['subject']==i,'true_lamb_r']= true_vals[i]['lamb_r']
-#     new_df.loc[new_df['subject']==i,'true_dec_temp'] = true_vals[i]['dec_temp']
+    sample_file = prefix+'recovered_samples_'+str(total_num_iter_so_far)+'.csv'
+    fname = os.path.join(folder, sample_file)
+    total_df.to_csv(fname)
 
-# import numpy
-# print(numpy.allclose(total_df['true_lamb_pi'], new_df['true_lamb_pi']))
+    return total_df
 
-sample_file = 'recovered_samples.csv'
-fname = os.path.join(folder, sample_file)
-total_df.to_csv(fname)
 
-plt.figure()
-sns.violinplot(data=total_df, x='true_lamb_pi', y='lamb_pi')
-plt.show()
+def plot_posterior(total_df, total_num_iter_so_far):
 
-plt.figure()
-sns.violinplot(data=total_df, x='true_lamb_r', y='lamb_r')
-plt.show()
+    # new_df = sample_df.copy()
+    # new_df['true_lamb_pi'] = ar.zeros(len(data)*n_samples) - 1
+    # new_df['true_lamb_r'] = ar.zeros(len(data)*n_samples) - 1
+    # new_df['true_dec_temp'] = ar.zeros(len(data)*n_samples) - 1
 
-plt.figure()
-sns.violinplot(data=total_df, x='true_dec_temp', y='dec_temp')
-plt.show()
+    # for i in range(len(data)):
+    #     new_df.loc[new_df['subject']==i,'true_lamb_pi'] = true_vals[i]['lamb_pi']
+    #     new_df.loc[new_df['subject']==i,'true_lamb_r']= true_vals[i]['lamb_r']
+    #     new_df.loc[new_df['subject']==i,'true_dec_temp'] = true_vals[i]['dec_temp']
 
-# plt.figure()
-# sns.violinplot(data=total_df, x='true_h', y='h')
-# plt.show()
+    # import numpy
+    # print(numpy.allclose(total_df['true_lamb_pi'], new_df['true_lamb_pi']))
 
-plt.figure()
-sns.scatterplot(x=true_pl, y=inferred_pl)
-plt.xlim([0,1])
-plt.ylim([0,1])
-plt.xlabel("true lamb_pi")
-plt.ylabel("inferred lamb_pi")
-plt.show()
+    plt.figure()
+    sns.violinplot(data=total_df, x='true_lamb_pi', y='lamb_pi', alpha=0.5)
+    sns.stripplot(data=total_df, x='true_lamb_pi', y='lamb_pi', hue='subject')
+    g = plt.gca()
+    g.set_xlim(left=-0.1, right=1.1)
+    g.set_ylim(bottom=-0.1, top=1.1)
+    plt.show()
 
-plt.figure()
-sns.scatterplot(x=true_rl, y=inferred_rl)
-plt.xlim([0,1])
-plt.ylim([0,1])
-plt.xlabel("true lamb_r")
-plt.ylabel("inferred lamb_r")
-plt.show()
+    plt.figure()
+    sns.violinplot(data=total_df, x='true_lamb_r', y='lamb_r', alpha=0.5)
+    sns.stripplot(data=total_df, x='true_lamb_r', y='lamb_r', hue='subject')
+    plt.xlim([-0.1, 1.1])
+    plt.ylim([-0.1, 1.1])
+    plt.show()
 
-plt.figure()
-sns.scatterplot(x=true_dt, y=inferred_dt)
-plt.xlim([0,10])
-plt.ylim([0,10])
-plt.xlabel("true dec_temp")
-plt.ylabel("inferred dec_temp")
-plt.show()
+    plt.figure()
+    sns.violinplot(data=total_df, x='true_dec_temp', y='dec_temp', alpha=0.5)
+    sns.stripplot(data=total_df, x='true_dec_temp', y='dec_temp', hue='subject')
+    plt.xlim([0, 10])
+    plt.ylim([0, 10])
+    plt.show()
 
-# plt.figure()
-# sns.scatterplot(x=true_h, y=inferred_h)
-# plt.xlim([0,1])
-# plt.ylim([0,1])
-# plt.xlabel("true h")
-# plt.ylabel("inferred h")
-# plt.show()
+    if infer_h:
+        plt.figure()
+        sns.violinplot(data=total_df, x='true_h', y='h', alpha=0.5)
+        sns.stripplot(data=total_df, x='true_h', y='h', hue='subject')
+        plt.xlim([-0.1, 1.1])
+        plt.ylim([-0.1, 1.1])
+        plt.show()
+
+    plt.figure()
+    sns.scatterplot(data=total_df, x="true_lamb_pi", y="inferred_lamb_pi")
+    plt.xlim([-0.1, 1.1])
+    plt.ylim([-0.1, 1.1])
+    plt.xlabel("true lamb_pi")
+    plt.ylabel("inferred lamb_pi")
+    plt.savefig("recovered_"+str(total_num_iter_so_far)+"_lamb_pi.svg")
+    plt.show()
+
+    plt.figure()
+    sns.scatterplot(data=total_df, x="true_lamb_r", y="inferred_lamb_r")
+    plt.xlim([-0.1, 1.1])
+    plt.ylim([-0.1, 1.1])
+    plt.xlabel("true lamb_r")
+    plt.ylabel("inferred lamb_r")
+    plt.savefig("recovered_"+str(total_num_iter_so_far)+"_lamb_r.svg")
+    plt.show()
+
+    plt.figure()
+    sns.scatterplot(data=total_df, x="true_dec_temp", y="inferred_dec_temp")
+    plt.xlim([0,10])
+    plt.ylim([0,10])
+    plt.xlabel("true dec_temp")
+    plt.ylabel("inferred dec_temp")
+    plt.savefig("recovered_"+str(total_num_iter_so_far)+"_dec_temp.svg")
+    plt.show()
+
+    if infer_h:
+        plt.figure()
+        sns.scatterplot(data=total_df, x="true_h", y="inferred_h")
+        plt.xlim([-0.1, 1.1])
+        plt.ylim([-0.1, 1.1])
+        plt.xlabel("true h")
+        plt.ylabel("inferred h")
+        plt.savefig("recovered_"+str(total_num_iter_so_far)+"_h.svg")
+        plt.show()
+
+def plot_correlations(total_df, total_num_iter_so_far):
+
+    smaller_df = pd.DataFrame()
+    smaller_df['mean policy forgetting factor'] = total_df['inferred_lamb_pi']
+    smaller_df['mean reward forgetting factor'] = total_df['inferred_lamb_r']
+    smaller_df['mean decision temperature'] = total_df['inferred_dec_temp']
+    if infer_h:
+        smaller_df['mean habitual tendency'] = total_df['inferred_h']
+
+    smaller_df['true policy forgetting factor'] = total_df['true_lamb_pi']
+    smaller_df['true reward forgetting factor'] = total_df['true_lamb_r']
+    smaller_df['true decision temperature'] = total_df['true_dec_temp']
+    if infer_h:
+        smaller_df['true habitual tendency'] = total_df['true_h']
+
+    rho = smaller_df.corr()
+    pval = smaller_df.corr(method=lambda x, y: pearsonr(x, y)[1]) - eye(*rho.shape)
+    reject, pval_corrected, alphaS, alphaB = multipletests(pval, method='bonferroni')
+
+    plt.figure()
+    sns.heatmap(smaller_df.corr(), annot=True, fmt='.2f')#[pval_corrected<alphaB]
+    plt.savefig("recovered_"+str(total_num_iter_so_far)+"_mean_corr.svg")
+    plt.show()
+
+    sample_df = pd.DataFrame()
+    sample_df['sampled policy forgetting factor'] = total_df['lamb_pi']
+    sample_df['sampled reward forgetting factor'] = total_df['lamb_r']
+    sample_df['sampled decision temperature'] = total_df['dec_temp']
+    if infer_h:
+        sample_df['sampled habitual tendency'] = total_df['h']
+
+    sample_df['true policy forgetting factor'] = total_df['true_lamb_pi']
+    sample_df['true reward forgetting factor'] = total_df['true_lamb_r']
+    sample_df['true decision temperature'] = total_df['true_dec_temp']
+    if infer_h:
+        smaller_df['true habitual tendency'] = total_df['true_h']
+
+    rho = sample_df.corr()
+    pval = sample_df.corr(method=lambda x, y: pearsonr(x, y)[1]) - eye(*rho.shape)
+    reject, pval_corrected, alphaS, alphaB = multipletests(pval, method='bonferroni')
+
+    plt.figure()
+    sns.heatmap(sample_df.corr(), annot=True, fmt='.2f')#[pval_corrected<alphaB]
+    plt.savefig("recovered_"+str(total_num_iter_so_far)+"_sample_corr.svg")
+    plt.show()
+
+
+"""run inference"""
+
+# inferrer = inf.SingleInference(agent, structured_data)#data[0])
+
+infer_h = True
+
+if infer_h:
+    inferrer = inf.GroupHInference(agent, structured_data)
+    prefix = "h_"
+else:
+    inferrer = inf.Group2Inference(agent, structured_data)
+    prefix = ""
+
+print("this is inference using", type(inferrer))
+
+num_steps = 250
+size_chunk = 50
+total_num_iter_so_far = 0
+
+for i in range(total_num_iter_so_far, num_steps, size_chunk):
+    print('taking steps '+str(i+1)+' to '+str(i+size_chunk)+' out of total '+str(num_steps))
+
+    infer(inferrer, size_chunk, prefix, total_num_iter_so_far)
+    total_num_iter_so_far += size_chunk
+    full_df = sample_posterior(inferrer, prefix, total_num_iter_so_far)
+    plot_posterior(full_df, total_num_iter_so_far)
+
 
 #print("this is inference for pl =", pl, "rl =", rl, "dt =", dt, "tend=", tend)
 # print(param_dict)
+
+print(full_df.corr())
