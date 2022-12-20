@@ -35,8 +35,10 @@ class Group2Perception(object):
                  alpha_0 = None,
                  dirichlet_rew_params = None,
                  generative_model_context = None,
+                 learn_habit = False,
+                 learn_rew = False,
                  T=5, trials=10, pol_lambda=0, r_lambda=0, non_decaying=0,
-                 dec_temp=1., npart=1, nsubs=1):
+                 dec_temp=1., npart=1, nsubs=1, infer_alpha_0=False, use_h=True):
 
         self.generative_model_observations = generative_model_observations
         self.generative_model_states = generative_model_states
@@ -45,6 +47,8 @@ class Group2Perception(object):
         self.T = T
         self.trials = trials
         self.nh = prior_states.shape[0]
+        self.learn_habit = learn_habit
+        self.learn_rew = learn_rew
         self.pol_lambda = pol_lambda
         self.r_lambda = r_lambda
         self.non_decaying = non_decaying
@@ -55,7 +59,18 @@ class Group2Perception(object):
         self.na = len(self.actions)
         self.npart = npart
         self.nsubs = nsubs
+        # infer_alpha_0 says whether to infer alpha_0 at all
+        self.infer_alpha_0 = infer_alpha_0
+        # use_h says whether to use h or alpha_0 for inference
+        self.use_h = use_h
         self.alpha_0 = alpha_0
+
+        if self.infer_alpha_0:
+            self.npars = 4
+        else:
+            self.npars = 3
+        self.param_names = list(self.locs_to_pars(ar.zeros(self.npars)).keys())
+
         self.dirichlet_rew_params_init = dirichlet_rew_params#ar.stack([dirichlet_rew_params]*self.npart, dim=-1)
         self.dirichlet_pol_params_init = ar.zeros((self.npi,self.npart, self.nsubs)).to(device) + self.alpha_0[None,...]#ar.stack([dirichlet_pol_params]*self.npart, dim=-1)
 
@@ -86,6 +101,41 @@ class Group2Perception(object):
         #print(self.big_trans_matrix.shape)
 
         # self.reset()
+
+    def locs_to_pars(self, locs):
+
+        if self.infer_alpha_0:
+            if self.use_h:
+                par_dict = {"pol_lambda": ar.sigmoid(locs[...,0]),
+                            "r_lambda": ar.sigmoid(locs[...,1]),
+                            "dec_temp": 10*ar.sigmoid(locs[...,2]),
+                            "h": ar.sigmoid(locs[...,3])}
+            else:
+                par_dict = {"pol_lambda": ar.sigmoid(locs[...,0]),
+                            "r_lambda": ar.sigmoid(locs[...,1]),
+                            "dec_temp": 10*ar.sigmoid(locs[...,2]),
+                            "alpha_0": ar.exp(locs[...,3])+1}
+        else:
+            par_dict = {"pol_lambda": ar.sigmoid(locs[...,0]),
+                        "r_lambda": ar.sigmoid(locs[...,1]),
+                        "dec_temp": 10*ar.sigmoid(locs[...,2])}
+
+        return par_dict
+
+    def set_parameters(self, locs):
+
+        par_dict = self.locs_to_pars(locs)
+
+        if 'pol_lambda' in par_dict.keys():
+            self.pol_lambda = par_dict['pol_lambda']
+        if 'r_lambda' in par_dict.keys():
+            self.r_lambda = par_dict['r_lambda']
+        if 'dec_temp' in par_dict.keys():
+            self.dec_temp = par_dict['dec_temp']
+        if 'h' in par_dict.keys():
+            self.alpha_0 = 1./par_dict['h']
+        elif 'alpha_0' in par_dict.keys():
+            self.alpha_0 = par_dict['alpha_0']
 
     def reset(self):
         if len(self.dec_temp.shape) > 1:
@@ -287,6 +337,40 @@ class Group2Perception(object):
         self.posterior_states.append(posterior)
 
         return posterior
+
+    def update_beliefs(self, tau, t, observation, reward, prev_response, possible_policies):
+
+        self.update_beliefs_states(tau, t, observation, reward, possible_policies)
+
+        #update beliefs about policies
+        self.update_beliefs_policies(tau, t) #self.posterior_policies[tau, t], self.likelihood[tau,t]
+        # if tau == 0:
+        #     prior_context = self.prior_context
+        # else: #elif t == 0:
+        #     prior_context = ar.dot(self.perception.transition_matrix_context, self.posterior_context[tau-1, -1]).reshape((self.nc))
+#            else:
+#                prior_context = ar.dot(self.perception.transition_matrix_context, self.posterior_context[tau, t-1])
+
+        # print(tau,t)
+        # print("prior", prior_context)
+        # print("post", self.posterior_context[tau, t])
+
+        # if t < self.T-1:
+        #     #post_pol = ar.matmul(self.posterior_policies[tau, t], self.posterior_context[tau, t])
+        #     self.posterior_actions[tau, t] = self.estimate_action_probability(tau, t)
+
+        if t == self.T-1 and self.learn_habit:
+            self.update_beliefs_dirichlet_pol_params(tau, t)
+
+        if False:
+            self.posterior_rewards[tau, t-1] = ar.einsum('rsc,spc,pc,c->r',
+                                                  self.perception.generative_model_rewards,
+                                                  self.posterior_states[tau,t,:,t],
+                                                  self.posterior_policies[tau,t])
+        #if reward > 0:
+        # check later if stuff still works!
+        if self.learn_rew:# and t==self.T-1:
+            self.update_beliefs_dirichlet_rew_params(tau, t, reward)
 
     def update_beliefs_states(self, tau, t, observation, reward, possible_policies):
         #estimate expected state distribution
@@ -1730,3 +1814,636 @@ class TwoStepPerception(object):
 
         return self.dirichlet_rew_params
 
+
+class mfmbPerception(object):
+    def __init__(self,
+                 generative_model_states,
+                 policies,
+                 Q_mf_init,
+                 Q_mb_init,
+                 utility,
+                 lamb = 0.9,
+                 alpha = 0.1,
+                 beta_mf = 2.,
+                 beta_mb = 2.,
+                 p = 0.1,
+                 T=3,
+                 npart=1, nsubs=1):
+
+        self.generative_model_states = generative_model_states
+        self.alpha = alpha
+        self.beta_mb = beta_mb
+        self.beta_mf = beta_mf
+        self.lamb = lamb
+        self.p = p
+        self.ns = generative_model_states.shape[0]
+        self.utility = utility
+        self.nr = utility.shape[0]
+        self.na = len(ar.unique(policies))
+        self.T = T
+        self.prev_first_action = []
+        self.action_probs = []
+
+        self.Q_mf_init = Q_mf_init
+        self.Q_mb_init = Q_mb_init
+        self.Q_mf = [Q_mf_init] #sxa
+        self.Q_mb = [Q_mb_init] #sxa
+
+        self.observations = []
+        self.rewards = []
+        self.actions = []
+
+        self.posterior_actions = [ar.zeros((self.na))+1./self.na]
+
+    def set_parameters(self, **kwargs):
+
+        if 'lamb' in kwargs.keys():
+            self.lamb = kwargs['lamb']
+        if 'alpha' in kwargs.keys():
+            self.alpha = kwargs['alpha']
+        if 'beta_mf' in kwargs.keys():
+            self.beta_mf = kwargs['beta_mf']
+        if 'beta_mb' in kwargs.keys():
+            self.beta_mb = 1./kwargs['beta_mb']
+        if 'p' in kwargs.keys():
+            self.p = kwargs['p']
+
+    def reset(self):
+
+        if len(self.alpha.shape) > 1:
+            self.npart = self.alpha.shape[0]
+            self.nsubs = self.dec_temp.shape[1]
+        else:
+            self.nsubs = self.alpha.shape[0]
+            self.npart = 1
+            #self.alpha_0 = self.alpha_0[None,:]
+            self.lamb = self.lamb[None,:]
+            self.alpha = self.alpha[None,:]
+            self.beta_mf = self.beta_mf[None,:]
+            self.beta_mb = self.beta_mb[None,:]
+            self.p = self.p[None,:]
+
+        self.prev_first_action = []
+        self.action_probs = []
+
+        self.Q_mf = [[ar.stack([ar.stack([self.Q_mf_init[k]]*self.npart)]*self.nsubs).permute(2,3,1,0) for k in range(3)]] #sxa
+        self.Q_mb = [[ar.stack([ar.stack([self.Q_mb_init[k]]*self.npart)]*self.nsubs).permute(2,3,1,0) for k in range(3)]] #sxa
+
+        self.posterior_actions = [ar.zeros(self.na,self.npart,self.nsubs)+1./self.na]
+
+        self.observations = []
+        self.rewards = []
+        self.actions = []
+
+
+    def update_mf(self, tau, t, chosen_action):
+
+        # paper has -1, 1 for reward and no reward?!
+        # these eqs are according to Otte et al. 2013
+        assert(t==self.T-1)
+        print("update mf", tau, t)
+
+        Q_mf = self.Q_mf[-1]
+
+        new_Q_mf = [ar.zeros((self.ns, self.na, self.npart, self.nsubs))]
+
+        #second stage
+        post_states2 = ar.eye(self.ns)[:,self.observations[-2]]
+        post_rewards2 = ar.eye(self.nr)[:,self.rewards[-1]]
+        post_past_action2 = ar.eye(self.na)[:,self.actions[-1]]
+        curr_state_action_pair2 = post_states2[:,None,None,...]*post_past_action2[None,:,None,...]
+        full_rewarded2 = (curr_state_action_pair2*(post_rewards2*self.utility[:,None])[None,None,:,...]).sum(dim=2)
+
+        pred_err2 = (full_rewarded2[:,:,None,:] + curr_state_action_pair2*Q_mf[2])/self.alpha - curr_state_action_pair2*Q_mf[1]#/self.alpha
+        update2 = Q_mf[1] + self.alpha*pred_err2
+        # also has forgetting factor?! (1-self.alpha)
+        new_Q_mf1 = ar.where(curr_state_action_pair2>0, update2, (1-self.alpha)*Q_mf[1])#(1-self.alpha)*
+        new_Q_mf.append(new_Q_mf1)
+
+        #first stage
+        post_states1 = ar.eye(self.ns)[:,self.observations[-3]]
+        post_rewards1 = ar.eye(self.nr)[:,self.rewards[-2]]
+        post_past_action1 = ar.eye(self.na)[:,self.actions[-2]]
+        curr_state_action_pair1 = post_states1[:,None,None,...]*post_past_action1[None,:,None,...]
+        full_rewarded1 = (curr_state_action_pair1*(post_rewards1*self.utility[:,None])[None,None,:,...]).sum(dim=2)
+
+        pred_err1 = (full_rewarded1[:,:,None,:].sum() + (curr_state_action_pair2*new_Q_mf1).sum())/self.alpha - (curr_state_action_pair1*Q_mf[0]).sum()#/self.alpha
+        print(pred_err1.shape)
+        print("pred err1", pred_err1)
+        print("pred err2 sum", pred_err2.sum())
+        update = Q_mf[0] + self.alpha*(pred_err1.sum() + self.lamb*pred_err2.sum())
+        print(self.lamb)
+        print(self.lamb*pred_err2.sum())
+        # also has forgetting factor?! (1-self.alpha)
+        new_Q_mf.append(ar.where(curr_state_action_pair1>0, update, (1-self.alpha)*Q_mf[0]))#(1-self.alpha)*
+
+        new_Q_mf.reverse()
+
+        print(new_Q_mf)
+
+        self.Q_mf.append(new_Q_mf)
+
+
+    def update_mb(self, tau, t, chosen_action):
+
+        Q_mb = self.Q_mb[-1]
+        Q_mf = self.Q_mf[-1]
+
+        # print("mb update")
+        # print(Q_mf[1].shape)
+
+        next_best_Q = ar.amax(Q_mf[1], dim=1)
+
+        # print(Q_mf[1][:,:,0,0])
+        # print(next_best_Q[:,:,0])
+        # print(self.generative_model_states[:,:,next_best_action,None,None].shape)
+        # print(Q_mf[1][None,:,next_best_action,:,:].shape)
+
+        post_states1 = ar.eye(self.ns)[:,self.observations[-3]]
+        post_past_action1 = ar.eye(self.na)[:,self.actions[-2]]
+        curr_state_action_pair1 = post_states1[:,None,None,...]*post_past_action1[None,:,None,...]
+
+        update_mb1 = (self.generative_model_states[:,:,:,None,None] * next_best_Q[:,None,None,...]).sum(dim=0)
+        print("update mb")
+        print(update_mb1)
+        print((self.generative_model_states * next_best_Q[:,None,None,0,0]).sum(dim=0))
+
+        new_Q_mb1 = ar.where(curr_state_action_pair1>0, update_mb1, (1-self.alpha)*Q_mb[0])
+        # print(new_Q_mb1)
+
+        new_Q_mb = [new_Q_mb1, Q_mf[1], ar.zeros((self.ns, self.na, self.npart, self.nsubs))]
+
+        self.Q_mb.append(new_Q_mb)
+
+    def calc_action_probs(self, tau, t):
+
+        Q_mb = ar.stack([self.Q_mb[-1][t][self.observations[-1][i],:,:,i] for i in range(self.nsubs)], dim=-1)
+        Q_mf = ar.stack([self.Q_mf[-1][t][self.observations[-1][i],:,:,i] for i in range(self.nsubs)], dim=-1)
+
+        if tau==0:
+            rep = ar.eye(self.na)[:,self.prev_first_action[-1]][:,None,:]
+        else:
+            rep = 0
+
+        exponent = self.beta_mb*Q_mb + self.beta_mf*Q_mf + self.p*rep
+
+        action_probs = ar.softmax(exponent, dim=0)
+        print("calc probs")
+        print(tau, t, Q_mb[:,0,0])
+        print(Q_mf[:,0,0])
+        print(exponent[:,0,0])
+        print(action_probs)
+
+        self.posterior_actions.append(action_probs)
+
+    def update_beliefs(self, tau, t, observation, reward, chosen_action, possible_policies):
+
+        self.observations.append(observation)
+        self.rewards.append(reward)
+        self.actions.append(chosen_action)
+
+        if t==1:
+            self.prev_first_action.append(chosen_action)
+
+        if t==self.T-1:
+            self.update_mf(tau, t, chosen_action)
+            self.update_mb(tau, t, chosen_action)
+        elif tau>0 and t<self.T-1:
+            self.calc_action_probs(tau, t)
+
+
+
+
+class mfmb2Perception(object):
+    def __init__(self,
+                 generative_model_states,
+                 policies,
+                 Q_mf_init,
+                 Q_mb_init,
+                 utility,
+                 lamb = 0.9,
+                 alpha = 0.1,
+                 beta_mf = 2.,
+                 beta_mb = 2.,
+                 p = 0.1,
+                 T=3,
+                 npart=1, nsubs=1,
+                 use_p=True):
+
+        self.generative_model_states = generative_model_states[:3,:3,...]
+        self.alpha = alpha
+        self.beta_mb = beta_mb
+        self.beta_mf = beta_mf
+        self.lamb = lamb
+        self.p = p
+        self.ns = self.generative_model_states.shape[0]
+        self.utility = utility
+        self.nr = utility.shape[0]
+        self.na = len(ar.unique(policies))
+        self.T = T
+        self.prev_first_action = []
+        self.action_probs = []
+
+        self.use_p = use_p
+        if self.use_p:
+            self.npars = 5
+        else:
+            self.npars = 4
+        self.param_names = list(self.locs_to_pars(ar.zeros(self.npars)).keys())
+
+        self.Q_mf_init = Q_mf_init
+        self.Q_mb_init = Q_mb_init
+        self.Q_mf = [Q_mf_init] #sxa
+        self.Q_mb = [Q_mb_init] #sxa
+
+        self.observations = []
+        self.rewards = []
+        self.actions = []
+
+        self.posterior_actions = [ar.zeros((self.na))+1./self.na]
+
+    def locs_to_pars(self, locs):
+
+        if self.use_p:
+            par_dict = {"lamb": ar.sigmoid(locs[...,0]),
+                        "alpha": ar.sigmoid(locs[...,1]),
+                        "beta_mf": 10*ar.sigmoid(locs[...,2]),
+                        "beta_mb": 10*ar.sigmoid(locs[...,3]),
+                        "p": 10*ar.sigmoid(locs[...,4])}
+        else:
+            par_dict = {"lamb": ar.sigmoid(locs[...,0]),
+                        "alpha": ar.sigmoid(locs[...,1]),
+                        "beta_mf": 10*ar.sigmoid(locs[...,2]),
+                        "beta_mb": 10*ar.sigmoid(locs[...,3])}
+
+        return par_dict
+
+    def set_parameters(self, locs):
+
+        par_dict = self.locs_to_pars(locs)
+
+        if 'lamb' in par_dict:
+            self.lamb = par_dict['lamb']
+        if 'alpha' in par_dict:
+            self.alpha = par_dict['alpha']
+        if 'beta_mf' in par_dict:
+            self.beta_mf = par_dict['beta_mf']
+        if 'beta_mb' in par_dict:
+            self.beta_mb = par_dict['beta_mb']
+        if 'p' in par_dict:
+            self.p = par_dict['p']
+
+    def reset(self):
+
+        if len(self.alpha.shape) > 1:
+            self.npart = self.alpha.shape[0]
+            self.nsubs = self.alpha.shape[1]
+        else:
+            self.nsubs = self.alpha.shape[0]
+            self.npart = 1
+            #self.alpha_0 = self.alpha_0[None,:]
+            self.lamb = self.lamb[None,:]
+            self.alpha = self.alpha[None,:]
+            self.beta_mf = self.beta_mf[None,:]
+            self.beta_mb = self.beta_mb[None,:]
+            self.p = self.p[None,:]
+
+        self.prev_first_action = []
+        self.action_probs = []
+
+        self.Q_mf = [[ar.stack([ar.stack([self.Q_mf_init[k]]*self.npart)]*self.nsubs).permute(2,3,1,0) for k in range(2)]] #sxa
+        self.Q_mb = [[ar.stack([ar.stack([self.Q_mb_init[k]]*self.npart)]*self.nsubs).permute(2,3,1,0) for k in range(2)]] #sxa
+
+        self.posterior_actions = [ar.zeros(self.na,self.npart,self.nsubs)+1./self.na]
+
+        self.observations = []
+        self.rewards = []
+        self.actions = []
+
+
+    def update_mf(self, tau, t):
+
+        # paper has -1, 1 for reward and no reward?!
+        # these eqs are according to Otte et al. 2013
+        # attention! the supplementary material from otto et al seems to be riddled with bugs
+        # the MF stage 1 update has now changed to a logical version
+        assert(t==self.T-1)
+        Q_mf = self.Q_mf[-1]
+
+        Q_mf1 = Q_mf[0]
+        Q_mf2 = Q_mf[1]
+        # Q_mf3 is 0 anyways according to the paper, but they drag it along so I will too
+
+        action1 = self.actions[-2]
+        action2 = self.actions[-1]
+
+        state1 = self.observations[-3]
+        state2 = self.observations[-2]
+
+        reward1 = self.utility[self.rewards[-2]]
+        reward2 = self.utility[self.rewards[-1]]
+        # print(reward2)
+        # print(reward1)
+
+        new_Q_mf3 = 0
+
+        # second stage update
+        state_action_pair2 = ar.eye(self.ns)[:,state2][:,None,None,...]*ar.eye(self.na)[:,action2][None,:,None,...]
+
+        pred_err2 = (reward2[None,None,None,...] + new_Q_mf3)/self.alpha[None,None,...] - Q_mf2*state_action_pair2
+        updated_Q_mf2 = Q_mf2*state_action_pair2 + self.alpha[None,None,...]*pred_err2
+
+        new_Q_mf2 = ar.where(state_action_pair2>0, updated_Q_mf2, (1-self.alpha)[None,None,...]*Q_mf2)
+
+        # first stage update
+        state_action_pair1 = ar.eye(self.ns)[:,state1][:,None,None,...]*ar.eye(self.na)[:,action1][None,:,None,...]
+
+        discounted_Q_mf2 = self.lamb*(new_Q_mf2*state_action_pair2).sum(dim=(0,1))
+        pred_err1 = (reward1[None,...] + discounted_Q_mf2[None,None,:,:])/self.alpha[None,None,...] - Q_mf1*state_action_pair1
+        updated_Q_mf1 = Q_mf1*state_action_pair1 + self.alpha[None,None,...]*(pred_err1)
+        # print("updated Q_mf")
+        # print(new_Q_mf2)
+
+        new_Q_mf1 = ar.where(state_action_pair1>0, updated_Q_mf1, (1-self.alpha)[None,None,...]*Q_mf1)
+
+        new_Q_mf = [new_Q_mf1, new_Q_mf2]
+        self.Q_mf.append(new_Q_mf)
+
+
+    def update_mb(self, tau, t):
+
+        Q_mb = self.Q_mb[-1]
+        Q_mf = self.Q_mf[-1]
+
+        state1 = self.observations[-3]
+        action1 = self.actions[-2]
+
+        Q_mf2 = Q_mf[1]
+
+        # best_Q2_s1 = Q_mf2[1].amax(dim=0)
+        # best_Q2_s2 = Q_mf2[2].amax(dim=0)
+
+        # Q_mb1_a0 = self.generative_model_states[1,0,0]*best_Q2_s1 + self.generative_model_states[2,0,0]*best_Q2_s2
+        # Q_mb1_a1 = self.generative_model_states[1,0,1]*best_Q2_s1 + self.generative_model_states[2,0,1]*best_Q2_s2
+
+        # new_Q_mb1 = ar.stack([ar.stack([Q_mb1_a0, Q_mb1_a1]), ar.zeros(2,self.npart,self.nsubs), ar.zeros(2,self.npart,self.nsubs)])
+
+        best_Q2 = ar.amax(Q_mf2, dim=1)
+
+        new_Q_mb1 = (self.generative_model_states[:,:,:,None,None]*best_Q2[:,None,None,...]).sum(dim=0)
+
+        new_Q_mb = [new_Q_mb1, Q_mf2]
+
+        self.Q_mb.append(new_Q_mb)
+
+    def calc_action_probs(self, tau, t):
+
+        Q_mb = ar.stack([self.Q_mb[-1][t][self.observations[-1][i],:,:,i] for i in range(self.nsubs)], dim=-1)
+        Q_mf = ar.stack([self.Q_mf[-1][t][self.observations[-1][i],:,:,i] for i in range(self.nsubs)], dim=-1)
+
+        if t==0:
+            rep = ar.eye(self.na)[:,self.prev_first_action[-1]][:,None,:]
+        else:
+            rep = 0
+
+        exponent = self.beta_mb*Q_mb + self.beta_mf*Q_mf + self.p*rep
+
+        action_probs = ar.softmax(exponent, dim=0)
+
+        self.posterior_actions.append(action_probs)
+
+    def update_beliefs(self, tau, t, observation, reward, chosen_action, possible_policies):
+
+        self.observations.append(observation)
+        self.rewards.append(reward)
+        self.actions.append(chosen_action)
+
+        if t==1:
+            self.prev_first_action.append(chosen_action)
+
+        if t==self.T-1:
+            # print(reward)
+            self.update_mf(tau, t)
+            self.update_mb(tau, t)
+        elif tau>0 and t<self.T-1:
+            self.calc_action_probs(tau, t)
+        elif tau==0 and t<self.T-1:
+            self.posterior_actions.append(ar.zeros(self.na,self.npart,self.nsubs)+1./self.na)
+
+
+
+class mfmbOrigPerception(object):
+    def __init__(self,
+                 generative_model_states,
+                 policies,
+                 Q_mf_init,
+                 Q_mb_init,
+                 utility,
+                 lamb = 0.9,
+                 alpha = 0.1,
+                 beta = 2.,
+                 w = 2.,
+                 p = 0.1,
+                 T=3,
+                 npart=1, nsubs=1,
+                 use_p=True):
+
+        self.generative_model_states = generative_model_states[:3,:3,...]
+        self.alpha = alpha
+        self.beta = beta
+        self.w = w
+        self.lamb = lamb
+        self.p = p
+        self.ns = self.generative_model_states.shape[0]
+        self.utility = utility
+        self.nr = utility.shape[0]
+        self.na = len(ar.unique(policies))
+        self.T = T
+        self.prev_first_action = []
+        self.action_probs = []
+
+        self.use_p = use_p
+        if self.use_p:
+            self.npars = 5
+        else:
+            self.npars = 4
+        self.param_names = list(self.locs_to_pars(ar.zeros(self.npars)).keys())
+
+        self.Q_mf_init = Q_mf_init
+        self.Q_mb_init = Q_mb_init
+        self.Q_mf = [Q_mf_init] #sxa
+        self.Q_mb = [Q_mb_init] #sxa
+
+        self.observations = []
+        self.rewards = []
+        self.actions = []
+
+        self.posterior_actions = [ar.zeros((self.na))+1./self.na]
+
+    def locs_to_pars(self, locs):
+
+        if self.use_p:
+            par_dict = {"lamb": ar.sigmoid(locs[...,0]),
+                        "alpha": ar.sigmoid(locs[...,1]),
+                        "beta": 10*ar.sigmoid(locs[...,2]),
+                        "w": ar.sigmoid(locs[...,3]),
+                        "p": ar.sigmoid(locs[...,4])}
+        else:
+            par_dict = {"lamb": ar.sigmoid(locs[...,0]),
+                        "alpha": ar.sigmoid(locs[...,1]),
+                        "beta": 10*ar.sigmoid(locs[...,2]),
+                        "w": ar.sigmoid(locs[...,3])}
+
+        return par_dict
+
+    def set_parameters(self, locs):
+
+        par_dict = self.locs_to_pars(locs)
+
+        if 'lamb' in par_dict:
+            self.lamb = par_dict['lamb']
+        if 'alpha' in par_dict:
+            self.alpha = par_dict['alpha']
+        if 'beta' in par_dict:
+            self.beta = par_dict['beta']
+        if 'w' in par_dict:
+            self.w = par_dict['w']
+        if 'p' in par_dict:
+            self.p = par_dict['p']
+
+    def reset(self):
+
+        if len(self.alpha.shape) > 1:
+            self.npart = self.alpha.shape[0]
+            self.nsubs = self.alpha.shape[1]
+        else:
+            self.nsubs = self.alpha.shape[0]
+            self.npart = 1
+            #self.alpha_0 = self.alpha_0[None,:]
+            self.lamb = self.lamb[None,:]
+            self.alpha = self.alpha[None,:]
+            self.beta = self.beta[None,:]
+            self.w = self.w[None,:]
+            self.p = self.p[None,:]
+
+        self.prev_first_action = []
+        self.action_probs = []
+
+        self.Q_mf = [[ar.stack([ar.stack([self.Q_mf_init[k]]*self.npart)]*self.nsubs).permute(2,3,1,0) for k in range(2)]] #sxa
+        self.Q_mb = [[ar.stack([ar.stack([self.Q_mb_init[k]]*self.npart)]*self.nsubs).permute(2,3,1,0) for k in range(2)]] #sxa
+
+        self.posterior_actions = [ar.zeros(self.na,self.npart,self.nsubs)+1./self.na]
+
+        self.observations = []
+        self.rewards = []
+        self.actions = []
+
+
+    def update_mf(self, tau, t):
+
+        # paper has -1, 1 for reward and no reward?!
+        # these eqs are according to Otte et al. 2013
+        # attention! the supplementary material from otto et al seems to be riddled with bugs
+        # the MF stage 1 update has now changed to a logical version
+        assert(t==self.T-1)
+        Q_mf = self.Q_mf[-1]
+
+        Q_mf1 = Q_mf[0]
+        Q_mf2 = Q_mf[1]
+        # Q_mf3 is 0 anyways according to the paper, but they drag it along so I will too
+
+        action1 = self.actions[-2]
+        action2 = self.actions[-1]
+
+        state1 = self.observations[-3]
+        state2 = self.observations[-2]
+
+        reward1 = self.utility[self.rewards[-2]]
+        reward2 = self.utility[self.rewards[-1]]
+        # print(reward2)
+        # print(reward1)
+
+        new_Q_mf3 = 0
+
+        # second stage update
+        state_action_pair2 = ar.eye(self.ns)[:,state2][:,None,None,...]*ar.eye(self.na)[:,action2][None,:,None,...]
+
+        pred_err2 = (reward2[None,None,None,...] + new_Q_mf3)/self.alpha[None,None,...] - Q_mf2*state_action_pair2
+        updated_Q_mf2 = Q_mf2*state_action_pair2 + self.alpha[None,None,...]*pred_err2
+
+        new_Q_mf2 = ar.where(state_action_pair2>0, updated_Q_mf2, (1-self.alpha)[None,None,...]*Q_mf2)
+
+        # first stage update
+        state_action_pair1 = ar.eye(self.ns)[:,state1][:,None,None,...]*ar.eye(self.na)[:,action1][None,:,None,...]
+
+        discounted_Q_mf2 = self.lamb*(new_Q_mf2*state_action_pair2).sum(dim=(0,1))
+        pred_err1 = (reward1[None,...] + discounted_Q_mf2[None,None,:,:])/self.alpha[None,None,...] - Q_mf1*state_action_pair1
+        updated_Q_mf1 = Q_mf1*state_action_pair1 + self.alpha[None,None,...]*(pred_err1)
+        # print("updated Q_mf")
+        # print(new_Q_mf2)
+
+        new_Q_mf1 = ar.where(state_action_pair1>0, updated_Q_mf1, (1-self.alpha)[None,None,...]*Q_mf1)
+
+        new_Q_mf = [new_Q_mf1, new_Q_mf2]
+        self.Q_mf.append(new_Q_mf)
+
+
+    def update_mb(self, tau, t):
+
+        Q_mb = self.Q_mb[-1]
+        Q_mf = self.Q_mf[-1]
+
+        state1 = self.observations[-3]
+        action1 = self.actions[-2]
+
+        Q_mf2 = Q_mf[1]
+
+        # best_Q2_s1 = Q_mf2[1].amax(dim=0)
+        # best_Q2_s2 = Q_mf2[2].amax(dim=0)
+
+        # Q_mb1_a0 = self.generative_model_states[1,0,0]*best_Q2_s1 + self.generative_model_states[2,0,0]*best_Q2_s2
+        # Q_mb1_a1 = self.generative_model_states[1,0,1]*best_Q2_s1 + self.generative_model_states[2,0,1]*best_Q2_s2
+
+        # new_Q_mb1 = ar.stack([ar.stack([Q_mb1_a0, Q_mb1_a1]), ar.zeros(2,self.npart,self.nsubs), ar.zeros(2,self.npart,self.nsubs)])
+
+        best_Q2 = ar.amax(Q_mf2, dim=1)
+
+        new_Q_mb1 = (self.generative_model_states[:,:,:,None,None]*best_Q2[:,None,None,...]).sum(dim=0)
+
+        new_Q_mb = [new_Q_mb1, Q_mf2]
+
+        self.Q_mb.append(new_Q_mb)
+
+    def calc_action_probs(self, tau, t):
+
+        Q_mb = ar.stack([self.Q_mb[-1][t][self.observations[-1][i],:,:,i] for i in range(self.nsubs)], dim=-1)
+        Q_mf = ar.stack([self.Q_mf[-1][t][self.observations[-1][i],:,:,i] for i in range(self.nsubs)], dim=-1)
+
+        if t==0:
+            rep = ar.eye(self.na)[:,self.prev_first_action[-1]][:,None,:]
+        else:
+            rep = 0
+
+        exponent = self.beta*(self.w*Q_mb + (1-self.w)*Q_mf + self.p*rep)
+
+        action_probs = ar.softmax(exponent, dim=0)
+
+        self.posterior_actions.append(action_probs)
+
+    def update_beliefs(self, tau, t, observation, reward, chosen_action, possible_policies):
+
+        self.observations.append(observation)
+        self.rewards.append(reward)
+        self.actions.append(chosen_action)
+
+        if t==1:
+            self.prev_first_action.append(chosen_action)
+
+        if t==self.T-1:
+            # print(reward)
+            self.update_mf(tau, t)
+            self.update_mb(tau, t)
+        elif tau>0 and t<self.T-1:
+            self.calc_action_probs(tau, t)
+        elif tau==0 and t<self.T-1:
+            self.posterior_actions.append(ar.zeros(self.na,self.npart,self.nsubs)+1./self.na)

@@ -298,24 +298,22 @@ class AveragedSelector(object):
     def log_prior(self):
         return 0
 
-    def select_desired_action(self, tau, t, posterior_policies, actions, *args):
+    def select_desired_action(self, tau, t, posterior_actions, actions, *args):
 
-        #estimate action probability
-        self.estimate_action_probability(tau, t, posterior_policies, actions)
 
         #generate the desired response from action probability
-        u = ar.distributions.Categorical(self.control_probability[tau, t]).sample()
+        u = ar.distributions.Categorical(posterior_actions).sample()
 
         return u
 
-    def estimate_action_probability(self, tau, t, posterior_policies, actions, *args):
-        #estimate action probability
-        control_prob = ar.zeros(self.na)
-        for a in range(self.na):
-            control_prob[a] = posterior_policies[actions == a].sum()
+    # def estimate_action_probability(self, tau, t, posterior_policies, actions, *args):
+    #     #estimate action probability
+    #     control_prob = ar.zeros(self.na)
+    #     for a in range(self.na):
+    #         control_prob[a] = posterior_policies[actions == a].sum()
 
 
-        self.control_probability[tau, t] = control_prob
+    #     self.control_probability[tau, t] = control_prob
 
 
 class MaxSelector(object):

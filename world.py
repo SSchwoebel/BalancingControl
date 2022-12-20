@@ -284,7 +284,7 @@ class GroupWorld(object):
             else:
                 context = None
         else:
-            response = self.actions[tau, t-1]
+            response = ar.tensor([self.actions[tau, t-1]])
             self.environment.update_hidden_states(tau, t, response)
             context = None
 

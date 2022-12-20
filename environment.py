@@ -171,7 +171,7 @@ class TaskSwitching(object):
         self.Theta = Theta.copy()
 
         self.nh = Theta.shape[0]
-        
+
         self.Chi = Chi.copy()
 
 #        self.changes = ar.array([0.01, -0.01])
@@ -181,11 +181,11 @@ class TaskSwitching(object):
         #set container that keeps track the evolution of the hidden states
         self.hidden_states = ar.zeros((trials, T), dtype = int)
         self.hidden_states[:,0] = start_states
-        
+
         self.contexts = contexts.copy().astype(int)
 
         self.trials = trials
-        
+
         if correct_choice is not None:
             self.correct_choice = correct_choice
         if congruent is not None:
@@ -229,12 +229,12 @@ class TaskSwitching(object):
 #            self.Rho[tau+1][self.Rho[tau+1] < 0.] = 0.
 
         return r
-    
+
     def generate_context_obs(self, tau):
-        
+
         c = ar.random.choice(self.Chi.shape[0], p=self.Chi[self.contexts[tau]])
         return c
-    
+
 
 class Flanker(object):
 
@@ -253,7 +253,7 @@ class Flanker(object):
         self.Theta = Theta.copy()
 
         self.nh = Theta.shape[0]
-        
+
         self.Chi = Chi.copy()
 
 #        self.changes = ar.array([0.01, -0.01])
@@ -263,13 +263,13 @@ class Flanker(object):
         #set container that keeps track the evolution of the hidden states
         self.hidden_states = ar.zeros((trials, T), dtype = int)
         self.hidden_states[:,0] = start_states
-        
+
         self.contexts = contexts.copy().astype(int)
-        
+
         self.flankers = flankers.copy()
 
         self.trials = trials
-        
+
         if correct_choice is not None:
             self.correct_choice = correct_choice
         if congruent is not None:
@@ -311,9 +311,9 @@ class Flanker(object):
 #            self.Rho[tau+1][self.Rho[tau+1] < 0.] = 0.
 
         return r
-    
+
     def generate_context_obs(self, tau):
-        
+
         c = ar.random.choice(self.Chi.shape[0], p=self.Chi[self.contexts[tau]])
         return c
 

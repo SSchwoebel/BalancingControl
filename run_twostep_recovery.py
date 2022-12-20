@@ -339,9 +339,7 @@ structured_data = {"observations": data_obs, "rewards": data_rew, "actions": dat
 bayes_prc = prc.Group2Perception(A, B, C_agent, transition_matrix_context,
                                        state_prior, utility, prior_pi, pol,
                                        #data_obs, data_rew, data_act,
-                                       alpha_0, C_alphas,
-                                       learn_habit = learn_habit,
-                                       learn_rew = True, T=T, trials=trials,
+                                       alpha_0, C_alphas, T=T, trials=trials,
                                        pol_lambda=0, r_lambda=0,
                                        non_decaying=3, dec_temp=1,)
                                        #nsubs = len(data))
@@ -352,6 +350,8 @@ agent = agt.FittingAgent(bayes_prc, [], pol,
                   prior_policies = prior_pi,
                   number_of_states = ns,
                   prior_context = prior_context,
+                  learn_habit = learn_habit,
+                  learn_rew = True,
                   #save_everything = True,
                   number_of_policies = npi,
                   number_of_rewards = nr)
@@ -426,7 +426,7 @@ def sample_posterior(inferrer, prefix, total_num_iter_so_far, n_samples=500):
     return total_df
 
 
-def plot_posterior(total_df, total_num_iter_so_far, prefix):
+def plot_posterior(total_df, total_num_iter_so_far):
 
     # new_df = sample_df.copy()
     # new_df['true_lamb_pi'] = ar.zeros(len(data)*n_samples) - 1
@@ -477,7 +477,7 @@ def plot_posterior(total_df, total_num_iter_so_far, prefix):
     plt.ylim([-0.1, 1.1])
     plt.xlabel("true lamb_pi")
     plt.ylabel("inferred lamb_pi")
-    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_lamb_pi.svg")
+    plt.savefig("recovered_"+str(total_num_iter_so_far)+"_lamb_pi.svg")
     plt.show()
 
     plt.figure()
@@ -486,7 +486,7 @@ def plot_posterior(total_df, total_num_iter_so_far, prefix):
     plt.ylim([-0.1, 1.1])
     plt.xlabel("true lamb_r")
     plt.ylabel("inferred lamb_r")
-    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_lamb_r.svg")
+    plt.savefig("recovered_"+str(total_num_iter_so_far)+"_lamb_r.svg")
     plt.show()
 
     plt.figure()
@@ -495,7 +495,7 @@ def plot_posterior(total_df, total_num_iter_so_far, prefix):
     plt.ylim([0,10])
     plt.xlabel("true dec_temp")
     plt.ylabel("inferred dec_temp")
-    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_dec_temp.svg")
+    plt.savefig("recovered_"+str(total_num_iter_so_far)+"_dec_temp.svg")
     plt.show()
 
     if infer_h:
@@ -505,10 +505,10 @@ def plot_posterior(total_df, total_num_iter_so_far, prefix):
         plt.ylim([-0.1, 1.1])
         plt.xlabel("true h")
         plt.ylabel("inferred h")
-        plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_h.svg")
+        plt.savefig("recovered_"+str(total_num_iter_so_far)+"_h.svg")
         plt.show()
 
-def plot_correlations(total_df, total_num_iter_so_far,prefix):
+def plot_correlations(total_df, total_num_iter_so_far):
 
     smaller_df = pd.DataFrame()
     smaller_df['mean policy forgetting factor'] = total_df['inferred_lamb_pi']
@@ -529,7 +529,7 @@ def plot_correlations(total_df, total_num_iter_so_far,prefix):
 
     plt.figure()
     sns.heatmap(smaller_df.corr(), annot=True, fmt='.2f')#[pval_corrected<alphaB]
-    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_mean_corr.svg")
+    plt.savefig("recovered_"+str(total_num_iter_so_far)+"_mean_corr.svg")
     plt.show()
 
     sample_df = pd.DataFrame()
@@ -551,7 +551,7 @@ def plot_correlations(total_df, total_num_iter_so_far,prefix):
 
     plt.figure()
     sns.heatmap(sample_df.corr(), annot=True, fmt='.2f')#[pval_corrected<alphaB]
-    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_sample_corr.svg")
+    plt.savefig("recovered_"+str(total_num_iter_so_far)+"_sample_corr.svg")
     plt.show()
 
 
@@ -580,9 +580,8 @@ for i in range(total_num_iter_so_far, num_steps, size_chunk):
     infer(inferrer, size_chunk, prefix, total_num_iter_so_far)
     total_num_iter_so_far += size_chunk
     full_df = sample_posterior(inferrer, prefix, total_num_iter_so_far)
-    plot_posterior(full_df, total_num_iter_so_far, prefix)
+    plot_posterior(full_df, total_num_iter_so_far)
 
-plot_correlations(full_df, total_num_iter_so_far, prefix)
 
 #print("this is inference for pl =", pl, "rl =", rl, "dt =", dt, "tend=", tend)
 # print(param_dict)

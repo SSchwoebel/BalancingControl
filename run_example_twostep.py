@@ -60,7 +60,7 @@ ns = 3+nb #number of states
 no = ns #number of observations
 na = 2 #number of actions
 npi = na**(T-1)
-nr = 2
+nr = 3
 
 proni = "/home/sarah/proni/sarah/"
 
@@ -140,9 +140,9 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
     # agent's beliefs about reward generation
 
     C_alphas = ar.zeros((nr, ns)) + learn_rew
-    C_alphas[0,:3] = 100
-    for i in range(1,nr):
-        C_alphas[i,0] = 1
+    # C_alphas[0,:3] = 100
+    # for i in range(1,nr):
+    #     C_alphas[i,0] = 1
 #    C_alphas[0,1:,:] = 100
 #    for c in range(nb):
 #        C_alphas[1,c+1,c] = 100
@@ -224,45 +224,29 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
     set up agent
     """
     #bethe agent
-    if agent == 'bethe':
 
-        agnt = 'bethe'
+    #pol_par = alphas
 
-        #pol_par = alphas
+    # perception
+    perception = prc.Group2Perception(A, B, C_agent, transition_matrix_context,
+                                    state_prior, utility, prior_pi, pol,
+                                    alpha_0, C_alphas,
+                                    learn_habit = learn_habit,
+                                    learn_rew = True, T=T, trials=trials,
+                                    pol_lambda=pol_lambda, r_lambda=r_lambda,
+                                    dec_temp=dec_temp, nsubs=1)#non_decaying=(ns-nb),
 
-        # perception
-        bayes_prc = prc.Group2Perception(A, B, C_agent, transition_matrix_context,
-                                               state_prior, utility, prior_pi, pol,
-                                               alpha_0, C_alphas, T=T, trials=trials,
-                                               pol_lambda=pol_lambda, r_lambda=r_lambda,
-                                               non_decaying=(ns-nb), dec_temp=dec_temp, nsubs=1)
+    perception.reset()
 
-        bayes_pln = agt.FittingAgent(bayes_prc, ac_sel, pol,
-                          trials = trials, T = T,
-                          prior_states = state_prior,
-                          prior_policies = prior_pi,
-                          number_of_states = ns,
-                          prior_context = prior_context,
-                          learn_habit = learn_habit,
-                          learn_rew = True,
-                          #save_everything = True,
-                          number_of_policies = npi,
-                          number_of_rewards = nr)
-    #MF agent
-    else:
-
-        agnt = 'mf'
-
-        bayes_prc = prc.MFPerception(A, B, utility, state_prior, T = T)
-
-
-
-        bayes_pln = agt.BayesianMFPlanner(bayes_prc, [], ac_sel,
-                                  trials = trials, T = T,
-                                  prior_states = state_prior,
-                                  policies = pol,
-                                  number_of_states = ns,
-                                  number_of_policies = npi)
+    bayes_pln = agt.FittingAgent(perception, ac_sel, pol,
+                      trials = trials, T = T,
+                      prior_states = state_prior,
+                      prior_policies = prior_pi,
+                      number_of_states = ns,
+                      prior_context = prior_context,
+                      #save_everything = True,
+                      number_of_policies = npi,
+                      number_of_rewards = nr)
 
 
     """
@@ -335,10 +319,11 @@ utility = []
 #ut = [0.985]
 ut = [0.999]
 for u in ut:
-    utility.append(ar.zeros(nr))
-    for i in range(1,nr):
-        utility[-1][i] = u/(nr-1)#u/nr*i
-    utility[-1][0] = (1.-u)
+    # we use 5 here to bring it closer to the previous implementation which had utility 0.999 and 0.001.
+    utility.append(ar.softmax(5*ar.tensor([-1.,1.,0.]),dim=0))
+    # for i in range(1,nr):
+    #     utility[-1][i] = u/(nr-1)#u/nr*i
+    # utility[-1][0] = (1.-u)
 
 changes = []
 
@@ -387,11 +372,11 @@ recalc_rho = False
 for pl in [0.1,0.3,0.5,0.7,0.9]:
     for rl in [0.1,0.3,0.5,0.7,0.9]:
         # TODO: wht does dt=9 not work?? gives control prob of nan
-        for dt in [1.]:#[2., 5.]:#[1.,3.,5.,7.]:
+        for dt in [4.]:#[2., 5.]:#[1.,3.,5.,7.]:
 
             stayed = []
             indices = []
-            for tendency in [1, 2, 5, 10, 20, 100]:#[1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
+            for tendency in [1]:#[1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
                 print(pl, rl, dt, tendency)
                 tend = array([tendency])
 
@@ -427,8 +412,9 @@ for pl in [0.1,0.3,0.5,0.7,0.9]:
 
                 Rho = ar.zeros((trials, nr, ns))
 
+                Rho[:,2,:never_reward] = 1.
                 Rho[:,1,:never_reward] = 0.
-                Rho[:,0,:never_reward] = 1.
+                Rho[:,0,:never_reward] = 0.
 
                 Rho[:,1,never_reward:never_reward+2] = ar.from_numpy(rew_probs[0,:,:]).permute((1,0))
                 Rho[:,0,never_reward:never_reward+2] = ar.from_numpy(1-rew_probs[0,:,:]).permute((1,0))
@@ -510,7 +496,7 @@ for pl in [0.1,0.3,0.5,0.7,0.9]:
 
                     stayed.append(stayed_list)
 
-                    run_name = "twostage_agent_daw_alph0_every"+str(i)+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tendency)+".json"
+                    run_name = "twostage_agent_daw_3rews"+str(i)+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tendency)+".json"
                     fname = os.path.join(folder, run_name)
 
                     actions = w.actions.numpy()
