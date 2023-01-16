@@ -2021,11 +2021,13 @@ class mfmb2Perception(object):
                  Q_mf_init,
                  Q_mb_init,
                  utility,
-                 lamb = 0.9,
-                 alpha = 0.1,
-                 beta_mf = 2.,
-                 beta_mb = 2.,
-                 p = 0.1,
+                 lamb = ar.tensor([0.9]),
+                 alpha = ar.tensor([0.1]),
+                 beta_mf = ar.tensor([4.]),
+                 beta_mb = ar.tensor([4.]),
+                 p = ar.tensor([2.]),
+                 mask = None,
+                 trials=10,
                  T=3,
                  npart=1, nsubs=1,
                  use_p=True):
@@ -2043,6 +2045,12 @@ class mfmb2Perception(object):
         self.T = T
         self.prev_first_action = []
         self.action_probs = []
+        self.nsubs = nsubs
+
+        if mask is None:
+            self.mask = ar.ones(trials, nsubs)
+        else:
+            self.mask = mask
 
         self.use_p = use_p
         if self.use_p:
@@ -2155,6 +2163,9 @@ class mfmb2Perception(object):
 
         new_Q_mf2 = ar.where(state_action_pair2>0, updated_Q_mf2, (1-self.alpha)[None,None,...]*Q_mf2)
 
+        # mask the participants who didnt do a choice
+        new_Q_mf2 = ar.where(self.mask[tau][None,None,:], new_Q_mf2, Q_mf2)
+
         # first stage update
         state_action_pair1 = ar.eye(self.ns)[:,state1][:,None,None,...]*ar.eye(self.na)[:,action1][None,:,None,...]
 
@@ -2165,6 +2176,9 @@ class mfmb2Perception(object):
         # print(new_Q_mf2)
 
         new_Q_mf1 = ar.where(state_action_pair1>0, updated_Q_mf1, (1-self.alpha)[None,None,...]*Q_mf1)
+
+        # mask the participants who didnt do a choice
+        new_Q_mf1 = ar.where(self.mask[tau][None,None,:], new_Q_mf1, Q_mf1)
 
         new_Q_mf = [new_Q_mf1, new_Q_mf2]
         self.Q_mf.append(new_Q_mf)
@@ -2219,7 +2233,11 @@ class mfmb2Perception(object):
         self.actions.append(chosen_action)
 
         if t==1:
-            self.prev_first_action.append(chosen_action)
+            if tau > 0:
+                prev_action = ar.where(self.mask[tau], chosen_action, self.prev_first_action[-1])
+            else:
+                prev_action = chosen_action
+            self.prev_first_action.append(prev_action)
 
         if t==self.T-1:
             # print(reward)

@@ -73,7 +73,7 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
     #state_unc: state transition uncertainty condition
     #goal_pol: evaluate only policies that lead to the goal
     #utility: goal prior, preference p(o)
-    avg, Rho, lamb, alpha, beta_mf, beta_mb, p, utility, use_p = par_list
+    avg, Rho, lamb, alpha, beta_mf, beta_mb, p, utility, use_p, valid = par_list
 
     """
     create matrices
@@ -188,7 +188,7 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
     # perception
     mbmf_prc = prc.mfmb2Perception(B, pol, Q_mf_init, Q_mb_init, utility,
                                     lamb, alpha, beta_mf, beta_mb,
-                                    p, nsubs=1, use_p=use_p)
+                                    p, nsubs=1, use_p=use_p, mask=valid[:,None])
     mbmf_prc.reset()
 
     planner = agt.FittingAgent(mbmf_prc, ac_sel, pol,
@@ -259,8 +259,8 @@ Rho[:,0,never_reward+2:] = ar.from_numpy(1-rew_probs[1,:,:]).permute((1,0))
 plt.figure(figsize=(10,5))
 for i in range(4):
     plt.plot(Rho[:,1,3+i], label="$p_{}$".format(i+1), linewidth=4)
-plt.ylim([0,1])
-plt.yticks(ar.arange(0,1.1,0.2),fontsize=18)
+plt.ylim([0.2,0.8])
+plt.yticks(ar.arange(0.2,0.9,0.2),fontsize=18)
 plt.ylabel("reward probability", fontsize=20)
 plt.xlim([-0.1, trials+0.1])
 plt.xticks(range(0,trials+1,50),fontsize=18)
@@ -278,14 +278,16 @@ if use_p:
 else:
     n_pars = 4
 
-num_agents = 50
-true_values_tensor = ar.rand((num_agents,n_pars,1))
+nsubs = 50
+true_values_tensor = ar.rand((nsubs,n_pars,1))
 
+# prob for invalid answer (e.g. no reply)
+p_invalid = 1.-1./201.
 
 stayed = []
 indices = []
 
-for pars in true_values_tensor:
+for i,pars in enumerate(true_values_tensor):
 
     if use_p:
         discount, lr, norm_dt_mf, norm_dt_mb, norm_perserv = pars
@@ -328,7 +330,11 @@ for pars in true_values_tensor:
     beta_mf = dt_mf#4.
     beta_mb = dt_mb#4.
     p = perserv
-    pars = [avg, Rho, lamb, alpha, beta_mf, beta_mb, p, utility, use_p]
+
+    prob_matrix = ar.zeros((trials)) + p_invalid
+    valid = ar.bernoulli(prob_matrix).bool()
+
+    pars = [avg, Rho, lamb, alpha, beta_mf, beta_mb, p, utility, use_p, valid]
 
     worlds.append(run_agent(pars))
 
@@ -380,7 +386,7 @@ for pars in true_values_tensor:
     # observations = w.observations.numpy()
     # rewards = w.rewards.numpy()
     # states = w.environment.hidden_states.numpy()
-    data.append({"actions": w.actions, "observations": w.observations, "rewards": w.rewards, "states": w.environment.hidden_states})
+    data.append({"actions": w.actions, "observations": w.observations, "rewards": w.rewards, "states": w.environment.hidden_states, 'mask': valid})
 
     jsonpickle_numpy.register_handlers()
     pickled = pickle.encode(data[-1])
@@ -524,6 +530,7 @@ set up agent
 data_obs = ar.stack([d["observations"] for d in data], dim=-1)
 data_rew = ar.stack([d["rewards"] for d in data], dim=-1)
 data_act = ar.stack([d["actions"] for d in data], dim=-1)
+data_mask = ar.stack([d["mask"] for d in data], dim=-1)
 
 structured_data = {"observations": data_obs, "rewards": data_rew, "actions": data_act}
 
@@ -532,8 +539,7 @@ Q_mb_init = [ar.zeros((3,na)), ar.zeros((3,na))]
 
 # perception
 perception = prc.mfmb2Perception(B, pol, Q_mf_init, Q_mb_init, utility,
-                                    lamb, alpha, beta_mf, beta_mb,
-                                    p, nsubs=1, use_p=use_p)
+                                 nsubs=nsubs, use_p=use_p, mask=data_mask)
 
 agent = agt.FittingAgent(perception, [], pol,
                       trials = trials, T = T,
@@ -550,7 +556,7 @@ def infer(inferrer, iter_steps, prefix, total_num_iter_so_far):
 
     inferrer.infer_posterior(iter_steps=iter_steps, num_particles=15, optim_kwargs={'lr': .01})#, param_dict
 
-    storage_name = prefix+'recovered_'+str(total_num_iter_so_far+iter_steps)+'_'+str(num_agents)+'agents.save'#h_recovered
+    storage_name = prefix+'recovered_'+str(total_num_iter_so_far+iter_steps)+'_'+str(nsubs)+'agents.save'#h_recovered
     storage_name = os.path.join(folder, storage_name)
     inferrer.save_parameters(storage_name)
     # inferrer.load_parameters(storage_name)
@@ -562,7 +568,7 @@ def infer(inferrer, iter_steps, prefix, total_num_iter_so_far):
     plt.ylabel("ELBO")
     plt.xlabel("iteration")
     plt.savefig('recovered_ELBO')
-    plt.savefig(prefix+'recovered_'+str(total_num_iter_so_far+iter_steps)+'_'+str(num_agents)+'agents_ELBO.svg')
+    plt.savefig(prefix+'recovered_'+str(total_num_iter_so_far+iter_steps)+'_'+str(nsubs)+'agents_ELBO.svg')
     plt.show()
 
 def sample_posterior(inferrer, prefix, total_num_iter_so_far, n_samples=500):
@@ -614,7 +620,7 @@ def sample_posterior(inferrer, prefix, total_num_iter_so_far, n_samples=500):
     if use_p:
         total_df['inferred_p'] = ar.tensor(inferred_p).repeat(n_samples)
 
-    sample_file = prefix+'recovered_samples_'+str(total_num_iter_so_far)+'_'+str(num_agents)+'agents.csv'
+    sample_file = prefix+'recovered_samples_'+str(total_num_iter_so_far)+'_'+str(nsubs)+'agents.csv'
     fname = os.path.join(folder, sample_file)
     total_df.to_csv(fname)
 
@@ -672,7 +678,7 @@ def plot_posterior(total_df, total_num_iter_so_far, prefix):
     plt.ylim([-0.1, 1.1])
     plt.xlabel("true lamb")
     plt.ylabel("inferred lamb")
-    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(num_agents)+"agents_lamb.svg")
+    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(nsubs)+"agents_lamb.svg")
     plt.show()
 
     plt.figure()
@@ -681,7 +687,7 @@ def plot_posterior(total_df, total_num_iter_so_far, prefix):
     plt.ylim([-0.1, 1.1])
     plt.xlabel("true alphaa")
     plt.ylabel("inferred alpha")
-    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(num_agents)+"agents_alpha.svg")
+    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(nsubs)+"agents_alpha.svg")
     plt.show()
 
     plt.figure()
@@ -690,7 +696,7 @@ def plot_posterior(total_df, total_num_iter_so_far, prefix):
     plt.ylim([0,10])
     plt.xlabel("true beta_mf")
     plt.ylabel("inferred beta_mf")
-    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(num_agents)+"agents_beta_mf.svg")
+    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(nsubs)+"agents_beta_mf.svg")
     plt.show()
 
     plt.figure()
@@ -699,7 +705,7 @@ def plot_posterior(total_df, total_num_iter_so_far, prefix):
     plt.ylim([0,10])
     plt.xlabel("true beta_mb")
     plt.ylabel("inferred beta_mb")
-    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(num_agents)+"agents_beta_mb.svg")
+    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(nsubs)+"agents_beta_mb.svg")
     plt.show()
 
     if use_p:
@@ -709,7 +715,7 @@ def plot_posterior(total_df, total_num_iter_so_far, prefix):
         plt.ylim([0,10])
         plt.xlabel("true p")
         plt.ylabel("inferred p")
-        plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(num_agents)+"agents_p.svg")
+        plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(nsubs)+"agents_p.svg")
         plt.show()
 
 
@@ -736,7 +742,7 @@ def plot_correlations(total_df, total_num_iter_so_far,prefix):
 
     plt.figure()
     sns.heatmap(smaller_df.corr(), annot=True, fmt='.2f')#[pval_corrected<alphaB]
-    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(num_agents)+"agents_mean_corr.svg")
+    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(nsubs)+"agents_mean_corr.svg")
     plt.show()
 
     sample_df = pd.DataFrame()
@@ -760,7 +766,7 @@ def plot_correlations(total_df, total_num_iter_so_far,prefix):
 
     plt.figure()
     sns.heatmap(sample_df.corr(), annot=True, fmt='.2f')#[pval_corrected<alphaB]
-    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(num_agents)+"agents_sample_corr.svg")
+    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(nsubs)+"agents_sample_corr.svg")
     plt.show()
 
 

@@ -1760,6 +1760,7 @@ class GeneralGroupInference(object):
         self.svi = None
         self.loss = []
         self.npars = self.agent.perception.npars
+        self.mask = agent.perception.mask
 
     def model(self):
         """
@@ -1826,7 +1827,7 @@ class GeneralGroupInference(object):
                         # print(curr_response.shape)
                         # print(probs.shape)
 
-                        pyro.sample('res_{}_{}'.format(tau, t), dist.Categorical(probs.permute(1,2,0)), obs=curr_response)
+                        pyro.sample('res_{}_{}'.format(tau, t), dist.Categorical(probs.permute(1,2,0)).mask(self.mask[tau]), obs=curr_response)
 
             # for tau in pyro.markov(range(self.trials)):
             #     for t in range(self.T):
