@@ -326,14 +326,16 @@ Q_mb_init = [ar.zeros((3,na)), ar.zeros((3,na))]
 # init values, they dont matter, they will be overwritten as soon as inference starts anyways
 lamb = ar.tensor([0.9])
 alpha = ar.tensor([0.1])
-beta_mf = ar.tensor([4.])
-beta_mb = ar.tensor([4.])
+beta = ar.tensor([4.])
+w = ar.tensor([0.5])
 p = ar.tensor([2.])
+Q_mf_init = [ar.zeros((3,na)), ar.zeros((3,na))]
+Q_mb_init = [ar.zeros((3,na)), ar.zeros((3,na))]
 
 # perception
 perception = prc.mfmb2Perception(B, pol, Q_mf_init, Q_mb_init, utility,
-                                 mask=data_mask, nsubs=nsubs, use_p=use_p,
-                                 trials = trials, T = T)
+                                    lamb, alpha, beta, w,
+                                    p, nsubs=1, use_p=use_p, mask=data_mask)
 
 agent = agt.FittingAgent(perception, [], pol,
                       trials = trials, T = T,
@@ -350,7 +352,7 @@ def infer(inferrer, iter_steps, prefix, total_num_iter_so_far):
 
     inferrer.infer_posterior(iter_steps=iter_steps, num_particles=15, optim_kwargs={'lr': .01})#, param_dict
 
-    storage_name = prefix+'inferred'+str(total_num_iter_so_far+iter_steps)+'_'+str(nsubs)+'subjects.save'#h_recovered
+    storage_name = prefix+'recovered_'+str(total_num_iter_so_far+iter_steps)+'_'+str(nsubs)+'subjectsOrig.save'#h_recovered
     storage_name = os.path.join(base_folder, storage_name)
     inferrer.save_parameters(storage_name)
     # inferrer.load_parameters(storage_name)
@@ -362,7 +364,7 @@ def infer(inferrer, iter_steps, prefix, total_num_iter_so_far):
     plt.ylabel("ELBO")
     plt.xlabel("iteration")
     plt.savefig('recovered_ELBO')
-    plt.savefig(prefix+'inferred_'+str(total_num_iter_so_far+iter_steps)+'_'+str(nsubs)+'subjects_ELBO.svg')
+    plt.savefig(prefix+'recovered_'+str(total_num_iter_so_far+iter_steps)+'_'+str(nsubs)+'subjectsOrig_ELBO.svg')
     plt.show()
 
 def sample_posterior(inferrer, prefix, total_num_iter_so_far, n_samples=500):
@@ -385,7 +387,7 @@ def sample_posterior(inferrer, prefix, total_num_iter_so_far, n_samples=500):
         else:
             inferred_values.append({"lamb": mean_lamb, "alpha": mean_alpha, "beta_mf": mean_beta_mf, "beta_mb": mean_beta_mb})
 
-    sample_file = prefix+'inferred_samples_'+str(total_num_iter_so_far)+'_'+str(nsubs)+'subjects.csv'
+    sample_file = prefix+'inferred_samples_'+str(total_num_iter_so_far)+'_'+str(nsubs)+'subjectsOrig.csv'
     fname = os.path.join(base_folder, sample_file)
     sample_df.to_csv(fname)
 
@@ -398,7 +400,7 @@ def plot_posterior(total_df, total_num_iter_so_far, prefix):
     ax = sns.histplot(data=total_df, x="lamb", hue='subject')
     # plt.xlim([-0.1, 1.1])
     # plt.ylim([-0.1, 1.1])
-    plt.savefig(prefix+"inferred_"+str(total_num_iter_so_far)+"_"+str(nsubs)+"subjects_lamb.svg")
+    plt.savefig(prefix+"inferred_"+str(total_num_iter_so_far)+"_"+str(nsubs)+"subjectsOrig_lamb.svg")
     ax.get_legend().remove()
     plt.show()
 
@@ -406,7 +408,7 @@ def plot_posterior(total_df, total_num_iter_so_far, prefix):
     ax = sns.histplot(data=total_df, x="alpha", hue='subject')
     # plt.xlim([-0.1, 1.1])
     # plt.ylim([-0.1, 1.1])
-    plt.savefig(prefix+"inferred_"+str(total_num_iter_so_far)+"_"+str(nsubs)+"subjects_alpha.svg")
+    plt.savefig(prefix+"inferred_"+str(total_num_iter_so_far)+"_"+str(nsubs)+"subjectsOrig_alpha.svg")
     ax.get_legend().remove()
     plt.show()
 
@@ -414,7 +416,7 @@ def plot_posterior(total_df, total_num_iter_so_far, prefix):
     ax = sns.histplot(data=total_df, x="beta_mf", hue='subject')
     # plt.xlim([-0.1, 1.1])
     # plt.ylim([-0.1, 1.1])
-    plt.savefig(prefix+"inferred_"+str(total_num_iter_so_far)+"_"+str(nsubs)+"subjects_beta_mf.svg")
+    plt.savefig(prefix+"inferred_"+str(total_num_iter_so_far)+"_"+str(nsubs)+"subjectsOrig_beta_mf.svg")
     ax.get_legend().remove()
     plt.show()
 
@@ -422,7 +424,7 @@ def plot_posterior(total_df, total_num_iter_so_far, prefix):
     ax = sns.histplot(data=total_df, x="beta_mb", hue='subject')
     # plt.xlim([-0.1, 1.1])
     # plt.ylim([-0.1, 1.1])
-    plt.savefig(prefix+"inferred_"+str(total_num_iter_so_far)+"_"+str(nsubs)+"subjects_beta_mb.svg")
+    plt.savefig(prefix+"inferred_"+str(total_num_iter_so_far)+"_"+str(nsubs)+"subjectsOrig_beta_mb.svg")
     ax.get_legend().remove()
     plt.show()
 
@@ -431,7 +433,7 @@ def plot_posterior(total_df, total_num_iter_so_far, prefix):
         ax = sns.histplot(data=total_df, x="p", hue='subject')
         # plt.xlim([-0.1, 1.1])
         # plt.ylim([-0.1, 1.1])
-        plt.savefig(prefix+"inferred_"+str(total_num_iter_so_far)+"_"+str(nsubs)+"subjects_p.svg")
+        plt.savefig(prefix+"inferred_"+str(total_num_iter_so_far)+"_"+str(nsubs)+"subjectsOrig_p.svg")
         ax.get_legend().remove()
         plt.show()
 
@@ -452,7 +454,7 @@ def plot_correlations(total_df, total_num_iter_so_far,prefix):
 
     plt.figure()
     sns.heatmap(sample_df.corr(), annot=True, fmt='.2f')#[pval_corrected<alphaB]
-    plt.savefig(prefix+"inferred_"+str(total_num_iter_so_far)+"_"+str(nsubs)+"subjects_sample_corr.svg")
+    plt.savefig(prefix+"inferred_"+str(total_num_iter_so_far)+"_"+str(nsubs)+"subjectsOrig_sample_corr.svg")
     plt.show()
 
 

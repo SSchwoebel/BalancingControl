@@ -37,7 +37,6 @@ import os
 import scipy as sc
 import scipy.signal as ss
 from scipy.stats import pearsonr
-import bottleneck as bn
 import gc
 import sys
 from numpy import eye
@@ -73,7 +72,7 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
     #state_unc: state transition uncertainty condition
     #goal_pol: evaluate only policies that lead to the goal
     #utility: goal prior, preference p(o)
-    avg, Rho, lamb, alpha, beta, w, p, utility, use_p = par_list
+    avg, Rho, lamb, alpha, beta, w, p, utility, use_p, mask, restrict_alpha = par_list
 
     """
     create matrices
@@ -188,7 +187,8 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
     # perception
     mbmf_prc = prc.mfmbOrigPerception(B, pol, Q_mf_init, Q_mb_init, utility,
                                     lamb, alpha, beta, w,
-                                    p, nsubs=1, use_p=use_p)
+                                    p, nsubs=1, use_p=use_p, mask=mask[:,None],
+                                    restrict_alpha=restrict_alpha)
     mbmf_prc.reset()
 
     planner = agt.FittingAgent(mbmf_prc, ac_sel, pol,
@@ -278,8 +278,13 @@ if use_p:
 else:
     n_pars = 4
 
+restrict_alpha = True
+
 num_agents = 50
 true_values_tensor = ar.rand((num_agents,n_pars,1))
+
+# prob for invalid answer (e.g. no reply)
+p_invalid = 1.-1./201.
 
 
 stayed = []
@@ -288,12 +293,16 @@ indices = []
 for pars in true_values_tensor:
 
     if use_p:
-        discount, lr, norm_dt, weight, perserv = pars
+        discount, norm_lr, norm_dt, weight, perserv = pars
     else:
-        discount, lr, norm_dt, weight = pars
+        discount, norm_lr, norm_dt, weight = pars
         perserv = ar.tensor([0])
 
     dt = 8*norm_dt
+    if restrict_alpha:
+        lr = 0.1 + norm_lr*0.9
+    else:
+        lr = norm_lr
 
     print(discount, lr, dt, weight, perserv)
 
@@ -326,7 +335,11 @@ for pars in true_values_tensor:
     beta = dt#4.
     w = weight#4.
     p = perserv
-    pars = [avg, Rho, lamb, alpha, beta, w, p, utility, use_p]
+    
+    valid_prob_matrix = ar.zeros((trials)) + p_invalid
+    valid = ar.bernoulli(valid_prob_matrix).bool()
+    
+    pars = [avg, Rho, lamb, alpha, beta, w, p, utility, use_p, valid, restrict_alpha]
 
     worlds.append(run_agent(pars))
 
@@ -378,7 +391,7 @@ for pars in true_values_tensor:
     # observations = wrld.observations.numpy()
     # rewards = wrld.rewards.numpy()
     # states = wrld.environment.hidden_states.numpy()
-    data.append({"actions": wrld.actions, "observations": wrld.observations, "rewards": wrld.rewards, "states": wrld.environment.hidden_states})
+    data.append({"actions": wrld.actions, "observations": wrld.observations, "rewards": wrld.rewards, "states": wrld.environment.hidden_states, "mask": valid})
 
     jsonpickle_numpy.register_handlers()
     pickled = pickle.encode(data[-1])
@@ -522,6 +535,7 @@ set up agent
 data_obs = ar.stack([d["observations"] for d in data], dim=-1)
 data_rew = ar.stack([d["rewards"] for d in data], dim=-1)
 data_act = ar.stack([d["actions"] for d in data], dim=-1)
+data_mask = ar.stack([d["mask"] for d in data], dim=-1)
 
 structured_data = {"observations": data_obs, "rewards": data_rew, "actions": data_act}
 
@@ -531,7 +545,7 @@ Q_mb_init = [ar.zeros((3,na)), ar.zeros((3,na))]
 # perception
 perception = prc.mfmbOrigPerception(B, pol, Q_mf_init, Q_mb_init, utility,
                                     lamb, alpha, beta, w,
-                                    p, nsubs=1, use_p=use_p)
+                                    p, nsubs=1, use_p=use_p, mask=data_mask)
 
 agent = agt.FittingAgent(perception, [], pol,
                       trials = trials, T = T,
@@ -548,7 +562,7 @@ def infer(inferrer, iter_steps, prefix, total_num_iter_so_far):
 
     inferrer.infer_posterior(iter_steps=iter_steps, num_particles=15, optim_kwargs={'lr': .01})#, param_dict
 
-    storage_name = prefix+'recovered_'+str(total_num_iter_so_far+iter_steps)+'_'+str(num_agents)+'agents.save'#h_recovered
+    storage_name = prefix+'recovered_'+str(total_num_iter_so_far+iter_steps)+'_'+str(num_agents)+'agentsOrig.save'#h_recovered
     storage_name = os.path.join(folder, storage_name)
     inferrer.save_parameters(storage_name)
     # inferrer.load_parameters(storage_name)
@@ -560,7 +574,7 @@ def infer(inferrer, iter_steps, prefix, total_num_iter_so_far):
     plt.ylabel("ELBO")
     plt.xlabel("iteration")
     plt.savefig('recovered_ELBO')
-    plt.savefig(prefix+'recovered_'+str(total_num_iter_so_far+iter_steps)+'_'+str(num_agents)+'agents_ELBO.svg')
+    plt.savefig(prefix+'recovered_'+str(total_num_iter_so_far+iter_steps)+'_'+str(num_agents)+'agentsOrig_ELBO.svg')
     plt.show()
 
 def sample_posterior(inferrer, prefix, total_num_iter_so_far, n_samples=500):
@@ -612,7 +626,7 @@ def sample_posterior(inferrer, prefix, total_num_iter_so_far, n_samples=500):
     if use_p:
         total_df['inferred_p'] = ar.tensor(inferred_p).repeat(n_samples)
 
-    sample_file = prefix+'recovered_samples_'+str(total_num_iter_so_far)+'_'+str(num_agents)+'agents.csv'
+    sample_file = prefix+'recovered_samples_'+str(total_num_iter_so_far)+'_'+str(num_agents)+'agentsOrig.csv'
     fname = os.path.join(folder, sample_file)
     total_df.to_csv(fname)
 
@@ -670,7 +684,7 @@ def plot_posterior(total_df, total_num_iter_so_far, prefix):
     plt.ylim([-0.1, 1.1])
     plt.xlabel("true lamb")
     plt.ylabel("inferred lamb")
-    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(num_agents)+"agents_lamb.svg")
+    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(num_agents)+"agentsOrig_lamb.svg")
     plt.show()
 
     plt.figure()
@@ -679,7 +693,7 @@ def plot_posterior(total_df, total_num_iter_so_far, prefix):
     plt.ylim([-0.1, 1.1])
     plt.xlabel("true alphaa")
     plt.ylabel("inferred alpha")
-    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(num_agents)+"agents_alpha.svg")
+    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(num_agents)+"agentsOrig_alpha.svg")
     plt.show()
 
     plt.figure()
@@ -688,7 +702,7 @@ def plot_posterior(total_df, total_num_iter_so_far, prefix):
     plt.ylim([0,10])
     plt.xlabel("true beta")
     plt.ylabel("inferred beta")
-    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(num_agents)+"agents_beta.svg")
+    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(num_agents)+"agentsOrig_beta.svg")
     plt.show()
 
     plt.figure()
@@ -697,7 +711,7 @@ def plot_posterior(total_df, total_num_iter_so_far, prefix):
     plt.ylim([-0.1, 1.1])
     plt.xlabel("true w")
     plt.ylabel("inferred w")
-    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(num_agents)+"agents_w.svg")
+    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(num_agents)+"agentsOrig_w.svg")
     plt.show()
 
     if use_p:
@@ -707,7 +721,7 @@ def plot_posterior(total_df, total_num_iter_so_far, prefix):
         plt.ylim([-0.1, 1.1])
         plt.xlabel("true p")
         plt.ylabel("inferred p")
-        plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(num_agents)+"agents_p.svg")
+        plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(num_agents)+"agentsOrig_p.svg")
         plt.show()
 
 
@@ -734,7 +748,7 @@ def plot_correlations(total_df, total_num_iter_so_far,prefix):
 
     plt.figure()
     sns.heatmap(smaller_df.corr(), annot=True, fmt='.2f')#[pval_corrected<alphaB]
-    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(num_agents)+"agents_mean_corr.svg")
+    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(num_agents)+"agentsOrig_mean_corr.svg")
     plt.show()
 
     sample_df = pd.DataFrame()
@@ -758,7 +772,7 @@ def plot_correlations(total_df, total_num_iter_so_far,prefix):
 
     plt.figure()
     sns.heatmap(sample_df.corr(), annot=True, fmt='.2f')#[pval_corrected<alphaB]
-    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(num_agents)+"agents_sample_corr.svg")
+    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(num_agents)+"agentsOrig_sample_corr.svg")
     plt.show()
 
 
@@ -772,7 +786,7 @@ prefix = 'mbmf_'
 
 print("this is inference using", type(inferrer))
 
-num_steps = 450
+num_steps = 500
 size_chunk = 50
 total_num_iter_so_far = 0
 

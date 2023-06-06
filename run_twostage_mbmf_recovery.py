@@ -37,7 +37,6 @@ import os
 import scipy as sc
 import scipy.signal as ss
 from scipy.stats import pearsonr
-import bottleneck as bn
 import gc
 import sys
 from numpy import eye
@@ -73,7 +72,7 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
     #state_unc: state transition uncertainty condition
     #goal_pol: evaluate only policies that lead to the goal
     #utility: goal prior, preference p(o)
-    avg, Rho, lamb, alpha, beta_mf, beta_mb, p, utility, use_p, valid = par_list
+    avg, Rho, lamb, alpha, beta_mf, beta_mb, p, utility, use_p, valid, restrict_alpha = par_list
 
     """
     create matrices
@@ -188,7 +187,8 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
     # perception
     mbmf_prc = prc.mfmb2Perception(B, pol, Q_mf_init, Q_mb_init, utility,
                                     lamb, alpha, beta_mf, beta_mb,
-                                    p, nsubs=1, use_p=use_p, mask=valid[:,None])
+                                    p, nsubs=1, use_p=use_p, mask=valid[:,None],
+                                    restrict_alpha=restrict_alpha)
     mbmf_prc.reset()
 
     planner = agt.FittingAgent(mbmf_prc, ac_sel, pol,
@@ -277,6 +277,8 @@ if use_p:
     n_pars = 5
 else:
     n_pars = 4
+    
+restrict_alpha = True
 
 nsubs = 50
 true_values_tensor = ar.rand((nsubs,n_pars,1))
@@ -290,14 +292,18 @@ indices = []
 for i,pars in enumerate(true_values_tensor):
 
     if use_p:
-        discount, lr, norm_dt_mf, norm_dt_mb, norm_perserv = pars
+        discount, norm_lr, norm_dt_mf, norm_dt_mb, norm_perserv = pars
         perserv = 8*norm_perserv
     else:
-        discount, lr, norm_dt_mf, norm_dt_mb = pars
+        discount, norm_lr, norm_dt_mf, norm_dt_mb = pars
         perserv = ar.tensor([0])
 
     dt_mf = 8*norm_dt_mf
     dt_mb = 8*norm_dt_mb
+    if restrict_alpha:
+        lr = 0.1 + norm_lr*0.9
+    else:
+        lr = norm_lr
 
     print(discount, lr, dt_mf, dt_mb, perserv)
 
@@ -333,8 +339,9 @@ for i,pars in enumerate(true_values_tensor):
 
     prob_matrix = ar.zeros((trials)) + p_invalid
     valid = ar.bernoulli(prob_matrix).bool()
+    # print(valid.shape)
 
-    pars = [avg, Rho, lamb, alpha, beta_mf, beta_mb, p, utility, use_p, valid]
+    pars = [avg, Rho, lamb, alpha, beta_mf, beta_mb, p, utility, use_p, valid, restrict_alpha]
 
     worlds.append(run_agent(pars))
 
@@ -780,7 +787,7 @@ prefix = 'mbmf_'
 
 print("this is inference using", type(inferrer))
 
-num_steps = 350
+num_steps = 500
 size_chunk = 50
 total_num_iter_so_far = 0
 

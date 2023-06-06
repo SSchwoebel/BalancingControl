@@ -2030,7 +2030,8 @@ class mfmb2Perception(object):
                  trials=10,
                  T=3,
                  npart=1, nsubs=1,
-                 use_p=True):
+                 use_p=True,
+                 restrict_alpha=False):
 
         self.generative_model_states = generative_model_states[:3,:3,...]
         self.alpha = alpha
@@ -2048,11 +2049,12 @@ class mfmb2Perception(object):
         self.nsubs = nsubs
 
         if mask is None:
-            self.mask = ar.ones(trials, nsubs)
+            self.mask = ar.ones(trials, nsubs).bool()
         else:
             self.mask = mask
 
         self.use_p = use_p
+        self.restrict_alpha = restrict_alpha
         if self.use_p:
             self.npars = 5
         else:
@@ -2071,16 +2073,21 @@ class mfmb2Perception(object):
         self.posterior_actions = [ar.zeros((self.na))+1./self.na]
 
     def locs_to_pars(self, locs):
+        
+        if self.restrict_alpha:
+            alpha = 0.1 + ar.sigmoid(locs[...,1])*0.9
+        else:
+            alpha = ar.sigmoid(locs[...,1])
 
         if self.use_p:
             par_dict = {"lamb": ar.sigmoid(locs[...,0]),
-                        "alpha": ar.sigmoid(locs[...,1]),
+                        "alpha": alpha,
                         "beta_mf": 10*ar.sigmoid(locs[...,2]),
                         "beta_mb": 10*ar.sigmoid(locs[...,3]),
                         "p": 10*ar.sigmoid(locs[...,4])}
         else:
             par_dict = {"lamb": ar.sigmoid(locs[...,0]),
-                        "alpha": ar.sigmoid(locs[...,1]),
+                        "alpha": alpha,
                         "beta_mf": 10*ar.sigmoid(locs[...,2]),
                         "beta_mb": 10*ar.sigmoid(locs[...,3])}
 
@@ -2262,9 +2269,12 @@ class mfmbOrigPerception(object):
                  beta = 2.,
                  w = 2.,
                  p = 0.1,
+                 mask = None,
+                 trials=10,
                  T=3,
                  npart=1, nsubs=1,
-                 use_p=True):
+                 use_p=True,
+                 restrict_alpha=False):
 
         self.generative_model_states = generative_model_states[:3,:3,...]
         self.alpha = alpha
@@ -2279,12 +2289,18 @@ class mfmbOrigPerception(object):
         self.T = T
         self.prev_first_action = []
         self.action_probs = []
+        
+        if mask is None:
+            self.mask = ar.ones(trials, nsubs).bool()
+        else:
+            self.mask = mask
 
         self.use_p = use_p
         if self.use_p:
             self.npars = 5
         else:
             self.npars = 4
+        self.restrict_alpha = restrict_alpha
         self.param_names = list(self.locs_to_pars(ar.zeros(self.npars)).keys())
 
         self.Q_mf_init = Q_mf_init
@@ -2299,16 +2315,21 @@ class mfmbOrigPerception(object):
         self.posterior_actions = [ar.zeros((self.na))+1./self.na]
 
     def locs_to_pars(self, locs):
+        
+        if self.restrict_alpha:
+            alpha = 0.1 + ar.sigmoid(locs[...,1])*0.9
+        else:
+            alpha = ar.sigmoid(locs[...,1])
 
         if self.use_p:
             par_dict = {"lamb": ar.sigmoid(locs[...,0]),
-                        "alpha": ar.sigmoid(locs[...,1]),
+                        "alpha": alpha,
                         "beta": 10*ar.sigmoid(locs[...,2]),
                         "w": ar.sigmoid(locs[...,3]),
                         "p": ar.sigmoid(locs[...,4])}
         else:
             par_dict = {"lamb": ar.sigmoid(locs[...,0]),
-                        "alpha": ar.sigmoid(locs[...,1]),
+                        "alpha": alpha,
                         "beta": 10*ar.sigmoid(locs[...,2]),
                         "w": ar.sigmoid(locs[...,3])}
 
@@ -2390,6 +2411,9 @@ class mfmbOrigPerception(object):
         updated_Q_mf2 = Q_mf2*state_action_pair2 + self.alpha[None,None,...]*pred_err2
 
         new_Q_mf2 = ar.where(state_action_pair2>0, updated_Q_mf2, (1-self.alpha)[None,None,...]*Q_mf2)
+        
+        # mask the participants who didnt do a choice
+        new_Q_mf2 = ar.where(self.mask[tau][None,None,:], new_Q_mf2, Q_mf2)
 
         # first stage update
         state_action_pair1 = ar.eye(self.ns)[:,state1][:,None,None,...]*ar.eye(self.na)[:,action1][None,:,None,...]
@@ -2401,6 +2425,9 @@ class mfmbOrigPerception(object):
         # print(new_Q_mf2)
 
         new_Q_mf1 = ar.where(state_action_pair1>0, updated_Q_mf1, (1-self.alpha)[None,None,...]*Q_mf1)
+        
+        # mask the participants who didnt do a choice
+        new_Q_mf1 = ar.where(self.mask[tau][None,None,:], new_Q_mf1, Q_mf1)
 
         new_Q_mf = [new_Q_mf1, new_Q_mf2]
         self.Q_mf.append(new_Q_mf)
@@ -2455,7 +2482,11 @@ class mfmbOrigPerception(object):
         self.actions.append(chosen_action)
 
         if t==1:
-            self.prev_first_action.append(chosen_action)
+            if tau > 0:
+                prev_action = ar.where(self.mask[tau], chosen_action, self.prev_first_action[-1])
+            else:
+                prev_action = chosen_action
+            self.prev_first_action.append(prev_action)
 
         if t==self.T-1:
             # print(reward)
