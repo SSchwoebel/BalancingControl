@@ -484,3 +484,6 @@ for i in range(total_num_iter_so_far, num_steps, size_chunk):
 # print(param_dict)
 
 print(full_df.corr())
+
+print("This is inference for the twostage task using the two beta mbmf model.")
+print("The settings are: use p", use_p,)# "restrict alpha", restrict_alpha)

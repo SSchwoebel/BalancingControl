@@ -34,6 +34,7 @@ import json
 import seaborn as sns
 import pandas as pd
 import os
+import glob
 import scipy as sc
 import scipy.signal as ss
 from scipy.stats import pearsonr
@@ -270,6 +271,8 @@ plt.savefig("twostep_prob.svg",dpi=300)
 plt.show()
 
 # make param combinations:
+    
+prefix = 'mbmfOrig_'
 
 use_p = False
 
@@ -278,10 +281,47 @@ if use_p:
 else:
     n_pars = 4
 
-restrict_alpha = True
+restrict_alpha = False
 
-num_agents = 50
-true_values_tensor = ar.rand((num_agents,n_pars,1))
+if use_p:
+    p_str = "usep_"
+else:
+    p_str = ""
+    
+if restrict_alpha:
+    restr_str = "resticted_"
+else:
+    restr_str = ""
+
+# prepare for savin results
+# make base filename and folder string
+fname_base = prefix+"recovered_"+p_str+restr_str
+print(fname_base)
+# define folder where we want to save data
+base_dir = os.path.join(folder,fname_base[:-1])
+
+remove_old = True
+
+# make directory if it doesnt exist
+if fname_base[:-1] not in os.listdir('data'):
+    os.mkdir(base_dir)
+# if it does exist, empty previous results, if we want that (remove_old==True)
+elif remove_old:
+    svgs = glob.glob(os.path.join(base_dir,"*.svg"))
+    for file in svgs:
+        os.remove(file)
+    csvs = glob.glob(os.path.join(base_dir,"*.csv"))
+    for file in csvs:
+        os.remove(file)
+    saves = glob.glob(os.path.join(base_dir,"*.save"))
+    for file in saves:
+        os.remove(file)
+    agents = glob.glob(os.path.join(base_dir,"twostage_agent*"))
+    for file in agents:
+        os.remove(file)
+
+nsubs = 50
+true_values_tensor = ar.rand((nsubs,n_pars,1))
 
 # prob for invalid answer (e.g. no reply)
 p_invalid = 1.-1./201.
@@ -385,7 +425,7 @@ for pars in true_values_tensor:
     stayed.append(stayed_list)
 
     run_name = "twostage_agent_daw_mbmfOrig"+str(i)+"_disc"+str(discount)+"_lr"+str(lr)+"_dt"+str(dt)+"weight"+str(weight)+"_perserv"+str(perserv)+".json"
-    fname = os.path.join(folder, run_name)
+    fname = os.path.join(base_dir, run_name)
 
     # actions = wrld.actions.numpy()
     # observations = wrld.observations.numpy()
@@ -558,12 +598,11 @@ agent = agt.FittingAgent(perception, [], pol,
 ###################################
 """inference convenience functions"""
 
-def infer(inferrer, iter_steps, prefix, total_num_iter_so_far):
+def infer(inferrer, iter_steps, fname_str):
 
     inferrer.infer_posterior(iter_steps=iter_steps, num_particles=15, optim_kwargs={'lr': .01})#, param_dict
 
-    storage_name = prefix+'recovered_'+str(total_num_iter_so_far+iter_steps)+'_'+str(num_agents)+'agentsOrig.save'#h_recovered
-    storage_name = os.path.join(folder, storage_name)
+    storage_name = os.path.join(base_dir, fname_str+'.save')#h_recovered
     inferrer.save_parameters(storage_name)
     # inferrer.load_parameters(storage_name)
 
@@ -573,11 +612,10 @@ def infer(inferrer, iter_steps, prefix, total_num_iter_so_far):
     plt.plot(loss)
     plt.ylabel("ELBO")
     plt.xlabel("iteration")
-    plt.savefig('recovered_ELBO')
-    plt.savefig(prefix+'recovered_'+str(total_num_iter_so_far+iter_steps)+'_'+str(num_agents)+'agentsOrig_ELBO.svg')
+    plt.savefig(os.path.join(base_dir, fname_str+'_ELBO.svg'))
     plt.show()
 
-def sample_posterior(inferrer, prefix, total_num_iter_so_far, n_samples=500):
+def sample_posterior(inferrer, fname_str, n_samples=500):
 
     sample_df = inferrer.sample_posterior(n_samples=n_samples) #inferrer.plot_posteriors(n_samples=1000)
     # inferrer.plot_posteriors(n_samples=n_samples)
@@ -626,14 +664,13 @@ def sample_posterior(inferrer, prefix, total_num_iter_so_far, n_samples=500):
     if use_p:
         total_df['inferred_p'] = ar.tensor(inferred_p).repeat(n_samples)
 
-    sample_file = prefix+'recovered_samples_'+str(total_num_iter_so_far)+'_'+str(num_agents)+'agentsOrig.csv'
-    fname = os.path.join(folder, sample_file)
-    total_df.to_csv(fname)
+    sample_file = os.path.join(base_dir, fname_str+'.csv')
+    total_df.to_csv(sample_file)
 
     return total_df
 
 
-def plot_posterior(total_df, total_num_iter_so_far, prefix):
+def plot_posterior(total_df, fname_str):
 
     # new_df = sample_df.copy()
     # new_df['true_pol_lambda'] = ar.zeros(len(data)*n_samples) - 1
@@ -684,7 +721,7 @@ def plot_posterior(total_df, total_num_iter_so_far, prefix):
     plt.ylim([-0.1, 1.1])
     plt.xlabel("true lamb")
     plt.ylabel("inferred lamb")
-    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(num_agents)+"agentsOrig_lamb.svg")
+    plt.savefig(os.path.join(base_dir, fname_str+"_lamb.svg"))
     plt.show()
 
     plt.figure()
@@ -693,7 +730,7 @@ def plot_posterior(total_df, total_num_iter_so_far, prefix):
     plt.ylim([-0.1, 1.1])
     plt.xlabel("true alphaa")
     plt.ylabel("inferred alpha")
-    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(num_agents)+"agentsOrig_alpha.svg")
+    plt.savefig(os.path.join(base_dir, fname_str+"_alpha.svg"))
     plt.show()
 
     plt.figure()
@@ -702,7 +739,7 @@ def plot_posterior(total_df, total_num_iter_so_far, prefix):
     plt.ylim([0,10])
     plt.xlabel("true beta")
     plt.ylabel("inferred beta")
-    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(num_agents)+"agentsOrig_beta.svg")
+    plt.savefig(os.path.join(base_dir, fname_str+"_beta.svg"))
     plt.show()
 
     plt.figure()
@@ -711,7 +748,7 @@ def plot_posterior(total_df, total_num_iter_so_far, prefix):
     plt.ylim([-0.1, 1.1])
     plt.xlabel("true w")
     plt.ylabel("inferred w")
-    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(num_agents)+"agentsOrig_w.svg")
+    plt.savefig(os.path.join(base_dir, fname_str+"_w.svg"))
     plt.show()
 
     if use_p:
@@ -721,11 +758,11 @@ def plot_posterior(total_df, total_num_iter_so_far, prefix):
         plt.ylim([-0.1, 1.1])
         plt.xlabel("true p")
         plt.ylabel("inferred p")
-        plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(num_agents)+"agentsOrig_p.svg")
+        plt.savefig(os.path.join(base_dir, fname_str+"_p.svg"))
         plt.show()
 
 
-def plot_correlations(total_df, total_num_iter_so_far,prefix):
+def plot_correlations(total_df, fname_str):
 
     smaller_df = pd.DataFrame()
     smaller_df['mean discounting parameter'] = total_df['inferred_lamb']
@@ -748,7 +785,7 @@ def plot_correlations(total_df, total_num_iter_so_far,prefix):
 
     plt.figure()
     sns.heatmap(smaller_df.corr(), annot=True, fmt='.2f')#[pval_corrected<alphaB]
-    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(num_agents)+"agentsOrig_mean_corr.svg")
+    plt.savefig(os.path.join(base_dir, fname_str+"_mean_corr.svg"))
     plt.show()
 
     sample_df = pd.DataFrame()
@@ -772,7 +809,7 @@ def plot_correlations(total_df, total_num_iter_so_far,prefix):
 
     plt.figure()
     sns.heatmap(sample_df.corr(), annot=True, fmt='.2f')#[pval_corrected<alphaB]
-    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(num_agents)+"agentsOrig_sample_corr.svg")
+    plt.savefig(os.path.join(base_dir, fname_str+"_sample_corr.svg"))
     plt.show()
 
 
@@ -781,8 +818,6 @@ def plot_correlations(total_df, total_num_iter_so_far,prefix):
 # inferrer = inf.SingleInference(agent, structured_data)#data[0])
 
 inferrer = inf.GeneralGroupInference(agent, structured_data)
-
-prefix = 'mbmf_'
 
 print("this is inference using", type(inferrer))
 
@@ -793,14 +828,22 @@ total_num_iter_so_far = 0
 for i in range(total_num_iter_so_far, num_steps, size_chunk):
     print('taking steps '+str(i+1)+' to '+str(i+size_chunk)+' out of total '+str(num_steps))
 
-    infer(inferrer, size_chunk, prefix, total_num_iter_so_far)
-    total_num_iter_so_far += size_chunk
-    full_df = sample_posterior(inferrer, prefix, total_num_iter_so_far)
-    plot_posterior(full_df, total_num_iter_so_far, prefix)
+    fname_str = fname_base + str(total_num_iter_so_far+size_chunk)+'_'+str(nsubs)+'agents'
 
-    plot_correlations(full_df, total_num_iter_so_far, prefix)
+    infer(inferrer, size_chunk, fname_str)
+    total_num_iter_so_far += size_chunk
+    full_df = sample_posterior(inferrer, fname_str)
+    plot_posterior(full_df, fname_str)
+
+    plot_correlations(full_df, fname_str)
+    
+    print("This is recovery for the twostage task using the original w and beta model.")
+    print("The settings are: use p", use_p, "restrict alpha", restrict_alpha)
 
 #print("this is inference for pl =", pl, "rl =", rl, "dt =", dt, "tend=", tend)
 # print(param_dict)
 
 print(full_df.corr())
+
+print("This is recovery for the twostage task using the original w and beta model.")
+print("The settings are: use p", use_p, "restrict alpha", restrict_alpha)
