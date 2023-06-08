@@ -2084,16 +2084,16 @@ class mfmb2Perception(object):
             alpha = ar.sigmoid(locs[...,1])
 
         if self.use_p:
-            par_dict = {"lamb": ar.sigmoid(locs[...,0]),
-                        "alpha": alpha,
-                        "beta_mf": self.max_dt*ar.sigmoid(locs[...,2]),
-                        "beta_mb": self.max_dt*ar.sigmoid(locs[...,3]),
-                        "p": self.max_dt*ar.sigmoid(locs[...,4])}
+            par_dict = {"discount": ar.sigmoid(locs[...,0]),
+                        "learning rate": alpha,
+                        "mf weight": self.max_dt*ar.sigmoid(locs[...,2]),
+                        "mb weight": self.max_dt*ar.sigmoid(locs[...,3]),
+                        "repetition": self.max_dt*ar.sigmoid(locs[...,4])}
         else:
-            par_dict = {"lamb": ar.sigmoid(locs[...,0]),
-                        "alpha": alpha,
-                        "beta_mf": self.max_dt*ar.sigmoid(locs[...,2]),
-                        "beta_mb": self.max_dt*ar.sigmoid(locs[...,3])}
+            par_dict = {"discount": ar.sigmoid(locs[...,0]),
+                        "learning rate": alpha,
+                        "mf weight": self.max_dt*ar.sigmoid(locs[...,2]),
+                        "mb weight": self.max_dt*ar.sigmoid(locs[...,3])}
 
         return par_dict
 
@@ -2101,16 +2101,16 @@ class mfmb2Perception(object):
 
         par_dict = self.locs_to_pars(locs)
 
-        if 'lamb' in par_dict:
-            self.lamb = par_dict['lamb']
-        if 'alpha' in par_dict:
-            self.alpha = par_dict['alpha']
-        if 'beta_mf' in par_dict:
-            self.beta_mf = par_dict['beta_mf']
-        if 'beta_mb' in par_dict:
-            self.beta_mb = par_dict['beta_mb']
-        if 'p' in par_dict:
-            self.p = par_dict['p']
+        if 'discount' in par_dict:
+            self.lamb = par_dict['discount']
+        if 'learning rate' in par_dict:
+            self.alpha = par_dict['learning rate']
+        if 'mf weight' in par_dict:
+            self.beta_mf = par_dict['mf weight']
+        if 'mb weight' in par_dict:
+            self.beta_mb = par_dict['mb weight']
+        if 'repetition' in par_dict:
+            self.p = par_dict['repetition']
 
     def reset(self):
 
@@ -2330,16 +2330,16 @@ class mfmbOrigPerception(object):
             alpha = ar.sigmoid(locs[...,1])
 
         if self.use_p:
-            par_dict = {"lamb": ar.sigmoid(locs[...,0]),
-                        "alpha": alpha,
-                        "beta": self.max_dt*ar.sigmoid(locs[...,2]),
-                        "w": ar.sigmoid(locs[...,3]),
-                        "p": ar.sigmoid(locs[...,4])}
+            par_dict = {"discount": ar.sigmoid(locs[...,0]),
+                        "learning rate": alpha,
+                        "dec temp": self.max_dt*ar.sigmoid(locs[...,2]),
+                        "weight": ar.sigmoid(locs[...,3]),
+                        "repetition": ar.sigmoid(locs[...,4])}
         else:
-            par_dict = {"lamb": ar.sigmoid(locs[...,0]),
-                        "alpha": alpha,
-                        "beta": self.max_dt*ar.sigmoid(locs[...,2]),
-                        "w": ar.sigmoid(locs[...,3])}
+            par_dict = {"discount": ar.sigmoid(locs[...,0]),
+                        "learning rate": alpha,
+                        "dec temp": self.max_dt*ar.sigmoid(locs[...,2]),
+                        "weight": ar.sigmoid(locs[...,3])}
 
         return par_dict
 
@@ -2347,16 +2347,16 @@ class mfmbOrigPerception(object):
 
         par_dict = self.locs_to_pars(locs)
 
-        if 'lamb' in par_dict:
-            self.lamb = par_dict['lamb']
-        if 'alpha' in par_dict:
-            self.alpha = par_dict['alpha']
-        if 'beta' in par_dict:
-            self.beta = par_dict['beta']
-        if 'w' in par_dict:
-            self.w = par_dict['w']
-        if 'p' in par_dict:
-            self.p = par_dict['p']
+        if 'discount' in par_dict:
+            self.lamb = par_dict['discount']
+        if 'learning rate' in par_dict:
+            self.alpha = par_dict['learning rate']
+        if 'dec temp' in par_dict:
+            self.beta = par_dict['dec temp']
+        if 'weight' in par_dict:
+            self.w = par_dict['weight']
+        if 'repetition' in par_dict:
+            self.p = par_dict['repetition']
 
     def reset(self):
 

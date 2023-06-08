@@ -73,7 +73,7 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
     #state_unc: state transition uncertainty condition
     #goal_pol: evaluate only policies that lead to the goal
     #utility: goal prior, preference p(o)
-    avg, Rho, lamb, alpha, beta_mf, beta_mb, p, utility, use_p, valid, restrict_alpha = par_list
+    avg, Rho, args, utility, use_p, valid, restrict_alpha, use_orig = par_list
 
     """
     create matrices
@@ -186,7 +186,26 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
     Q_mb_init = [ar.zeros((3,na)), ar.zeros((3,na))]
 
     # perception
-    mbmf_prc = prc.mfmb2Perception(B, pol, Q_mf_init, Q_mb_init, utility,
+    if use_orig:
+        lamb = args["discount"]
+        alpha = args["learning rate"]
+        beta = args["dec temp"]
+        w = args["weight"]
+        p = args["repetition"]
+        
+        mbmf_prc = prc.mfmbOrigPerception(B, pol, Q_mf_init, Q_mb_init, utility,
+                                        lamb, alpha, beta, w,
+                                        p, nsubs=1, use_p=use_p, mask=valid[:,None],
+                                        restrict_alpha=restrict_alpha,
+                                        max_dt=max_dt, min_alpha=min_alpha)
+    else:
+        lamb = args["discount"]
+        alpha = args["learning rate"]
+        beta_mf = args["mf weight"]
+        beta_mb = args["mb weight"]
+        p = args["repetition"]
+        
+        mbmf_prc = prc.mfmb2Perception(B, pol, Q_mf_init, Q_mb_init, utility,
                                     lamb, alpha, beta_mf, beta_mb,
                                     p, nsubs=1, use_p=use_p, mask=valid[:,None],
                                     restrict_alpha=restrict_alpha,
@@ -272,17 +291,28 @@ plt.savefig("twostep_prob.svg",dpi=300)
 plt.show()
 
 # make param combinations:
-    
-prefix = "mbmf_"
 
-use_p = False
+use_orig = True
+    
+use_p = True
+restrict_alpha = False
+max_dt = 6
+
+if use_orig:
+    prefix = "mbmfOrig_"
+    param_names = ["discount", "learning rate", "dec temp", "weight", "repetition"]
+    model_name = "original original w and beta model"
+else:
+    prefix = "mbmf_"
+    param_names = ["discount", "learning rate", "mf weight", "mb weight", "repetition"]
+    model_name = "two beta mbmf model"
 
 if use_p:
     n_pars = 5
 else:
     n_pars = 4
-    
-restrict_alpha = False
+    param_names = param_names[:-1]
+
 
 if use_p:
     p_str = "usep_"
@@ -324,7 +354,7 @@ elif remove_old:
         os.remove(file)
     
 
-nsubs = 10
+nsubs = 50
 true_values_tensor = ar.rand((nsubs,n_pars,1))
 
 # prob for invalid answer (e.g. no reply)
@@ -337,22 +367,41 @@ stayed = []
 indices = []
 
 for i,pars in enumerate(true_values_tensor):
-
-    if use_p:
-        discount, norm_lr, norm_dt_mf, norm_dt_mb, norm_perserv = pars
-        perserv = max_dt*norm_perserv
+    
+    # make parameters for original mb mf: discount lambda, learning rate, dec temp, balancing w, perserveration
+    if use_orig:
+        if use_p:
+            discount, norm_lr, norm_dt, weight, perserv = pars
+        else:
+            discount, norm_lr, norm_dt, weight = pars
+            perserv = ar.tensor([0])
+    
+        dt = max_dt*norm_dt
+        if restrict_alpha:
+            lr = min_alpha + norm_lr*(1.-min_alpha)
+        else:
+            lr = norm_lr
+        print(discount, lr, dt, weight, perserv)
+        perception_args = {"discount": discount, "learning rate": lr, "dec temp": dt, "weight": weight, "repetition": perserv}
+        
+    # make parameters for two beta mb mf: discount lambda, learning rate, mb dec temp, mf dec temp, perserveration
     else:
-        discount, norm_lr, norm_dt_mf, norm_dt_mb = pars
-        perserv = ar.tensor([0])
+        if use_p:
+            discount, norm_lr, norm_dt_mf, norm_dt_mb, norm_perserv = pars
+            perserv = max_dt*norm_perserv
+        else:
+            discount, norm_lr, norm_dt_mf, norm_dt_mb = pars
+            perserv = ar.tensor([0])
+    
+        dt_mf = max_dt*norm_dt_mf
+        dt_mb = max_dt*norm_dt_mb
+        if restrict_alpha:
+            lr = min_alpha + norm_lr*(1.-min_alpha)
+        else:
+            lr = norm_lr
 
-    dt_mf = max_dt*norm_dt_mf
-    dt_mb = max_dt*norm_dt_mb
-    if restrict_alpha:
-        lr = min_alpha + norm_lr*(1.-min_alpha)
-    else:
-        lr = norm_lr
-
-    print(discount, lr, dt_mf, dt_mb, perserv)
+        print(discount, lr, dt_mf, dt_mb, perserv)
+        perception_args = {"discount": discount, "learning rate": lr, "mf weight": dt_mf, "mb weight": dt_mb, "repetition": perserv}
 
     # init = array([0.6, 0.4, 0.6, 0.4])
 
@@ -378,17 +427,12 @@ for i,pars in enumerate(true_values_tensor):
     worlds = []
     l = []
     avg = True
-    lamb = discount#0.3
-    alpha = lr#0.6
-    beta_mf = dt_mf#4.
-    beta_mb = dt_mb#4.
-    p = perserv
 
     prob_matrix = ar.zeros((trials)) + p_invalid
     valid = ar.bernoulli(prob_matrix).bool()
     # print(valid.shape)
 
-    pars = [avg, Rho, lamb, alpha, beta_mf, beta_mb, p, utility, use_p, valid, restrict_alpha]
+    pars = [avg, Rho, perception_args, utility, use_p, valid, restrict_alpha, use_orig]
 
     worlds.append(run_agent(pars))
 
@@ -433,7 +477,10 @@ for i,pars in enumerate(true_values_tensor):
 
     stayed.append(stayed_list)
 
-    run_name = "twostage_agent_daw_mbmf"+str(i)+"_disc"+str(discount)+"_lr"+str(lr)+"_dt_mf"+str(dt_mf)+"_dt_mb"+str(dt_mb)+"_perserv"+str(perserv)+".json"
+    if use_orig:
+        run_name = "twostage_agent_daw_mbmfOrig"+str(i)+"_disc"+str(discount)+"_lr"+str(lr)+"_dt"+str(dt)+"weight"+str(weight)+"_perserv"+str(perserv)+".json"
+    else:
+        run_name = "twostage_agent_daw_mbmf"+str(i)+"_disc"+str(discount)+"_lr"+str(lr)+"_dt_mf"+str(dt_mf)+"_dt_mb"+str(dt_mb)+"_perserv"+str(perserv)+".json"
     fname = os.path.join(base_dir, run_name)
 
     # actions = w.actions.numpy()
@@ -484,7 +531,7 @@ for i,pars in enumerate(true_values_tensor):
     # plt.ylabel("stay probability")
     # plt.show()
 
-    true_vals.append({"lamb": lamb, "alpha": alpha, "beta_mf": beta_mf, "beta_mb": beta_mb, "p": p})
+    true_vals.append(perception_args)
 
 stayed_arr = array(stayed)
 
@@ -592,7 +639,13 @@ Q_mf_init = [ar.zeros((3,na)), ar.zeros((3,na))]
 Q_mb_init = [ar.zeros((3,na)), ar.zeros((3,na))]
 
 # perception
-perception = prc.mfmb2Perception(B, pol, Q_mf_init, Q_mb_init, utility,
+if use_orig:
+    perception = prc.mfmbOrigPerception(B, pol, Q_mf_init, Q_mb_init, utility,
+                                     nsubs=nsubs, use_p=use_p, mask=data_mask,
+                                     restrict_alpha=restrict_alpha,
+                                     max_dt=max_dt, min_alpha=min_alpha)
+else:
+    perception = prc.mfmb2Perception(B, pol, Q_mf_init, Q_mb_init, utility,
                                  nsubs=nsubs, use_p=use_p, mask=data_mask,
                                  restrict_alpha=restrict_alpha,
                                  max_dt=max_dt, min_alpha=min_alpha)
@@ -629,163 +682,109 @@ def sample_posterior(inferrer, fname_str, n_samples=500):
 
     sample_df = inferrer.sample_posterior(n_samples=n_samples) #inferrer.plot_posteriors(n_samples=1000)
     # inferrer.plot_posteriors(n_samples=n_samples)
+    
+    sample_file = os.path.join(base_dir, fname_str+'_sample_df.csv')
+    sample_df.to_csv(sample_file)
 
     inferred_values = []
     
     smaller_df = pd.DataFrame()
 
-    for i in range(len(data)):
-        mean_lamb = sample_df[sample_df['subject']==i]['lamb'].mean()
-        mean_alpha = sample_df[sample_df['subject']==i]['alpha'].mean()
-        mean_beta_mf = sample_df[sample_df['subject']==i]['beta_mf'].mean()
-        mean_beta_mb = sample_df[sample_df['subject']==i]['beta_mb'].mean()
-        if use_p:
-            mean_p = sample_df[sample_df['subject']==i]['p'].mean()
+    for name in param_names:
+        means = []
+        trues = []
+        subs = []
+        for i in range(len(data)):
+            means.append(sample_df[sample_df['subject']==i][name].mean())
+            trues.append(true_vals[i][name])
+            subs.append(i)
 
-        if use_p:
-            inferred_values.append({"lamb": mean_lamb, "alpha": mean_alpha, "beta_mf": mean_beta_mf, "beta_mb": mean_beta_mb, "p": mean_p})
-        else:
-            inferred_values.append({"lamb": mean_lamb, "alpha": mean_alpha, "beta_mf": mean_beta_mf, "beta_mb": mean_beta_mb})
+        smaller_df["inferred "+name] = ar.tensor(means)
+        smaller_df["true "+name] = ar.tensor(trues)
+        smaller_df["subject"] = ar.tensor(subs)
+        
+    smaller_file = os.path.join(base_dir, fname_str+'_smaller_df.csv')
+    smaller_df.to_csv(smaller_file)
 
-    true_lamb = [val['lamb'] for val in true_vals]
-    true_alpha = [val['alpha'] for val in true_vals]
-    true_beta_mf = [val['beta_mf'] for val in true_vals]
-    true_beta_mb = [val['beta_mb'] for val in true_vals]
-    if use_p:
-        true_p = [val['p'] for val in true_vals]
 
-    inferred_lamb = [val['lamb'] for val in inferred_values]
-    inferred_alpha = [val['alpha'] for val in inferred_values]
-    inferred_beta_mf = [val['beta_mf'] for val in inferred_values]
-    inferred_beta_mb = [val['beta_mb'] for val in inferred_values]
-    if use_p:
-        inferred_p = [val['p'] for val in inferred_values]
+    # true_lamb = [val['lamb'] for val in true_vals]
+    # true_alpha = [val['alpha'] for val in true_vals]
+    # true_beta_mf = [val['beta_mf'] for val in true_vals]
+    # true_beta_mb = [val['beta_mb'] for val in true_vals]
+    # if use_p:
+    #     true_p = [val['p'] for val in true_vals]
+
+    # inferred_lamb = [val['lamb'] for val in inferred_values]
+    # inferred_alpha = [val['alpha'] for val in inferred_values]
+    # inferred_beta_mf = [val['beta_mf'] for val in inferred_values]
+    # inferred_beta_mb = [val['beta_mb'] for val in inferred_values]
+    # if use_p:
+    #     inferred_p = [val['p'] for val in inferred_values]
 
     total_df = sample_df.copy()
-    total_df['true_lamb'] = ar.tensor(true_lamb).repeat(n_samples)
-    total_df['true_alpha'] = ar.tensor(true_alpha).repeat(n_samples)
-    total_df['true_beta_mf'] = ar.tensor(true_beta_mf).repeat(n_samples)
-    total_df['true_beta_mb'] = ar.tensor(true_beta_mb).repeat(n_samples)
-    if use_p:
-        total_df['true_p'] = ar.tensor(true_p).repeat(n_samples)
-
-    total_df['inferred_lamb'] = ar.tensor(inferred_lamb).repeat(n_samples)
-    total_df['inferred_alpha'] = ar.tensor(inferred_alpha).repeat(n_samples)
-    total_df['inferred_beta_mf'] = ar.tensor(inferred_beta_mf).repeat(n_samples)
-    total_df['inferred_beta_mb'] = ar.tensor(inferred_beta_mb).repeat(n_samples)
-    if use_p:
-        total_df['inferred_p'] = ar.tensor(inferred_p).repeat(n_samples)
-
-    sample_file = os.path.join(base_dir, fname_str+'.csv')
-    total_df.to_csv(sample_file)
+    for name in param_names:
+        total_df["true "+name] = ar.tensor(smaller_df["true "+name]).repeat(n_samples)
+        total_df["inferred "+name] = ar.tensor(smaller_df["inferred "+name]).repeat(n_samples)
     
-    smaller_df = pd.DataFrame()
-    smaller_df['true_lamb'] = ar.tensor(true_lamb)
-    smaller_df['true_alpha'] = ar.tensor(true_alpha)
-    smaller_df['true_beta_mf'] = ar.tensor(true_beta_mf)
-    smaller_df['true_beta_mb'] = ar.tensor(true_beta_mb)
-    if use_p:
-        smaller_df['true_p'] = ar.tensor(true_p).repeat(n_samples)
+    # total_df['true_lamb'] = ar.tensor(true_lamb).repeat(n_samples)
+    # total_df['true_alpha'] = ar.tensor(true_alpha).repeat(n_samples)
+    # total_df['true_beta_mf'] = ar.tensor(true_beta_mf).repeat(n_samples)
+    # total_df['true_beta_mb'] = ar.tensor(true_beta_mb).repeat(n_samples)
+    # if use_p:
+    #     total_df['true_p'] = ar.tensor(true_p).repeat(n_samples)
 
-    smaller_df['inferred_lamb'] = ar.tensor(inferred_lamb)
-    smaller_df['inferred_alpha'] = ar.tensor(inferred_alpha)
-    smaller_df['inferred_beta_mf'] = ar.tensor(inferred_beta_mf)
-    smaller_df['inferred_beta_mb'] = ar.tensor(inferred_beta_mb)
-    if use_p:
-        smaller_df['inferred_p'] = ar.tensor(inferred_p)
+    # total_df['inferred_lamb'] = ar.tensor(inferred_lamb).repeat(n_samples)
+    # total_df['inferred_alpha'] = ar.tensor(inferred_alpha).repeat(n_samples)
+    # total_df['inferred_beta_mf'] = ar.tensor(inferred_beta_mf).repeat(n_samples)
+    # total_df['inferred_beta_mb'] = ar.tensor(inferred_beta_mb).repeat(n_samples)
+    # if use_p:
+    #     total_df['inferred_p'] = ar.tensor(inferred_p).repeat(n_samples)
 
-    return total_df, smaller_df
-
-
-def plot_posterior(total_df, fname_str):
+    total_file = os.path.join(base_dir, fname_str+'_total_df.csv')
+    total_df.to_csv(total_file)
     
-    # new_df = sample_df.copy()
-    # new_df['true_pol_lambda'] = ar.zeros(len(data)*n_samples) - 1
-    # new_df['true_r_lambda'] = ar.zeros(len(data)*n_samples) - 1
-    # new_df['true_dec_temp'] = ar.zeros(len(data)*n_samples) - 1
+    # smaller_df = pd.DataFrame()
+    # smaller_df['true_lamb'] = ar.tensor(true_lamb)
+    # smaller_df['true_alpha'] = ar.tensor(true_alpha)
+    # smaller_df['true_beta_mf'] = ar.tensor(true_beta_mf)
+    # smaller_df['true_beta_mb'] = ar.tensor(true_beta_mb)
+    # if use_p:
+    #     smaller_df['true_p'] = ar.tensor(true_p)
 
-    # for i in range(len(data)):
-    #     new_df.loc[new_df['subject']==i,'true_pol_lambda'] = true_vals[i]['pol_lambda']
-    #     new_df.loc[new_df['subject']==i,'true_r_lambda']= true_vals[i]['r_lambda']
-    #     new_df.loc[new_df['subject']==i,'true_dec_temp'] = true_vals[i]['dec_temp']
+    # smaller_df['inferred_lamb'] = ar.tensor(inferred_lamb)
+    # smaller_df['inferred_alpha'] = ar.tensor(inferred_alpha)
+    # smaller_df['inferred_beta_mf'] = ar.tensor(inferred_beta_mf)
+    # smaller_df['inferred_beta_mb'] = ar.tensor(inferred_beta_mb)
+    # if use_p:
+    #     smaller_df['inferred_p'] = ar.tensor(inferred_p)
 
-    # import numpy
-    # print(numpy.allclose(total_df['true_pol_lambda'], new_df['true_pol_lambda']))
+    return total_df, smaller_df, sample_df
 
-    # plt.figure()
-    # sns.violinplot(data=total_df, x='true_pol_lambda', y='pol_lambda', alpha=0.5)
-    # sns.stripplot(data=total_df, x='true_pol_lambda', y='pol_lambda', hue='subject')
-    # g = plt.gca()
-    # g.set_xlim(left=-0.1, right=1.1)
-    # g.set_ylim(bottom=-0.1, top=1.1)
-    # plt.show()
 
-    # plt.figure()
-    # sns.violinplot(data=total_df, x='true_r_lambda', y='r_lambda', alpha=0.5)
-    # sns.stripplot(data=total_df, x='true_r_lambda', y='r_lambda', hue='subject')
-    # plt.xlim([-0.1, 1.1])
-    # plt.ylim([-0.1, 1.1])
-    # plt.show()
+def plot_inferred(smaller_df, fname_str, reg_fit=False):
+    
+    plot_df = smaller_df.drop('subject', axis=1)
+                        
+    if use_orig:
+        axes_names = ["discounting param lambda", "learning rate alpha", "decision temp beta", "weight w", "repetiton bias p"]
+        ranges = [[0,1], [0,1], [0, max_dt], [0,1], [0, 1]]
+    else:
+        axes_names = ["discounting param lambda", "learning rate alpha", "mf weight beta_mf", "mb weight beta_mb", "repetiton bias p"]
+        ranges = [[0,1], [0,1], [0, max_dt], [0, max_dt], [0, max_dt]]
 
-    # plt.figure()
-    # sns.violinplot(data=total_df, x='true_dec_temp', y='dec_temp', alpha=0.5)
-    # sns.stripplot(data=total_df, x='true_dec_temp', y='dec_temp', hue='subject')
-    # plt.xlim([0, 10])
-    # plt.ylim([0, 10])
-    # plt.show()
+    
+    for i, name in enumerate(param_names):
 
-    # if infer_h:
-    #     plt.figure()
-    #     sns.violinplot(data=total_df, x='true_h', y='h', alpha=0.5)
-    #     sns.stripplot(data=total_df, x='true_h', y='h', hue='subject')
-    #     plt.xlim([-0.1, 1.1])
-    #     plt.ylim([-0.1, 1.1])
-    #     plt.show()
-
-    plt.figure()
-    sns.scatterplot(data=total_df, x="true_lamb", y="inferred_lamb")
-    plt.xlim([-0.1, 1.1])
-    plt.ylim([-0.1, 1.1])
-    plt.xlabel("true lamb")
-    plt.ylabel("inferred lamb")
-    plt.savefig(os.path.join(base_dir, fname_str+"_lamb.svg"))
-    plt.show()
-
-    plt.figure()
-    sns.scatterplot(data=total_df, x="true_alpha", y="inferred_alpha")
-    plt.xlim([-0.1, 1.1])
-    plt.ylim([-0.1, 1.1])
-    plt.xlabel("true alpha")
-    plt.ylabel("inferred alpha")
-    plt.savefig(os.path.join(base_dir, fname_str+"_alpha.svg"))
-    plt.show()
-
-    plt.figure()
-    sns.scatterplot(data=total_df, x="true_beta_mf", y="inferred_beta_mf")
-    plt.xlim([0,max_dt])
-    plt.ylim([0,max_dt])
-    plt.xlabel("true beta_mf")
-    plt.ylabel("inferred beta_mf")
-    plt.savefig(os.path.join(base_dir, fname_str+"_beta_mf.svg"))
-    plt.show()
-
-    plt.figure()
-    sns.scatterplot(data=total_df, x="true_beta_mb", y="inferred_beta_mb")
-    plt.xlim([0,max_dt])
-    plt.ylim([0,max_dt])
-    plt.xlabel("true beta_mb")
-    plt.ylabel("inferred beta_mb")
-    plt.savefig(os.path.join(base_dir, fname_str+"_beta_mb.svg"))
-    plt.show()
-
-    if use_p:
         plt.figure()
-        sns.scatterplot(data=total_df, x="true_p", y="inferred_p")
-        plt.xlim([0,max_dt])
-        plt.ylim([0,max_dt])
-        plt.xlabel("true p")
-        plt.ylabel("inferred p")
-        plt.savefig(os.path.join(base_dir, fname_str+"_p.svg"))
+        plt.plot(ranges[i],ranges[i], linestyle='-', color="grey", alpha=0.6)
+        # sns.scatterplot(data=plot_df, x="true "+name, y="inferred "+name, ax=ax)
+        sns.regplot(data=plot_df, x="true "+name, y="inferred "+name,
+                   line_kws = {'color': 'green', 'alpha': 0.3}, fit_reg=reg_fit)
+        plt.xlim(ranges[i])
+        plt.ylim(ranges[i])
+        plt.xlabel("true "+axes_names[i])
+        plt.ylabel("inferred "+axes_names[i])
+        plt.annotate(axes_names[i], (0.+0.1*ranges[i][1], ranges[i][1]-0.1*ranges[i][1]))
         plt.show()
 
 
@@ -840,67 +839,50 @@ def plot_correlations(total_df, fname_str):
     plt.show()
     
     return smaller_df
+
+
+def big_custom_plot(plot_df, fname_str, ELBO, fit_reg=False, annot=False):
     
-    
-def make_big_results_plot(total_df, fname_str, ELBO, smaller_df):
-    
-    fig = plt.figure(layout='constrained', figsize=(12,12))
+    if use_orig:
+        axes_names = ["discounting param lambda", "learning rate alpha", "decision temp beta", "weight w", "repetiton bias p"]
+        ranges = [[0,1], [0,1], [0, max_dt], [0,1], [0, 1]]
+        positions = [[0,0], [0,1], [1,0], [1,1], [1,2]]
+    else:
+        axes_names = ["discounting param lambda", "learning rate alpha", "mf weight beta_mf", "mb weight beta_mb", "repetiton bias p"]
+        ranges = [[0,1], [0,1], [0, max_dt], [0, max_dt], [0, max_dt]]
+        positions = [[0,0], [0,1], [1,0], [1,1], [1,2]]
+
+    fig = plt.figure(layout='constrained', figsize=(14,12))
     axes = fig.subplots(3, 3)
     
-    ax = axes[0,0]
-    ax.plot([0,1],[0,1], linestyle='-', color="grey", alpha=0.6)
-    sns.scatterplot(data=smaller_df, x="true_lamb", y="inferred_lamb", ax=ax)
-    ax.set_xlim([-0.1, 1.1])
-    ax.set_ylim([-0.1, 1.1])
-    ax.set_xlabel("true lamb")
-    ax.set_ylabel("inferred lamb")
-    ax.annotate("discount parameter lambda", (0., 1.))
-
-    ax = axes[0,1]
-    ax.plot([0,1],[0,1], linestyle='-', color="grey", alpha=0.6)
-    sns.scatterplot(data=smaller_df, x="true_alpha", y="inferred_alpha", ax=ax)
-    ax.set_xlim([-0.1, 1.1])
-    ax.set_ylim([-0.1, 1.1])
-    ax.set_xlabel("true alpha")
-    ax.set_ylabel("inferred alpha")
-    ax.annotate("learning rate alpha", (0., 1.))
-
-    ax = axes[1,0]
-    ax.plot([0,max_dt],[0,max_dt], linestyle='-', color="grey", alpha=0.6)
-    sns.scatterplot(data=smaller_df, x="true_beta_mf", y="inferred_beta_mf", ax=ax)
-    ax.set_xlim([0,max_dt])
-    ax.set_ylim([0,max_dt])
-    ax.set_xlabel("true beta_mf")
-    ax.set_ylabel("inferred beta_mf")
-    ax.annotate("mf weight beta_mf", (0.5, max_dt-1))
-
-    ax = axes[1,1]
-    ax.plot([0,max_dt],[0,max_dt], linestyle='-', color="grey", alpha=0.6)
-    sns.scatterplot(data=smaller_df, x="true_beta_mb", y="inferred_beta_mb", ax=ax)
-    ax.set_xlim([0,max_dt])
-    ax.set_ylim([0,max_dt])
-    ax.set_xlabel("true beta_mb")
-    ax.set_ylabel("inferred beta_mb")
-    ax.annotate("mb weight beta_mb", (0.5, max_dt-1))
-
-    if use_p:
-        ax = axes[1,2]
-        ax.plot([0,max_dt],[0,max_dt], linestyle='-', color="grey", alpha=0.6)
-        sns.scatterplot(data=smaller_df, x="true_p", y="inferred_p", ax=ax)
-        ax.set_xlim([0,max_dt])
-        ax.set_ylim([0,max_dt])
-        ax.set_xlabel("true p")
-        ax.set_ylabel("inferred p")
-        ax.annotate("repetiton bias p", (0.5, max_dt-1))
+    for i, name in enumerate(param_names):
+    
+        ax = axes[positions[i][0], positions[i][1]]
+        ax.plot(ranges[i],ranges[i], linestyle='-', color="grey", alpha=0.6)
+        # sns.scatterplot(data=plot_df, x="true "+name, y="inferred "+name, ax=ax)
+        sns.regplot(data=plot_df, x="true "+name, y="inferred "+name, ax=ax,
+                   line_kws = {'color': 'green', 'alpha': 0.3}, fit_reg=fit_reg)
+        ax.set_xlim(ranges[i])
+        ax.set_ylim(ranges[i])
+        ax.set_xlabel("true "+axes_names[i])
+        ax.set_ylabel("inferred "+axes_names[i])
+        ax.annotate(axes_names[i], (0.+0.1*ranges[i][1], ranges[i][1]-0.1*ranges[i][1]), fontsize=16)
+        
+        if annot:
+            (r, p) = pearsonr(plot_df["true "+name], plot_df["inferred "+name])
+            ax.annotate("r = {:.2f} ".format(r)+"p = {:.3f}".format(p), 
+                        (0.4*ranges[i][1], 0.05*ranges[i][1]), fontsize=16)
+            # ax.annotate("p = {:.3f}".format(p),
+            #             (0.7*ranges[i][1], 0.05*ranges[i][1]))
         
     ax = axes[2,0]
     # plt.title("ELBO")
     ax.plot(ELBO)
-    ax.set_ylabel("ELBO")
-    ax.set_xlabel("iteration")
+    ax.set_ylabel("ELBO", fontsize=16)
+    ax.set_xlabel("iteration", fontsize=16)
 
-    rho = smaller_df.corr()
-    pval = smaller_df.corr(method=lambda x, y: pearsonr(x, y)[1]) - eye(*rho.shape)
+    rho = plot_df.corr()
+    pval = plot_df.corr(method=lambda x, y: pearsonr(x, y)[1]) - eye(*rho.shape)
     reject, pval_corrected, alphaS, alphaB = multipletests(pval, method='bonferroni')
     
     gs = axes[2, 1].get_gridspec()
@@ -908,17 +890,88 @@ def make_big_results_plot(total_df, fname_str, ELBO, smaller_df):
     for ax in axes[2, 1:]:
         ax.remove()
     axbig = fig.add_subplot(gs[2, 2])
-    
     ax = axbig
-    sns.heatmap(smaller_df.corr(), annot=True, fmt='.2f', ax=ax)#[pval_corrected<alphaB]
+    
+    p_opacity = pval_corrected*0.5 +0.5
+
+    sns.heatmap(plot_df.corr(), annot=True, fmt='.2f', alpha=p_opacity, 
+                cmap='vlag', vmin=-1, vmax=1, ax=ax)
+    
+    # sns.heatmap(smaller_df.corr(), annot=True, fmt='.2f', ax=ax)#[pval_corrected<alphaB]
         
     try:
         plt.tight_layout()
     except:
         pass
     
-    plt.savefig(os.path.join(base_dir, fname_str+"_big_plot.svg"))
+    if fit_reg:
+        name_str = "_regression"
+    else:
+        name_str = ""
+    if annot:
+        name_str += "_annot"
+    
+    plt.savefig(os.path.join(base_dir, fname_str+"_big_plot"+name_str+".svg"))
     plt.show()
+    
+    
+def plot_results(sample_df, fname_str, ELBO, smaller_df):
+    
+    plot_df = smaller_df.drop('subject', axis=1)\
+                        .reindex(["inferred "+name for name in param_names]\
+                                 +["true "+name for name in param_names], axis=1)
+        
+    def annot_corrfunc(x, y, **kws):
+        (r, p) = pearsonr(x, y)
+        ax = plt.gca()
+        ax.annotate("r = {:.2f} ".format(r),
+                    xy=(.1, .9), xycoords=ax.transAxes)
+        ax.annotate("p = {:.3f}".format(p),
+                    xy=(.4, .9), xycoords=ax.transAxes)
+        
+    big_custom_plot(plot_df, fname_str, ELBO, fit_reg=True, annot=True)
+    big_custom_plot(plot_df, fname_str, ELBO, fit_reg=True, annot=False)
+    big_custom_plot(plot_df, fname_str, ELBO, fit_reg=False, annot=True)
+    big_custom_plot(plot_df, fname_str, ELBO, fit_reg=False, annot=False)
+    
+    # plt.figure()
+    # sns.pairplot(sample_df, kind='reg')
+    # plt.savefig(os.path.join(base_dir, fname_str+"_pairplot_sample.svg"))
+    # plt.show()
+    
+    plt.figure()
+    f = sns.pairplot(data=plot_df, kind='reg', 
+                     diag_kind="kde", corner=True,
+                     plot_kws={'line_kws': {'color': 'green', 'alpha': 0.6}})
+    f.map(annot_corrfunc)
+    plt.savefig(os.path.join(base_dir, fname_str+"_pairplot_means_all.svg"))
+    plt.show()
+    
+    plt.figure()
+    xvars_of_interest = ["true "+name for name in param_names]
+    yvars_of_interest = ["inferred "+name for name in param_names]
+    f = sns.pairplot(data=plot_df, kind='reg', diag_kind="kde", corner=True,
+                     plot_kws={'line_kws': {'color': 'green', 'alpha': 0.6}},
+                     x_vars=xvars_of_interest, y_vars=yvars_of_interest)
+    f.map(annot_corrfunc)
+    plt.savefig(os.path.join(base_dir, fname_str+"_pairplot_means.svg"))
+    plt.show()
+    
+    plt.figure()
+    vars_of_interest = ["inferred "+name for name in param_names]
+    f = sns.pairplot(data=plot_df, kind='reg', diag_kind="kde", corner=True,
+                     plot_kws={'line_kws': {'color': 'green', 'alpha': 0.6}},
+                     x_vars=vars_of_interest, y_vars=vars_of_interest)
+    f.map(annot_corrfunc)
+    plt.savefig(os.path.join(base_dir, fname_str+"_pairplot_means_inferred_corr.svg"))
+    plt.show()
+    
+    # p_opacity = pval_corrected*0.5 +0.5
+    
+    # plt.figure()
+    # sns.heatmap(plot_df.corr(), annot=True, fmt='.2f', alpha=p_opacity, 
+    #             cmap='vlag', vmin=-1, vmax=1)
+    # plt.show()
 
 
 """run inference"""
@@ -930,7 +983,7 @@ inferrer = inf.GeneralGroupInference(agent, structured_data)
 print("this is inference using", type(inferrer))
 
 num_steps = 500
-size_chunk = 10
+size_chunk = 50
 total_num_iter_so_far = 0
 
 for i in range(total_num_iter_so_far, num_steps, size_chunk):
@@ -940,14 +993,14 @@ for i in range(total_num_iter_so_far, num_steps, size_chunk):
 
     infer(inferrer, size_chunk, fname_str)
     total_num_iter_so_far += size_chunk
-    full_df, smaller_df = sample_posterior(inferrer, fname_str) 
+    full_df, smaller_df, sample_df = sample_posterior(inferrer, fname_str) 
     
     # plot_posterior(full_df, fname_str)
     # plot_correlations(full_df, fname_str)
     
-    make_big_results_plot(full_df, fname_str, inferrer.loss, smaller_df)
+    plot_results(sample_df, fname_str, inferrer.loss, smaller_df)
     
-    print("This is recovery for the twostage task using the two beta mbmf model.")
+    print("This is recovery for the twostage task using the "+model_name+".")
     print("The settings are: use p", use_p, "restrict alpha", restrict_alpha)
     
 
@@ -956,5 +1009,5 @@ for i in range(total_num_iter_so_far, num_steps, size_chunk):
 
 print(full_df.corr())
 
-print("This is recovery for the twostage task using the two beta mbmf model.")
+print("This is recovery for the twostage task using the "+model_name+".")
 print("The settings are: use p", use_p, "restrict alpha", restrict_alpha)
