@@ -189,7 +189,8 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
     mbmf_prc = prc.mfmb2Perception(B, pol, Q_mf_init, Q_mb_init, utility,
                                     lamb, alpha, beta_mf, beta_mb,
                                     p, nsubs=1, use_p=use_p, mask=valid[:,None],
-                                    restrict_alpha=restrict_alpha)
+                                    restrict_alpha=restrict_alpha,
+                                    max_dt=max_dt, min_alpha=min_alpha)
     mbmf_prc.reset()
 
     planner = agt.FittingAgent(mbmf_prc, ac_sel, pol,
@@ -281,7 +282,7 @@ if use_p:
 else:
     n_pars = 4
     
-restrict_alpha = True
+restrict_alpha = False
 
 if use_p:
     p_str = "usep_"
@@ -290,8 +291,10 @@ else:
     
 if restrict_alpha:
     restr_str = "resticted_"
+    min_alpha = 0.1
 else:
     restr_str = ""
+    min_alpha = 0
 
 # prepare for savin results
 # make base filename and folder string
@@ -321,11 +324,14 @@ elif remove_old:
         os.remove(file)
     
 
-nsubs = 50
+nsubs = 10
 true_values_tensor = ar.rand((nsubs,n_pars,1))
 
 # prob for invalid answer (e.g. no reply)
 p_invalid = 1.-1./201.
+
+# max dec temp
+max_dt = 8
 
 stayed = []
 indices = []
@@ -334,15 +340,15 @@ for i,pars in enumerate(true_values_tensor):
 
     if use_p:
         discount, norm_lr, norm_dt_mf, norm_dt_mb, norm_perserv = pars
-        perserv = 8*norm_perserv
+        perserv = max_dt*norm_perserv
     else:
         discount, norm_lr, norm_dt_mf, norm_dt_mb = pars
         perserv = ar.tensor([0])
 
-    dt_mf = 8*norm_dt_mf
-    dt_mb = 8*norm_dt_mb
+    dt_mf = max_dt*norm_dt_mf
+    dt_mb = max_dt*norm_dt_mb
     if restrict_alpha:
-        lr = 0.1 + norm_lr*0.9
+        lr = min_alpha + norm_lr*(1.-min_alpha)
     else:
         lr = norm_lr
 
@@ -587,7 +593,9 @@ Q_mb_init = [ar.zeros((3,na)), ar.zeros((3,na))]
 
 # perception
 perception = prc.mfmb2Perception(B, pol, Q_mf_init, Q_mb_init, utility,
-                                 nsubs=nsubs, use_p=use_p, mask=data_mask)
+                                 nsubs=nsubs, use_p=use_p, mask=data_mask,
+                                 restrict_alpha=restrict_alpha,
+                                 max_dt=max_dt, min_alpha=min_alpha)
 
 agent = agt.FittingAgent(perception, [], pol,
                       trials = trials, T = T,
@@ -623,6 +631,8 @@ def sample_posterior(inferrer, fname_str, n_samples=500):
     # inferrer.plot_posteriors(n_samples=n_samples)
 
     inferred_values = []
+    
+    smaller_df = pd.DataFrame()
 
     for i in range(len(data)):
         mean_lamb = sample_df[sample_df['subject']==i]['lamb'].mean()
@@ -668,8 +678,23 @@ def sample_posterior(inferrer, fname_str, n_samples=500):
 
     sample_file = os.path.join(base_dir, fname_str+'.csv')
     total_df.to_csv(sample_file)
+    
+    smaller_df = pd.DataFrame()
+    smaller_df['true_lamb'] = ar.tensor(true_lamb)
+    smaller_df['true_alpha'] = ar.tensor(true_alpha)
+    smaller_df['true_beta_mf'] = ar.tensor(true_beta_mf)
+    smaller_df['true_beta_mb'] = ar.tensor(true_beta_mb)
+    if use_p:
+        smaller_df['true_p'] = ar.tensor(true_p).repeat(n_samples)
 
-    return total_df
+    smaller_df['inferred_lamb'] = ar.tensor(inferred_lamb)
+    smaller_df['inferred_alpha'] = ar.tensor(inferred_alpha)
+    smaller_df['inferred_beta_mf'] = ar.tensor(inferred_beta_mf)
+    smaller_df['inferred_beta_mb'] = ar.tensor(inferred_beta_mb)
+    if use_p:
+        smaller_df['inferred_p'] = ar.tensor(inferred_p)
+
+    return total_df, smaller_df
 
 
 def plot_posterior(total_df, fname_str):
@@ -730,15 +755,15 @@ def plot_posterior(total_df, fname_str):
     sns.scatterplot(data=total_df, x="true_alpha", y="inferred_alpha")
     plt.xlim([-0.1, 1.1])
     plt.ylim([-0.1, 1.1])
-    plt.xlabel("true alphaa")
+    plt.xlabel("true alpha")
     plt.ylabel("inferred alpha")
     plt.savefig(os.path.join(base_dir, fname_str+"_alpha.svg"))
     plt.show()
 
     plt.figure()
     sns.scatterplot(data=total_df, x="true_beta_mf", y="inferred_beta_mf")
-    plt.xlim([0,10])
-    plt.ylim([0,10])
+    plt.xlim([0,max_dt])
+    plt.ylim([0,max_dt])
     plt.xlabel("true beta_mf")
     plt.ylabel("inferred beta_mf")
     plt.savefig(os.path.join(base_dir, fname_str+"_beta_mf.svg"))
@@ -746,8 +771,8 @@ def plot_posterior(total_df, fname_str):
 
     plt.figure()
     sns.scatterplot(data=total_df, x="true_beta_mb", y="inferred_beta_mb")
-    plt.xlim([0,10])
-    plt.ylim([0,10])
+    plt.xlim([0,max_dt])
+    plt.ylim([0,max_dt])
     plt.xlabel("true beta_mb")
     plt.ylabel("inferred beta_mb")
     plt.savefig(os.path.join(base_dir, fname_str+"_beta_mb.svg"))
@@ -756,8 +781,8 @@ def plot_posterior(total_df, fname_str):
     if use_p:
         plt.figure()
         sns.scatterplot(data=total_df, x="true_p", y="inferred_p")
-        plt.xlim([0,10])
-        plt.ylim([0,10])
+        plt.xlim([0,max_dt])
+        plt.ylim([0,max_dt])
         plt.xlabel("true p")
         plt.ylabel("inferred p")
         plt.savefig(os.path.join(base_dir, fname_str+"_p.svg"))
@@ -813,6 +838,87 @@ def plot_correlations(total_df, fname_str):
     sns.heatmap(sample_df.corr(), annot=True, fmt='.2f')#[pval_corrected<alphaB]
     plt.savefig(os.path.join(base_dir, fname_str+"_sample_corr.svg"))
     plt.show()
+    
+    return smaller_df
+    
+    
+def make_big_results_plot(total_df, fname_str, ELBO, smaller_df):
+    
+    fig = plt.figure(layout='constrained', figsize=(12,12))
+    axes = fig.subplots(3, 3)
+    
+    ax = axes[0,0]
+    ax.plot([0,1],[0,1], linestyle='-', color="grey", alpha=0.6)
+    sns.scatterplot(data=smaller_df, x="true_lamb", y="inferred_lamb", ax=ax)
+    ax.set_xlim([-0.1, 1.1])
+    ax.set_ylim([-0.1, 1.1])
+    ax.set_xlabel("true lamb")
+    ax.set_ylabel("inferred lamb")
+    ax.annotate("discount parameter lambda", (0., 1.))
+
+    ax = axes[0,1]
+    ax.plot([0,1],[0,1], linestyle='-', color="grey", alpha=0.6)
+    sns.scatterplot(data=smaller_df, x="true_alpha", y="inferred_alpha", ax=ax)
+    ax.set_xlim([-0.1, 1.1])
+    ax.set_ylim([-0.1, 1.1])
+    ax.set_xlabel("true alpha")
+    ax.set_ylabel("inferred alpha")
+    ax.annotate("learning rate alpha", (0., 1.))
+
+    ax = axes[1,0]
+    ax.plot([0,max_dt],[0,max_dt], linestyle='-', color="grey", alpha=0.6)
+    sns.scatterplot(data=smaller_df, x="true_beta_mf", y="inferred_beta_mf", ax=ax)
+    ax.set_xlim([0,max_dt])
+    ax.set_ylim([0,max_dt])
+    ax.set_xlabel("true beta_mf")
+    ax.set_ylabel("inferred beta_mf")
+    ax.annotate("mf weight beta_mf", (0.5, max_dt-1))
+
+    ax = axes[1,1]
+    ax.plot([0,max_dt],[0,max_dt], linestyle='-', color="grey", alpha=0.6)
+    sns.scatterplot(data=smaller_df, x="true_beta_mb", y="inferred_beta_mb", ax=ax)
+    ax.set_xlim([0,max_dt])
+    ax.set_ylim([0,max_dt])
+    ax.set_xlabel("true beta_mb")
+    ax.set_ylabel("inferred beta_mb")
+    ax.annotate("mb weight beta_mb", (0.5, max_dt-1))
+
+    if use_p:
+        ax = axes[1,2]
+        ax.plot([0,max_dt],[0,max_dt], linestyle='-', color="grey", alpha=0.6)
+        sns.scatterplot(data=smaller_df, x="true_p", y="inferred_p", ax=ax)
+        ax.set_xlim([0,max_dt])
+        ax.set_ylim([0,max_dt])
+        ax.set_xlabel("true p")
+        ax.set_ylabel("inferred p")
+        ax.annotate("repetiton bias p", (0.5, max_dt-1))
+        
+    ax = axes[2,0]
+    # plt.title("ELBO")
+    ax.plot(ELBO)
+    ax.set_ylabel("ELBO")
+    ax.set_xlabel("iteration")
+
+    rho = smaller_df.corr()
+    pval = smaller_df.corr(method=lambda x, y: pearsonr(x, y)[1]) - eye(*rho.shape)
+    reject, pval_corrected, alphaS, alphaB = multipletests(pval, method='bonferroni')
+    
+    gs = axes[2, 1].get_gridspec()
+    # remove the underlying axes
+    for ax in axes[2, 1:]:
+        ax.remove()
+    axbig = fig.add_subplot(gs[2, 2])
+    
+    ax = axbig
+    sns.heatmap(smaller_df.corr(), annot=True, fmt='.2f', ax=ax)#[pval_corrected<alphaB]
+        
+    try:
+        plt.tight_layout()
+    except:
+        pass
+    
+    plt.savefig(os.path.join(base_dir, fname_str+"_big_plot.svg"))
+    plt.show()
 
 
 """run inference"""
@@ -824,7 +930,7 @@ inferrer = inf.GeneralGroupInference(agent, structured_data)
 print("this is inference using", type(inferrer))
 
 num_steps = 500
-size_chunk = 50
+size_chunk = 10
 total_num_iter_so_far = 0
 
 for i in range(total_num_iter_so_far, num_steps, size_chunk):
@@ -834,13 +940,16 @@ for i in range(total_num_iter_so_far, num_steps, size_chunk):
 
     infer(inferrer, size_chunk, fname_str)
     total_num_iter_so_far += size_chunk
-    full_df = sample_posterior(inferrer, fname_str)
-    plot_posterior(full_df, fname_str)
-
-    plot_correlations(full_df, fname_str)
+    full_df, smaller_df = sample_posterior(inferrer, fname_str) 
+    
+    # plot_posterior(full_df, fname_str)
+    # plot_correlations(full_df, fname_str)
+    
+    make_big_results_plot(full_df, fname_str, inferrer.loss, smaller_df)
     
     print("This is recovery for the twostage task using the two beta mbmf model.")
     print("The settings are: use p", use_p, "restrict alpha", restrict_alpha)
+    
 
 #print("this is inference for pl =", pl, "rl =", rl, "dt =", dt, "tend=", tend)
 # print(param_dict)

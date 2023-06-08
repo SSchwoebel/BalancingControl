@@ -2031,7 +2031,8 @@ class mfmb2Perception(object):
                  T=3,
                  npart=1, nsubs=1,
                  use_p=True,
-                 restrict_alpha=False):
+                 restrict_alpha=False,
+                 max_dt=10, min_alpha=0):
 
         self.generative_model_states = generative_model_states[:3,:3,...]
         self.alpha = alpha
@@ -2055,6 +2056,9 @@ class mfmb2Perception(object):
 
         self.use_p = use_p
         self.restrict_alpha = restrict_alpha
+        if self.restrict_alpha:
+            self.min_alpha = min_alpha
+        self.max_dt = max_dt
         if self.use_p:
             self.npars = 5
         else:
@@ -2075,21 +2079,21 @@ class mfmb2Perception(object):
     def locs_to_pars(self, locs):
         
         if self.restrict_alpha:
-            alpha = 0.1 + ar.sigmoid(locs[...,1])*0.9
+            alpha = self.min_alpha + ar.sigmoid(locs[...,1])*(1.-self.min_alpha)
         else:
             alpha = ar.sigmoid(locs[...,1])
 
         if self.use_p:
             par_dict = {"lamb": ar.sigmoid(locs[...,0]),
                         "alpha": alpha,
-                        "beta_mf": 10*ar.sigmoid(locs[...,2]),
-                        "beta_mb": 10*ar.sigmoid(locs[...,3]),
-                        "p": 10*ar.sigmoid(locs[...,4])}
+                        "beta_mf": self.max_dt*ar.sigmoid(locs[...,2]),
+                        "beta_mb": self.max_dt*ar.sigmoid(locs[...,3]),
+                        "p": self.max_dt*ar.sigmoid(locs[...,4])}
         else:
             par_dict = {"lamb": ar.sigmoid(locs[...,0]),
                         "alpha": alpha,
-                        "beta_mf": 10*ar.sigmoid(locs[...,2]),
-                        "beta_mb": 10*ar.sigmoid(locs[...,3])}
+                        "beta_mf": self.max_dt*ar.sigmoid(locs[...,2]),
+                        "beta_mb": self.max_dt*ar.sigmoid(locs[...,3])}
 
         return par_dict
 
@@ -2274,7 +2278,8 @@ class mfmbOrigPerception(object):
                  T=3,
                  npart=1, nsubs=1,
                  use_p=True,
-                 restrict_alpha=False):
+                 restrict_alpha=False,
+                 max_dt=10, min_alpha=0):
 
         self.generative_model_states = generative_model_states[:3,:3,...]
         self.alpha = alpha
@@ -2301,6 +2306,9 @@ class mfmbOrigPerception(object):
         else:
             self.npars = 4
         self.restrict_alpha = restrict_alpha
+        if self.restrict_alpha:
+            self.min_alpha = min_alpha
+        self.max_dt = max_dt
         self.param_names = list(self.locs_to_pars(ar.zeros(self.npars)).keys())
 
         self.Q_mf_init = Q_mf_init
@@ -2317,20 +2325,20 @@ class mfmbOrigPerception(object):
     def locs_to_pars(self, locs):
         
         if self.restrict_alpha:
-            alpha = 0.1 + ar.sigmoid(locs[...,1])*0.9
+            alpha = self.min_alpha + ar.sigmoid(locs[...,1])*(1-self.min_alpha)
         else:
             alpha = ar.sigmoid(locs[...,1])
 
         if self.use_p:
             par_dict = {"lamb": ar.sigmoid(locs[...,0]),
                         "alpha": alpha,
-                        "beta": 10*ar.sigmoid(locs[...,2]),
+                        "beta": self.max_dt*ar.sigmoid(locs[...,2]),
                         "w": ar.sigmoid(locs[...,3]),
                         "p": ar.sigmoid(locs[...,4])}
         else:
             par_dict = {"lamb": ar.sigmoid(locs[...,0]),
                         "alpha": alpha,
-                        "beta": 10*ar.sigmoid(locs[...,2]),
+                        "beta": self.max_dt*ar.sigmoid(locs[...,2]),
                         "w": ar.sigmoid(locs[...,3])}
 
         return par_dict
