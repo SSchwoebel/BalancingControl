@@ -193,7 +193,7 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
         w = args["weight"]
         p = args["repetition"]
         
-        mbmf_prc = prc.mfmbOrigPerception(B, pol, Q_mf_init, Q_mb_init, utility,
+        mbmf_prc = prc.mfmbOrig2Perception(B, pol, Q_mf_init, Q_mb_init, utility,
                                         lamb, alpha, beta, w,
                                         p, nsubs=1, use_p=use_p, mask=valid[:,None],
                                         restrict_alpha=restrict_alpha,
@@ -205,7 +205,7 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
         beta_mb = args["mb weight"]
         p = args["repetition"]
         
-        mbmf_prc = prc.mfmb2Perception(B, pol, Q_mf_init, Q_mb_init, utility,
+        mbmf_prc = prc.mfmb3Perception(B, pol, Q_mf_init, Q_mb_init, utility,
                                     lamb, alpha, beta_mf, beta_mb,
                                     p, nsubs=1, use_p=use_p, mask=valid[:,None],
                                     restrict_alpha=restrict_alpha,
@@ -292,18 +292,18 @@ plt.show()
 
 # make param combinations:
 
-use_orig = True
+use_orig = False
     
-use_p = True
+use_p = False
 restrict_alpha = False
 max_dt = 6
 
 if use_orig:
-    prefix = "mbmfOrig_"
+    prefix = "mbmfOrig2_"
     param_names = ["discount", "learning rate", "dec temp", "weight", "repetition"]
     model_name = "original original w and beta model"
 else:
-    prefix = "mbmf_"
+    prefix = "mbmf3_"
     param_names = ["discount", "learning rate", "mf weight", "mb weight", "repetition"]
     model_name = "two beta mbmf model"
 
@@ -640,12 +640,12 @@ Q_mb_init = [ar.zeros((3,na)), ar.zeros((3,na))]
 
 # perception
 if use_orig:
-    perception = prc.mfmbOrigPerception(B, pol, Q_mf_init, Q_mb_init, utility,
+    perception = prc.mfmbOrig2Perception(B, pol, Q_mf_init, Q_mb_init, utility,
                                      nsubs=nsubs, use_p=use_p, mask=data_mask,
                                      restrict_alpha=restrict_alpha,
                                      max_dt=max_dt, min_alpha=min_alpha)
 else:
-    perception = prc.mfmb2Perception(B, pol, Q_mf_init, Q_mb_init, utility,
+    perception = prc.mfmb3Perception(B, pol, Q_mf_init, Q_mb_init, utility,
                                  nsubs=nsubs, use_p=use_p, mask=data_mask,
                                  restrict_alpha=restrict_alpha,
                                  max_dt=max_dt, min_alpha=min_alpha)
@@ -685,8 +685,6 @@ def sample_posterior(inferrer, fname_str, n_samples=500):
     
     sample_file = os.path.join(base_dir, fname_str+'_sample_df.csv')
     sample_df.to_csv(sample_file)
-
-    inferred_values = []
     
     smaller_df = pd.DataFrame()
 
@@ -706,57 +704,13 @@ def sample_posterior(inferrer, fname_str, n_samples=500):
     smaller_file = os.path.join(base_dir, fname_str+'_smaller_df.csv')
     smaller_df.to_csv(smaller_file)
 
-
-    # true_lamb = [val['lamb'] for val in true_vals]
-    # true_alpha = [val['alpha'] for val in true_vals]
-    # true_beta_mf = [val['beta_mf'] for val in true_vals]
-    # true_beta_mb = [val['beta_mb'] for val in true_vals]
-    # if use_p:
-    #     true_p = [val['p'] for val in true_vals]
-
-    # inferred_lamb = [val['lamb'] for val in inferred_values]
-    # inferred_alpha = [val['alpha'] for val in inferred_values]
-    # inferred_beta_mf = [val['beta_mf'] for val in inferred_values]
-    # inferred_beta_mb = [val['beta_mb'] for val in inferred_values]
-    # if use_p:
-    #     inferred_p = [val['p'] for val in inferred_values]
-
     total_df = sample_df.copy()
     for name in param_names:
         total_df["true "+name] = ar.tensor(smaller_df["true "+name]).repeat(n_samples)
         total_df["inferred "+name] = ar.tensor(smaller_df["inferred "+name]).repeat(n_samples)
-    
-    # total_df['true_lamb'] = ar.tensor(true_lamb).repeat(n_samples)
-    # total_df['true_alpha'] = ar.tensor(true_alpha).repeat(n_samples)
-    # total_df['true_beta_mf'] = ar.tensor(true_beta_mf).repeat(n_samples)
-    # total_df['true_beta_mb'] = ar.tensor(true_beta_mb).repeat(n_samples)
-    # if use_p:
-    #     total_df['true_p'] = ar.tensor(true_p).repeat(n_samples)
-
-    # total_df['inferred_lamb'] = ar.tensor(inferred_lamb).repeat(n_samples)
-    # total_df['inferred_alpha'] = ar.tensor(inferred_alpha).repeat(n_samples)
-    # total_df['inferred_beta_mf'] = ar.tensor(inferred_beta_mf).repeat(n_samples)
-    # total_df['inferred_beta_mb'] = ar.tensor(inferred_beta_mb).repeat(n_samples)
-    # if use_p:
-    #     total_df['inferred_p'] = ar.tensor(inferred_p).repeat(n_samples)
 
     total_file = os.path.join(base_dir, fname_str+'_total_df.csv')
     total_df.to_csv(total_file)
-    
-    # smaller_df = pd.DataFrame()
-    # smaller_df['true_lamb'] = ar.tensor(true_lamb)
-    # smaller_df['true_alpha'] = ar.tensor(true_alpha)
-    # smaller_df['true_beta_mf'] = ar.tensor(true_beta_mf)
-    # smaller_df['true_beta_mb'] = ar.tensor(true_beta_mb)
-    # if use_p:
-    #     smaller_df['true_p'] = ar.tensor(true_p)
-
-    # smaller_df['inferred_lamb'] = ar.tensor(inferred_lamb)
-    # smaller_df['inferred_alpha'] = ar.tensor(inferred_alpha)
-    # smaller_df['inferred_beta_mf'] = ar.tensor(inferred_beta_mf)
-    # smaller_df['inferred_beta_mb'] = ar.tensor(inferred_beta_mb)
-    # if use_p:
-    #     smaller_df['inferred_p'] = ar.tensor(inferred_p)
 
     return total_df, smaller_df, sample_df
 

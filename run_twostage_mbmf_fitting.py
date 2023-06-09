@@ -34,6 +34,7 @@ import json
 import seaborn as sns
 import pandas as pd
 import os
+import glob
 import scipy as sc
 import scipy.signal as ss
 from scipy.stats import pearsonr
@@ -147,12 +148,63 @@ plt.show()
 
 # make param combinations:
 
-use_p = False
+use_orig = True
+    
+use_p = True
+restrict_alpha = True
+max_dt = 6
+
+if use_orig:
+    prefix = "mbmfOrig2_"
+    param_names = ["discount", "learning rate", "dec temp", "weight", "repetition"]
+    model_name = "original original w and beta model"
+else:
+    prefix = "mbmf3_"
+    param_names = ["discount", "learning rate", "mf weight", "mb weight", "repetition"]
+    model_name = "two beta mbmf model"
 
 if use_p:
     n_pars = 5
 else:
     n_pars = 4
+    param_names = param_names[:-1]
+
+
+if use_p:
+    p_str = "usep_"
+else:
+    p_str = ""
+    
+if restrict_alpha:
+    restr_str = "resticted_"
+    min_alpha = 0.1
+else:
+    restr_str = ""
+    min_alpha = 0
+    
+# prepare for savin results
+# make base filename and folder string
+fname_base = prefix+"fitted_"+p_str+restr_str
+print(fname_base)
+# define folder where we want to save data
+base_dir = os.path.join(base_folder,fname_base[:-1])
+
+remove_old = True
+
+# make directory if it doesnt exist
+if fname_base[:-1] not in os.listdir('data'):
+    os.mkdir(base_dir)
+# if it does exist, empty previous results, if we want that (remove_old==True)
+elif remove_old:
+    svgs = glob.glob(os.path.join(base_dir,"*.svg"))
+    for file in svgs:
+        os.remove(file)
+    csvs = glob.glob(os.path.join(base_dir,"*.csv"))
+    for file in csvs:
+        os.remove(file)
+    saves = glob.glob(os.path.join(base_dir,"*.save"))
+    for file in saves:
+        os.remove(file)
 
 stayed = []
 indices = []
@@ -160,7 +212,7 @@ indices = []
 dataset_names = os.listdir(data_folder)
 nsubs = len(dataset_names)
 
-for i in range(nsubs):
+for i in range(50):#
 
     fname = os.path.join(data_folder, dataset_names[i])
     data_dict, common_trans, dataset = load_dataset(fname)
@@ -249,37 +301,37 @@ nb1 = 1.-b1
 b2 = 0.7
 nb2 = 1.-b2
 
-# B[:,:,0] = array([[  0,  0,  0,  0,  0,  0,  0,],
-#                       [ b1,  0,  0,  0,  0,  0,  0,],
-#                       [nb1,  0,  0,  0,  0,  0,  0,],
-#                       [  0,  1,  0,  1,  0,  0,  0,],
-#                       [  0,  0,  0,  0,  1,  0,  0,],
-#                       [  0,  0,  1,  0,  0,  1,  0,],
-#                       [  0,  0,  0,  0,  0,  0,  1,],])
-
-# B[:,:,1] = array([[  0,  0,  0,  0,  0,  0,  0,],
-#                       [nb2,  0,  0,  0,  0,  0,  0,],
-#                       [ b2,  0,  0,  0,  0,  0,  0,],
-#                       [  0,  0,  0,  1,  0,  0,  0,],
-#                       [  0,  1,  0,  0,  1,  0,  0,],
-#                       [  0,  0,  0,  0,  0,  1,  0,],
-#                       [  0,  0,  1,  0,  0,  0,  1,],])
-
 B[:,:,0] = array([[  0,  0,  0,  0,  0,  0,  0,],
                       [ b1,  0,  0,  0,  0,  0,  0,],
                       [nb1,  0,  0,  0,  0,  0,  0,],
                       [  0,  1,  0,  1,  0,  0,  0,],
-                      [  0,  0,  1,  0,  1,  0,  0,],
-                      [  0,  0,  0,  0,  0,  1,  0,],
+                      [  0,  0,  0,  0,  1,  0,  0,],
+                      [  0,  0,  1,  0,  0,  1,  0,],
                       [  0,  0,  0,  0,  0,  0,  1,],])
 
 B[:,:,1] = array([[  0,  0,  0,  0,  0,  0,  0,],
                       [nb2,  0,  0,  0,  0,  0,  0,],
                       [ b2,  0,  0,  0,  0,  0,  0,],
                       [  0,  0,  0,  1,  0,  0,  0,],
-                      [  0,  0,  0,  0,  1,  0,  0,],
-                      [  0,  1,  0,  0,  0,  1,  0,],
+                      [  0,  1,  0,  0,  1,  0,  0,],
+                      [  0,  0,  0,  0,  0,  1,  0,],
                       [  0,  0,  1,  0,  0,  0,  1,],])
+
+# B[:,:,0] = array([[  0,  0,  0,  0,  0,  0,  0,],
+#                       [ b1,  0,  0,  0,  0,  0,  0,],
+#                       [nb1,  0,  0,  0,  0,  0,  0,],
+#                       [  0,  1,  0,  1,  0,  0,  0,],
+#                       [  0,  0,  1,  0,  1,  0,  0,],
+#                       [  0,  0,  0,  0,  0,  1,  0,],
+#                       [  0,  0,  0,  0,  0,  0,  1,],])
+
+# B[:,:,1] = array([[  0,  0,  0,  0,  0,  0,  0,],
+#                       [nb2,  0,  0,  0,  0,  0,  0,],
+#                       [ b2,  0,  0,  0,  0,  0,  0,],
+#                       [  0,  0,  0,  1,  0,  0,  0,],
+#                       [  0,  0,  0,  0,  1,  0,  0,],
+#                       [  0,  1,  0,  0,  0,  1,  0,],
+#                       [  0,  0,  1,  0,  0,  0,  1,],])
 
 
 transition_matrix_context = ar.ones(1).to(device)
@@ -323,17 +375,17 @@ structured_data = {"observations": data_obs, "rewards": data_rew, "actions": dat
 Q_mf_init = [ar.zeros((3,na)), ar.zeros((3,na))]
 Q_mb_init = [ar.zeros((3,na)), ar.zeros((3,na))]
 
-# init values, they dont matter, they will be overwritten as soon as inference starts anyways
-lamb = ar.tensor([0.9])
-alpha = ar.tensor([0.1])
-beta_mf = ar.tensor([4.])
-beta_mb = ar.tensor([4.])
-p = ar.tensor([2.])
-
 # perception
-perception = prc.mfmb2Perception(B, pol, Q_mf_init, Q_mb_init, utility,
-                                 mask=data_mask, nsubs=nsubs, use_p=use_p,
-                                 trials = trials, T = T)
+if use_orig:
+    perception = prc.mfmbOrig2Perception(B, pol, Q_mf_init, Q_mb_init, utility,
+                                     nsubs=nsubs, use_p=use_p, mask=data_mask,
+                                     restrict_alpha=restrict_alpha,
+                                     max_dt=max_dt, min_alpha=min_alpha)
+else:
+    perception = prc.mfmb3Perception(B, pol, Q_mf_init, Q_mb_init, utility,
+                                 nsubs=nsubs, use_p=use_p, mask=data_mask,
+                                 restrict_alpha=restrict_alpha,
+                                 max_dt=max_dt, min_alpha=min_alpha)
 
 agent = agt.FittingAgent(perception, [], pol,
                       trials = trials, T = T,
@@ -365,75 +417,114 @@ def infer(inferrer, iter_steps, prefix, total_num_iter_so_far):
     plt.savefig(prefix+'inferred_'+str(total_num_iter_so_far+iter_steps)+'_'+str(nsubs)+'subjects_ELBO.svg')
     plt.show()
 
-def sample_posterior(inferrer, prefix, total_num_iter_so_far, n_samples=500):
+def sample_posterior(inferrer, fname_str, n_samples=500):
 
     sample_df = inferrer.sample_posterior(n_samples=n_samples) #inferrer.plot_posteriors(n_samples=1000)
     # inferrer.plot_posteriors(n_samples=n_samples)
+    
+    sample_file = os.path.join(base_dir, fname_str+'_sample_df.csv')
+    sample_df.to_csv(sample_file)
 
-    inferred_values = []
+    smaller_df = pd.DataFrame()
 
-    for i in range(len(data)):
-        mean_lamb = sample_df[sample_df['subject']==i]['lamb'].mean()
-        mean_alpha = sample_df[sample_df['subject']==i]['alpha'].mean()
-        mean_beta_mf = sample_df[sample_df['subject']==i]['beta_mf'].mean()
-        mean_beta_mb = sample_df[sample_df['subject']==i]['beta_mb'].mean()
-        if use_p:
-            mean_p = sample_df[sample_df['subject']==i]['p'].mean()
+    for name in param_names:
+        means = []
+        subs = []
+        for i in range(len(data)):
+            means.append(sample_df[sample_df['subject']==i][name].mean())
+            subs.append(i)
 
-        if use_p:
-            inferred_values.append({"lamb": mean_lamb, "alpha": mean_alpha, "beta_mf": mean_beta_mf, "beta_mb": mean_beta_mb, "p": mean_p})
-        else:
-            inferred_values.append({"lamb": mean_lamb, "alpha": mean_alpha, "beta_mf": mean_beta_mf, "beta_mb": mean_beta_mb})
+        smaller_df["inferred "+name] = ar.tensor(means)
+        smaller_df["subject"] = ar.tensor(subs)
+        
+    smaller_file = os.path.join(base_dir, fname_str+'_smaller_df.csv')
+    smaller_df.to_csv(smaller_file)
+    
+    total_df = sample_df.copy()
+    for name in param_names:
+        total_df["inferred "+name] = ar.tensor(smaller_df["inferred "+name]).repeat(n_samples)
+        
+    total_file = os.path.join(base_dir, fname_str+'_total_df.csv')
+    total_df.to_csv(total_file)
 
-    sample_file = prefix+'inferred_samples_'+str(total_num_iter_so_far)+'_'+str(nsubs)+'subjects.csv'
-    fname = os.path.join(base_folder, sample_file)
-    sample_df.to_csv(fname)
-
-    return sample_df
+    return total_df, smaller_df, sample_df
 
 
-def plot_posterior(total_df, total_num_iter_so_far, prefix):
+def plot_results(sample_df, fname_str, ELBO, smaller_df):
 
-    plt.figure()
-    ax = sns.histplot(data=total_df, x="lamb", hue='subject')
-    # plt.xlim([-0.1, 1.1])
-    # plt.ylim([-0.1, 1.1])
-    plt.savefig(prefix+"inferred_"+str(total_num_iter_so_far)+"_"+str(nsubs)+"subjects_lamb.svg")
-    ax.get_legend().remove()
-    plt.show()
+    # plt.figure()
+    # ax = sns.histplot(data=total_df, x="lamb", hue='subject')
+    # # plt.xlim([-0.1, 1.1])
+    # # plt.ylim([-0.1, 1.1])
+    # plt.savefig(prefix+"inferred_"+str(total_num_iter_so_far)+"_"+str(nsubs)+"subjects_lamb.svg")
+    # ax.get_legend().remove()
+    # plt.show()
 
-    plt.figure()
-    ax = sns.histplot(data=total_df, x="alpha", hue='subject')
-    # plt.xlim([-0.1, 1.1])
-    # plt.ylim([-0.1, 1.1])
-    plt.savefig(prefix+"inferred_"+str(total_num_iter_so_far)+"_"+str(nsubs)+"subjects_alpha.svg")
-    ax.get_legend().remove()
-    plt.show()
+    # plt.figure()
+    # ax = sns.histplot(data=total_df, x="alpha", hue='subject')
+    # # plt.xlim([-0.1, 1.1])
+    # # plt.ylim([-0.1, 1.1])
+    # plt.savefig(prefix+"inferred_"+str(total_num_iter_so_far)+"_"+str(nsubs)+"subjects_alpha.svg")
+    # ax.get_legend().remove()
+    # plt.show()
 
-    plt.figure()
-    ax = sns.histplot(data=total_df, x="beta_mf", hue='subject')
-    # plt.xlim([-0.1, 1.1])
-    # plt.ylim([-0.1, 1.1])
-    plt.savefig(prefix+"inferred_"+str(total_num_iter_so_far)+"_"+str(nsubs)+"subjects_beta_mf.svg")
-    ax.get_legend().remove()
-    plt.show()
+    # plt.figure()
+    # ax = sns.histplot(data=total_df, x="beta_mf", hue='subject')
+    # # plt.xlim([-0.1, 1.1])
+    # # plt.ylim([-0.1, 1.1])
+    # plt.savefig(prefix+"inferred_"+str(total_num_iter_so_far)+"_"+str(nsubs)+"subjects_beta_mf.svg")
+    # ax.get_legend().remove()
+    # plt.show()
 
-    plt.figure()
-    ax = sns.histplot(data=total_df, x="beta_mb", hue='subject')
-    # plt.xlim([-0.1, 1.1])
-    # plt.ylim([-0.1, 1.1])
-    plt.savefig(prefix+"inferred_"+str(total_num_iter_so_far)+"_"+str(nsubs)+"subjects_beta_mb.svg")
-    ax.get_legend().remove()
-    plt.show()
+    # plt.figure()
+    # ax = sns.histplot(data=total_df, x="beta_mb", hue='subject')
+    # # plt.xlim([-0.1, 1.1])
+    # # plt.ylim([-0.1, 1.1])
+    # plt.savefig(prefix+"inferred_"+str(total_num_iter_so_far)+"_"+str(nsubs)+"subjects_beta_mb.svg")
+    # ax.get_legend().remove()
+    # plt.show()
 
-    if use_p:
+    # if use_p:
+    #     plt.figure()
+    #     ax = sns.histplot(data=total_df, x="p", hue='subject')
+    #     # plt.xlim([-0.1, 1.1])
+    #     # plt.ylim([-0.1, 1.1])
+    #     plt.savefig(prefix+"inferred_"+str(total_num_iter_so_far)+"_"+str(nsubs)+"subjects_p.svg")
+    #     ax.get_legend().remove()
+    #     plt.show()
+    
+    # for name in param_names:
+    #     plt.figure()
+    #     sns.displot(data=sample_df, x=name, col='subject', kind='kde', col_wrap=8)
+    #     plt.savefig(os.path.join(base_dir, fname_str+"_subject_dists_kde_"+name+".svg"))
+    #     plt.show()
+        
+    for name in param_names:
         plt.figure()
-        ax = sns.histplot(data=total_df, x="p", hue='subject')
-        # plt.xlim([-0.1, 1.1])
-        # plt.ylim([-0.1, 1.1])
-        plt.savefig(prefix+"inferred_"+str(total_num_iter_so_far)+"_"+str(nsubs)+"subjects_p.svg")
-        ax.get_legend().remove()
+        sns.displot(data=sample_df, x=name, col='subject', kind='hist', col_wrap=8)
+        plt.savefig(os.path.join(base_dir, fname_str+"_subject_dists_hist_"+name+".svg"))
         plt.show()
+        
+    def annot_corrfunc(x, y, **kws):
+        (r, p) = pearsonr(x, y)
+        ax = plt.gca()
+        ax.annotate("r = {:.2f} ".format(r),
+                    xy=(.1, .9), xycoords=ax.transAxes)
+        ax.annotate("p = {:.3f}".format(p),
+                    xy=(.4, .9), xycoords=ax.transAxes)
+        
+    # rho = smaller_df.corr()
+    # pval = smaller_df.corr(method=lambda x, y: pearsonr(x, y)[1]) - eye(*rho.shape)
+    # reject, pval_corrected, alphaS, alphaB = multipletests(pval, method='bonferroni')
+        
+    plot_df = smaller_df.drop('subject', axis=1)
+    plt.figure()
+    f = sns.pairplot(data=plot_df, kind='reg', 
+                     diag_kind="kde", corner=True,
+                     plot_kws={'line_kws': {'color': 'green', 'alpha': 0.6}})
+    f.map(annot_corrfunc)
+    plt.savefig(os.path.join(base_dir, fname_str+"_pairplot_means_all.svg"))
+    plt.show()
 
 
 def plot_correlations(total_df, total_num_iter_so_far,prefix):
@@ -473,17 +564,22 @@ total_num_iter_so_far = 0
 for i in range(total_num_iter_so_far, num_steps, size_chunk):
     print('taking steps '+str(i+1)+' to '+str(i+size_chunk)+' out of total '+str(num_steps))
 
+    fname_str = fname_base + str(total_num_iter_so_far+size_chunk)+'_'+str(nsubs)+'subjects'
+
     infer(inferrer, size_chunk, prefix, total_num_iter_so_far)
     total_num_iter_so_far += size_chunk
-    full_df = sample_posterior(inferrer, prefix, total_num_iter_so_far)
-    plot_posterior(full_df, total_num_iter_so_far, prefix)
+    total_df, smaller_df, sample_df = sample_posterior(inferrer, fname_str)
+    plot_results(sample_df, fname_str, inferrer.loss, smaller_df)
+    
+    print("This is inference for the twostage task using the "+model_name+".")
+    print("The settings are: use p", use_p, "restrict alpha", restrict_alpha)
 
-    plot_correlations(full_df, total_num_iter_so_far, prefix)
+    # plot_correlations(full_df, total_num_iter_so_far, prefix)
 
 #print("this is inference for pl =", pl, "rl =", rl, "dt =", dt, "tend=", tend)
 # print(param_dict)
 
-print(full_df.corr())
+# print(full_df.corr())
 
-print("This is inference for the twostage task using the two beta mbmf model.")
-print("The settings are: use p", use_p,)# "restrict alpha", restrict_alpha)
+print("This is inference for the twostage task using the "+model_name+".")
+print("The settings are: use p", use_p, "restrict alpha", restrict_alpha)
