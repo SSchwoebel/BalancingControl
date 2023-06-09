@@ -34,10 +34,10 @@ import json
 import seaborn as sns
 import pandas as pd
 import os
+import glob
 import scipy as sc
 import scipy.signal as ss
 from scipy.stats import pearsonr
-import bottleneck as bn
 import gc
 import sys
 from numpy import eye
@@ -73,7 +73,7 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
     #state_unc: state transition uncertainty condition
     #goal_pol: evaluate only policies that lead to the goal
     #utility: goal prior, preference p(o)
-    learn_pol, avg, Rho, learn_habit, pol_lambda, r_lambda, dec_temp, utility, infer_h = par_list
+    avg, Rho, perception_args, utility, infer_h, valid = par_list
     learn_rew = 1
 
     """
@@ -174,16 +174,6 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
     #pol = pol[-2:]
     npi = pol.shape[0]
 
-    # prior over policies
-
-    prior_pi = ar.ones(npi)/npi #ar.zeros(npi) + 1e-3/(npi-1)
-    #prior_pi[170] = 1. - 1e-3
-    alphas = ar.zeros((npi)) + learn_pol
-    alpha_0 = learn_pol
-#    for i in range(nb):
-#        alphas[i+1,i] = 100
-    #alphas[170] = 100
-    prior_pi = alphas / alphas.sum(axis=0)
 
 
     """
@@ -222,17 +212,25 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
     """
     set up agent
     """
-
-    #pol_par = alphas
+    
+    pol_lambda = perception_args["policy rate"]
+    r_lambda = perception_args["reward rate"]
+    dec_temp = perception_args["dec temp"]    
+    alpha_0 = perception_args["habitual tendency"]
+    
+    alphas = ar.zeros((npi)) + alpha_0
+    prior_pi = alphas / alphas.sum(axis=0)
+    learn_habit = True
 
     # perception
     bayes_prc = prc.Group2Perception(A, B, C_agent, transition_matrix_context,
                                            state_prior, utility, prior_pi, pol,
                                            alpha_0, C_alphas,
-                                           learn_habit = learn_habit,
+                                           learn_habit = learn_habit, mask=valid[:,None],
                                            learn_rew = True, T=T, trials=trials,
                                            pol_lambda=pol_lambda, r_lambda=r_lambda,
-                                           non_decaying=(ns-nb), dec_temp=dec_temp, nsubs=1, infer_alpha_0=infer_h)
+                                           non_decaying=(ns-nb), dec_temp=dec_temp, 
+                                           nsubs=1, infer_alpha_0=infer_h, use_h=True)
     bayes_prc.reset()
 
     bayes_pln = agt.FittingAgent(bayes_prc, ac_sel, pol,
@@ -323,14 +321,53 @@ plt.show()
 
 infer_h = False
 
+prefix = "BCC_"
+param_names = ["policy rate", "reward rate", "dec temp", "habitual tendency"]
+model_name = "Bayesian prior-based contextual control model"
+
 if infer_h:
     n_pars = 4
+    h_str = "inferh_"
 else:
     n_pars = 3
+    h_str = ""
+    param_names = param_names[:-1]
+    
+max_dt = 6
 
-num_agents = 30
-true_values_tensor = ar.rand((num_agents,n_pars,1))
+# prepare for savin results
+# make base filename and folder string
+fname_base = prefix+"recovered_"+h_str
+print(fname_base)
+# define folder where we want to save data
+base_dir = os.path.join(folder,fname_base[:-1])
 
+remove_old = True
+
+# make directory if it doesnt exist
+if fname_base[:-1] not in os.listdir('data'):
+    os.mkdir(base_dir)
+# if it does exist, empty previous results, if we want that (remove_old==True)
+elif remove_old:
+    svgs = glob.glob(os.path.join(base_dir,"*.svg"))
+    for file in svgs:
+        os.remove(file)
+    csvs = glob.glob(os.path.join(base_dir,"*.csv"))
+    for file in csvs:
+        os.remove(file)
+    saves = glob.glob(os.path.join(base_dir,"*.save"))
+    for file in saves:
+        os.remove(file)
+    agents = glob.glob(os.path.join(base_dir,"twostage_agent*"))
+    for file in agents:
+        os.remove(file)
+    
+
+nsubs = 10
+true_values_tensor = ar.rand((nsubs,n_pars,1))
+
+# prob for invalid answer (e.g. no reply)
+p_invalid = 1.-1./201.
 
 stayed = []
 indices = []
@@ -338,16 +375,17 @@ indices = []
 for pars in true_values_tensor:
 
     if infer_h:
-
         pl, rl, norm_dt, h = pars
-        tend = 1./h
+        tend = h
     else:
         pl, rl, norm_dt = pars
         tend = ar.tensor([1])
 
-    dt = 7*norm_dt+1
+    dt = max_dt*norm_dt+1
 
     print(pl, rl, dt, tend)
+    
+    perception_args = {"policy rate": pl, "reward rate": rl, "dec temp": dt, "habitual tendency": tend}
 
     # init = array([0.6, 0.4, 0.6, 0.4])
 
@@ -372,13 +410,10 @@ for pars in true_values_tensor:
 
     worlds = []
     l = []
-    learn_pol = tend
-    learn_habit = True
     avg = True
-    pol_lambda = pl
-    r_lambda = rl
-    dec_temp = dt
-    pars = [learn_pol, avg, Rho, learn_habit, pol_lambda, r_lambda, dec_temp, utility, infer_h]
+    prob_matrix = ar.zeros((trials)) + p_invalid
+    valid = ar.bernoulli(prob_matrix).bool()
+    pars = [avg, Rho,perception_args, utility, infer_h, valid]
 
     worlds.append(run_agent(pars))
 
@@ -423,14 +458,14 @@ for pars in true_values_tensor:
 
     stayed.append(stayed_list)
 
-    run_name = "twostage_agent_daw_3rews_alph0_every_recovery_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tend)+".json"
+    run_name = "twostage_agent_daw_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tend)+".json"
     fname = os.path.join(folder, run_name)
 
     # actions = w.actions.numpy()
     # observations = w.observations.numpy()
     # rewards = w.rewards.numpy()
     # states = w.environment.hidden_states.numpy()
-    data.append({"actions": w.actions, "observations": w.observations, "rewards": w.rewards, "states": w.environment.hidden_states})
+    data.append({"actions": w.actions, "observations": w.observations, "rewards": w.rewards, "states": w.environment.hidden_states, 'mask': valid})
 
     jsonpickle_numpy.register_handlers()
     pickled = pickle.encode(data[-1])
@@ -474,10 +509,11 @@ for pars in true_values_tensor:
     # plt.ylabel("stay probability")
     # plt.show()
 
-    true_vals.append({"pol_lambda": pl, "r_lambda": rl, "dec_temp": dt, "h": 1./tend})
+    true_vals.append(perception_args)
 
 stayed_arr = array(stayed)
 
+learn_habit = True
 plt.figure()
 g = sns.barplot(data=stayed_arr)
 g.set_xticklabels(names, rotation=45, horizontalalignment='right', fontsize=16)
@@ -494,11 +530,6 @@ plt.show()
 
 print('analyzing '+str(len(true_vals))+' data sets')
 
-
-
-
-learn_pol=tend
-learn_habit=True
 
 learn_rew = 1
 
@@ -595,19 +626,6 @@ pol = array(list(itertools.product(list(range(na)), repeat=T-1))).to(device)
 #pol = pol[-2:]
 npi = pol.shape[0]
 
-# prior over policies
-
-prior_pi = ar.ones(npi).to(device)
-prior_pi /= npi #ar.zeros(npi) + 1e-3/(npi-1)
-#prior_pi[170] = 1. - 1e-3
-alphas = ar.zeros((npi)).to(device)
-alphas += learn_pol
-alpha_0 = array([learn_pol]).to(device)
-#    for i in range(nb):
-#        alphas[i+1,i] = 100
-#alphas[170] = 100
-prior_pi = alphas / alphas.sum()
-
 
 """
 set state prior (where agent thinks it starts)
@@ -620,13 +638,11 @@ state_prior[0] = 1.
 prior_context = array([1.]).to(device)
 
 #    prior_context[0] = 1.
-
+prior_pi = ar.zeros(npi) / ar.zeros(npi).sum()
 """
 set up agent
 """
 #bethe agent
-
-pol_par = alphas
 
 data_obs = ar.stack([d["observations"] for d in data], dim=-1)
 data_rew = ar.stack([d["rewards"] for d in data], dim=-1)
@@ -635,16 +651,52 @@ data_act = ar.stack([d["actions"] for d in data], dim=-1)
 structured_data = {"observations": data_obs, "rewards": data_rew, "actions": data_act}
 
 # perception
+pol_lambda = ar.tensor([1])
+r_lambda = ar.tensor([0.5])
+dec_temp = ar.tensor([2])   
+alpha_0 = ar.tensor([1])
+
+alphas = ar.zeros((npi)) + alpha_0
+prior_pi = alphas / alphas.sum(axis=0)
+learn_habit = True
+
+npart = 15
+
+# obs_message_list = [[]]
+# for tau in range(trials):
+#     obs_message_tau = []
+#     rew_message_tau = []
+#     for t in range(T):
+#         observations = ar.stack(data_obs[tau][-t-1:])
+#         obs_messages = []
+#         for n in range(nsubs):
+#             prev_obs = [A[o] for o in observations[-t-1:,n]]
+#             obs = prev_obs + [ar.zeros((ns)).to(device)+1./ns]*(T-t-1)
+#             obs = [ar.stack(obs).T.to(device)]*npart
+#             obs_messages.append(ar.stack(obs, dim=-1))
+#         obs_messages = ar.stack(obs_messages, dim=-1).to(device)
+#         obs_message_tau.append(obs_messages)
+    
+#         rewards = ar.stack(data_rew[tau][-t-1:])
+#         rew_messages = []
+#         for n in range(nsubs):
+#             rew_messages.append(ar.stack([ar.stack([generative_model_rewards[r,:,i,n].to(device) for r in rewards[-t-1:,n]]  \
+#                                                    + [utility.matmul(generative_model_rewards[:,:,i,n].to(device)).to(device)]*(self.T-t-1)).T.to(device) for i in range(self.npart)], dim=-1).to(device))
+#         rew_messages = ar.stack(rew_messages, dim=-1).to(device)
+#         rew_message_tau.append(rew_messages)
+        
+#     obs_message_list.append(obs_message_tau)
+    
+
+# perception
 bayes_prc = prc.Group2Perception(A, B, C_agent, transition_matrix_context,
                                        state_prior, utility, prior_pi, pol,
-                                       #data_obs, data_rew, data_act,
                                        alpha_0, C_alphas,
-                                       learn_habit = learn_habit,
+                                       learn_habit = learn_habit, mask=valid[:,None],
                                        learn_rew = True, T=T, trials=trials,
-                                       pol_lambda=0, r_lambda=0,
-                                       non_decaying=3, dec_temp=1,
-                                       infer_alpha_0=infer_h,
-                                       use_h=True)
+                                       pol_lambda=pol_lambda, r_lambda=r_lambda,
+                                       non_decaying=(ns-nb), dec_temp=dec_temp, 
+                                       nsubs=1, infer_alpha_0=infer_h, use_h=True)
 
 agent = agt.FittingAgent(bayes_prc, [], pol,
                   trials = trials, T = T,
@@ -660,12 +712,11 @@ agent = agt.FittingAgent(bayes_prc, [], pol,
 ###################################
 """inference convenience functions"""
 
-def infer(inferrer, iter_steps, prefix, total_num_iter_so_far):
+def infer(inferrer, iter_steps, fname_str):
 
-    inferrer.infer_posterior(iter_steps=iter_steps, num_particles=15, optim_kwargs={'lr': .01})#, param_dict
+    inferrer.infer_posterior(iter_steps=iter_steps, num_particles=npart, optim_kwargs={'lr': .01})#, param_dict
 
-    storage_name = prefix+'recovered_'+str(total_num_iter_so_far+iter_steps)+'_'+str(num_agents)+'agents.save'#h_recovered
-    storage_name = os.path.join(folder, storage_name)
+    storage_name = os.path.join(base_dir, fname_str+'.save')#h_recovered
     inferrer.save_parameters(storage_name)
     # inferrer.load_parameters(storage_name)
 
@@ -675,185 +726,195 @@ def infer(inferrer, iter_steps, prefix, total_num_iter_so_far):
     plt.plot(loss)
     plt.ylabel("ELBO")
     plt.xlabel("iteration")
-    plt.savefig('recovered_ELBO')
-    plt.savefig(prefix+'recovered_'+str(total_num_iter_so_far+iter_steps)+'_'+str(num_agents)+'agents_ELBO.svg')
+    plt.savefig(os.path.join(base_dir, fname_str+'_ELBO.svg'))
     plt.show()
 
-def sample_posterior(inferrer, prefix, total_num_iter_so_far, n_samples=500):
+def sample_posterior(inferrer, fname_str, n_samples=500):
 
     sample_df = inferrer.sample_posterior(n_samples=n_samples) #inferrer.plot_posteriors(n_samples=1000)
     # inferrer.plot_posteriors(n_samples=n_samples)
+    
+    sample_file = os.path.join(base_dir, fname_str+'_sample_df.csv')
+    sample_df.to_csv(sample_file)
+    
+    smaller_df = pd.DataFrame()
 
-    inferred_values = []
+    for name in param_names:
+        means = []
+        trues = []
+        subs = []
+        for i in range(len(data)):
+            means.append(sample_df[sample_df['subject']==i][name].mean())
+            trues.append(true_vals[i][name])
+            subs.append(i)
 
-    for i in range(len(data)):
-        mean_pl = sample_df[sample_df['subject']==i]['pol_lambda'].mean()
-        mean_rl = sample_df[sample_df['subject']==i]['r_lambda'].mean()
-        mean_dt = sample_df[sample_df['subject']==i]['dec_temp'].mean()
-        if infer_h:
-            mean_h = sample_df[sample_df['subject']==i]['h'].mean()
-
-            inferred_values.append({"pol_lambda": mean_pl, "r_lambda": mean_rl, "dec_temp": mean_dt, "h": mean_h})
-        else:
-            inferred_values.append({"pol_lambda": mean_pl, "r_lambda": mean_rl, "dec_temp": mean_dt})
-
-    true_pl = [val['pol_lambda'] for val in true_vals]
-    true_rl = [val['r_lambda'] for val in true_vals]
-    true_dt = [val['dec_temp'] for val in true_vals]
-    if infer_h:
-        true_h = [val['h'] for val in true_vals]
-
-    inferred_pl = [val['pol_lambda'] for val in inferred_values]
-    inferred_rl = [val['r_lambda'] for val in inferred_values]
-    inferred_dt = [val['dec_temp'] for val in inferred_values]
-    if infer_h:
-        inferred_h = [val['h'] for val in inferred_values]
+        smaller_df["inferred "+name] = ar.tensor(means)
+        smaller_df["true "+name] = ar.tensor(trues)
+        smaller_df["subject"] = ar.tensor(subs)
+        
+    smaller_file = os.path.join(base_dir, fname_str+'_smaller_df.csv')
+    smaller_df.to_csv(smaller_file)
 
     total_df = sample_df.copy()
-    total_df['true_pol_lambda'] = ar.tensor(true_pl).repeat(n_samples)
-    total_df['true_r_lambda'] = ar.tensor(true_rl).repeat(n_samples)
-    total_df['true_dec_temp'] = ar.tensor(true_dt).repeat(n_samples)
-    total_df['inferred_pol_lambda'] = ar.tensor(inferred_pl).repeat(n_samples)
-    total_df['inferred_r_lambda'] = ar.tensor(inferred_rl).repeat(n_samples)
-    total_df['inferred_dec_temp'] = ar.tensor(inferred_dt).repeat(n_samples)
-    if infer_h:
-        total_df['true_h'] = ar.tensor(true_h).repeat(n_samples)
-        total_df['inferred_h'] = ar.tensor(inferred_h).repeat(n_samples)
+    for name in param_names:
+        total_df["true "+name] = ar.tensor(smaller_df["true "+name]).repeat(n_samples)
+        total_df["inferred "+name] = ar.tensor(smaller_df["inferred "+name]).repeat(n_samples)
 
-    sample_file = prefix+'recovered_samples_'+str(total_num_iter_so_far)+'_'+str(num_agents)+'agents.csv'
-    fname = os.path.join(folder, sample_file)
-    total_df.to_csv(fname)
+    total_file = os.path.join(base_dir, fname_str+'_total_df.csv')
+    total_df.to_csv(total_file)
 
-    return total_df
+    return total_df, smaller_df, sample_df
 
 
-def plot_posterior(total_df, total_num_iter_so_far, prefix):
+def plot_inferred(smaller_df, fname_str, reg_fit=False):
+    
+    plot_df = smaller_df.drop('subject', axis=1)
+                        
+    axes_names = ["policy forgetting rate lambda_pi", "reward forgetting rate lambda_r", "decision temp gamma", "habitual tendency h"]
+    ranges = [[0,1], [0,1], [1, max_dt], [0,1], [0, 1]]
 
-    # new_df = sample_df.copy()
-    # new_df['true_pol_lambda'] = ar.zeros(len(data)*n_samples) - 1
-    # new_df['true_r_lambda'] = ar.zeros(len(data)*n_samples) - 1
-    # new_df['true_dec_temp'] = ar.zeros(len(data)*n_samples) - 1
+    
+    for i, name in enumerate(param_names):
 
-    # for i in range(len(data)):
-    #     new_df.loc[new_df['subject']==i,'true_pol_lambda'] = true_vals[i]['pol_lambda']
-    #     new_df.loc[new_df['subject']==i,'true_r_lambda']= true_vals[i]['r_lambda']
-    #     new_df.loc[new_df['subject']==i,'true_dec_temp'] = true_vals[i]['dec_temp']
-
-    # import numpy
-    # print(numpy.allclose(total_df['true_pol_lambda'], new_df['true_pol_lambda']))
-
-    # plt.figure()
-    # sns.violinplot(data=total_df, x='true_pol_lambda', y='pol_lambda', alpha=0.5)
-    # sns.stripplot(data=total_df, x='true_pol_lambda', y='pol_lambda', hue='subject')
-    # g = plt.gca()
-    # g.set_xlim(left=-0.1, right=1.1)
-    # g.set_ylim(bottom=-0.1, top=1.1)
-    # plt.show()
-
-    # plt.figure()
-    # sns.violinplot(data=total_df, x='true_r_lambda', y='r_lambda', alpha=0.5)
-    # sns.stripplot(data=total_df, x='true_r_lambda', y='r_lambda', hue='subject')
-    # plt.xlim([-0.1, 1.1])
-    # plt.ylim([-0.1, 1.1])
-    # plt.show()
-
-    # plt.figure()
-    # sns.violinplot(data=total_df, x='true_dec_temp', y='dec_temp', alpha=0.5)
-    # sns.stripplot(data=total_df, x='true_dec_temp', y='dec_temp', hue='subject')
-    # plt.xlim([0, 10])
-    # plt.ylim([0, 10])
-    # plt.show()
-
-    # if infer_h:
-    #     plt.figure()
-    #     sns.violinplot(data=total_df, x='true_h', y='h', alpha=0.5)
-    #     sns.stripplot(data=total_df, x='true_h', y='h', hue='subject')
-    #     plt.xlim([-0.1, 1.1])
-    #     plt.ylim([-0.1, 1.1])
-    #     plt.show()
-
-    plt.figure()
-    sns.scatterplot(data=total_df, x="true_pol_lambda", y="inferred_pol_lambda")
-    plt.xlim([-0.1, 1.1])
-    plt.ylim([-0.1, 1.1])
-    plt.xlabel("true pol_lambda")
-    plt.ylabel("inferred pol_lambda")
-    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(num_agents)+"agents_pol_lambda.svg")
-    plt.show()
-
-    plt.figure()
-    sns.scatterplot(data=total_df, x="true_r_lambda", y="inferred_r_lambda")
-    plt.xlim([-0.1, 1.1])
-    plt.ylim([-0.1, 1.1])
-    plt.xlabel("true r_lambda")
-    plt.ylabel("inferred r_lambda")
-    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(num_agents)+"agents_r_lambda.svg")
-    plt.show()
-
-    plt.figure()
-    sns.scatterplot(data=total_df, x="true_dec_temp", y="inferred_dec_temp")
-    plt.xlim([0,10])
-    plt.ylim([0,10])
-    plt.xlabel("true dec_temp")
-    plt.ylabel("inferred dec_temp")
-    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(num_agents)+"agents_dec_temp.svg")
-    plt.show()
-
-    if infer_h:
         plt.figure()
-        sns.scatterplot(data=total_df, x="true_h", y="inferred_h")
-        plt.xlim([-0.1, 1.1])
-        plt.ylim([-0.1, 1.1])
-        plt.xlabel("true h")
-        plt.ylabel("inferred h")
-        plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(num_agents)+"agents_h.svg")
+        plt.plot(ranges[i],ranges[i], linestyle='-', color="grey", alpha=0.6)
+        # sns.scatterplot(data=plot_df, x="true "+name, y="inferred "+name, ax=ax)
+        sns.regplot(data=plot_df, x="true "+name, y="inferred "+name,
+                   line_kws = {'color': 'green', 'alpha': 0.3}, fit_reg=reg_fit)
+        plt.xlim(ranges[i])
+        plt.ylim(ranges[i])
+        plt.xlabel("true "+axes_names[i])
+        plt.ylabel("inferred "+axes_names[i])
+        plt.annotate(axes_names[i], (0.+0.1*ranges[i][1], ranges[i][1]-0.1*ranges[i][1]))
         plt.show()
+        
+        
+def big_custom_plot(plot_df, fname_str, ELBO, fit_reg=False, annot=False):
+    
+    axes_names = ["policy forgetting rate lambda_pi", "reward forgetting rate lambda_r", "decision temp gamma", "habitual tendency h"]
+    ranges = [[0,1], [0,1], [1, max_dt], [0,1], [0, 1]]
+    positions = [[0,0], [0,1], [1,0], [1,1]]
 
-def plot_correlations(total_df, total_num_iter_so_far,prefix):
+    fig = plt.figure(layout='constrained', figsize=(14,12))
+    axes = fig.subplots(3, 3)
+    
+    for i, name in enumerate(param_names):
+    
+        ax = axes[positions[i][0], positions[i][1]]
+        ax.plot(ranges[i],ranges[i], linestyle='-', color="grey", alpha=0.6)
+        # sns.scatterplot(data=plot_df, x="true "+name, y="inferred "+name, ax=ax)
+        sns.regplot(data=plot_df, x="true "+name, y="inferred "+name, ax=ax,
+                   line_kws = {'color': 'green', 'alpha': 0.3}, fit_reg=fit_reg)
+        ax.set_xlim(ranges[i])
+        ax.set_ylim(ranges[i])
+        ax.set_xlabel("true "+axes_names[i])
+        ax.set_ylabel("inferred "+axes_names[i])
+        ax.annotate(axes_names[i], (0.+0.1*ranges[i][1], ranges[i][1]-0.1*ranges[i][1]), fontsize=16)
+        
+        if annot:
+            (r, p) = pearsonr(plot_df["true "+name], plot_df["inferred "+name])
+            ax.annotate("r = {:.2f} ".format(r)+"p = {:.3f}".format(p), 
+                        (0.4*ranges[i][1], 0.05*ranges[i][1]), fontsize=16)
+            # ax.annotate("p = {:.3f}".format(p),
+            #             (0.7*ranges[i][1], 0.05*ranges[i][1]))
+        
+    ax = axes[2,0]
+    # plt.title("ELBO")
+    ax.plot(ELBO)
+    ax.set_ylabel("ELBO", fontsize=16)
+    ax.set_xlabel("iteration", fontsize=16)
 
-    smaller_df = pd.DataFrame()
-    smaller_df['mean policy forgetting factor'] = total_df['inferred_pol_lambda']
-    smaller_df['mean reward forgetting factor'] = total_df['inferred_r_lambda']
-    smaller_df['mean decision temperature'] = total_df['inferred_dec_temp']
-    if infer_h:
-        smaller_df['mean habitual tendency'] = total_df['inferred_h']
-
-    smaller_df['true policy forgetting factor'] = total_df['true_pol_lambda']
-    smaller_df['true reward forgetting factor'] = total_df['true_r_lambda']
-    smaller_df['true decision temperature'] = total_df['true_dec_temp']
-    if infer_h:
-        smaller_df['true habitual tendency'] = total_df['true_h']
-
-    rho = smaller_df.corr()
-    pval = smaller_df.corr(method=lambda x, y: pearsonr(x, y)[1]) - eye(*rho.shape)
+    rho = plot_df.corr()
+    pval = plot_df.corr(method=lambda x, y: pearsonr(x, y)[1]) - eye(*rho.shape)
     reject, pval_corrected, alphaS, alphaB = multipletests(pval, method='bonferroni')
+    
+    gs = axes[2, 1].get_gridspec()
+    # remove the underlying axes
+    for ax in axes[2, 1:]:
+        ax.remove()
+    axbig = fig.add_subplot(gs[2, 2])
+    ax = axbig
+    
+    p_opacity = pval_corrected*0.5 +0.5
 
-    plt.figure()
-    sns.heatmap(smaller_df.corr(), annot=True, fmt='.2f')#[pval_corrected<alphaB]
-    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(num_agents)+"agents_mean_corr.svg")
+    sns.heatmap(plot_df.corr(), annot=True, fmt='.2f', alpha=p_opacity, 
+                cmap='vlag', vmin=-1, vmax=1, ax=ax)
+    
+    # sns.heatmap(smaller_df.corr(), annot=True, fmt='.2f', ax=ax)#[pval_corrected<alphaB]
+        
+    try:
+        plt.tight_layout()
+    except:
+        pass
+    
+    if fit_reg:
+        name_str = "_regression"
+    else:
+        name_str = ""
+    if annot:
+        name_str += "_annot"
+    
+    plt.savefig(os.path.join(base_dir, fname_str+"_big_plot"+name_str+".svg"))
     plt.show()
-
-    sample_df = pd.DataFrame()
-    sample_df['sampled policy forgetting factor'] = total_df['pol_lambda']
-    sample_df['sampled reward forgetting factor'] = total_df['r_lambda']
-    sample_df['sampled decision temperature'] = total_df['dec_temp']
-    if infer_h:
-        sample_df['sampled habitual tendency'] = total_df['h']
-
-    sample_df['true policy forgetting factor'] = total_df['true_pol_lambda']
-    sample_df['true reward forgetting factor'] = total_df['true_r_lambda']
-    sample_df['true decision temperature'] = total_df['true_dec_temp']
-    if infer_h:
-        smaller_df['true habitual tendency'] = total_df['true_h']
-
-    rho = sample_df.corr()
-    pval = sample_df.corr(method=lambda x, y: pearsonr(x, y)[1]) - eye(*rho.shape)
-    reject, pval_corrected, alphaS, alphaB = multipletests(pval, method='bonferroni')
-
+    
+    
+def plot_results(sample_df, fname_str, ELBO, smaller_df):
+    
+    plot_df = smaller_df.drop('subject', axis=1)\
+                        .reindex(["inferred "+name for name in param_names]\
+                                 +["true "+name for name in param_names], axis=1)
+        
+    def annot_corrfunc(x, y, **kws):
+        (r, p) = pearsonr(x, y)
+        ax = plt.gca()
+        ax.annotate("r = {:.2f} ".format(r),
+                    xy=(.1, .9), xycoords=ax.transAxes)
+        ax.annotate("p = {:.3f}".format(p),
+                    xy=(.4, .9), xycoords=ax.transAxes)
+        
+    big_custom_plot(plot_df, fname_str, ELBO, fit_reg=True, annot=True)
+    big_custom_plot(plot_df, fname_str, ELBO, fit_reg=True, annot=False)
+    big_custom_plot(plot_df, fname_str, ELBO, fit_reg=False, annot=True)
+    big_custom_plot(plot_df, fname_str, ELBO, fit_reg=False, annot=False)
+    
+    # plt.figure()
+    # sns.pairplot(sample_df, kind='reg')
+    # plt.savefig(os.path.join(base_dir, fname_str+"_pairplot_sample.svg"))
+    # plt.show()
+    
     plt.figure()
-    sns.heatmap(sample_df.corr(), annot=True, fmt='.2f')#[pval_corrected<alphaB]
-    plt.savefig(prefix+"recovered_"+str(total_num_iter_so_far)+"_"+str(num_agents)+"agents_sample_corr.svg")
+    f = sns.pairplot(data=plot_df, kind='reg', 
+                     diag_kind="kde", corner=True,
+                     plot_kws={'line_kws': {'color': 'green', 'alpha': 0.6}})
+    f.map(annot_corrfunc)
+    plt.savefig(os.path.join(base_dir, fname_str+"_pairplot_means_all.svg"))
     plt.show()
+    
+    plt.figure()
+    xvars_of_interest = ["true "+name for name in param_names]
+    yvars_of_interest = ["inferred "+name for name in param_names]
+    f = sns.pairplot(data=plot_df, kind='reg', diag_kind="kde", corner=True,
+                     plot_kws={'line_kws': {'color': 'green', 'alpha': 0.6}},
+                     x_vars=xvars_of_interest, y_vars=yvars_of_interest)
+    f.map(annot_corrfunc)
+    plt.savefig(os.path.join(base_dir, fname_str+"_pairplot_means.svg"))
+    plt.show()
+    
+    plt.figure()
+    vars_of_interest = ["inferred "+name for name in param_names]
+    f = sns.pairplot(data=plot_df, kind='reg', diag_kind="kde", corner=True,
+                     plot_kws={'line_kws': {'color': 'green', 'alpha': 0.6}},
+                     x_vars=vars_of_interest, y_vars=vars_of_interest)
+    f.map(annot_corrfunc)
+    plt.savefig(os.path.join(base_dir, fname_str+"_pairplot_means_inferred_corr.svg"))
+    plt.show()
+    
+    # p_opacity = pval_corrected*0.5 +0.5
+    
+    # plt.figure()
+    # sns.heatmap(plot_df.corr(), annot=True, fmt='.2f', alpha=p_opacity, 
+    #             cmap='vlag', vmin=-1, vmax=1)
+    # plt.show()
 
 
 """run inference"""
@@ -870,20 +931,28 @@ else:
 print("this is inference using", type(inferrer))
 
 num_steps = 250
-size_chunk = 50
+size_chunk = 25
 total_num_iter_so_far = 0
 
 for i in range(total_num_iter_so_far, num_steps, size_chunk):
     print('taking steps '+str(i+1)+' to '+str(i+size_chunk)+' out of total '+str(num_steps))
 
-    infer(inferrer, size_chunk, prefix, total_num_iter_so_far)
-    total_num_iter_so_far += size_chunk
-    full_df = sample_posterior(inferrer, prefix, total_num_iter_so_far)
-    plot_posterior(full_df, total_num_iter_so_far, prefix)
+    fname_str = fname_base + str(total_num_iter_so_far+size_chunk)+'_'+str(nsubs)+'agents'
 
-    plot_correlations(full_df, total_num_iter_so_far, prefix)
+    infer(inferrer, size_chunk, fname_str)
+    total_num_iter_so_far += size_chunk
+    full_df, smaller_df, sample_df = sample_posterior(inferrer, fname_str) 
+    
+    # plot_posterior(full_df, fname_str)
+    # plot_correlations(full_df, fname_str)
+    
+    plot_results(sample_df, fname_str, inferrer.loss, smaller_df)
+    
+    print("This is recovery for the twostage task using the "+model_name+".")
+    print("The settings are: infer h", infer_h)
 
 #print("this is inference for pl =", pl, "rl =", rl, "dt =", dt, "tend=", tend)
 # print(param_dict)
 
-print(full_df.corr())
+print("This is recovery for the twostage task using the "+model_name+".")
+print("The settings are: infer h", infer_h)
