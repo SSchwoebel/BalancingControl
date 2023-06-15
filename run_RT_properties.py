@@ -13,12 +13,16 @@ import seaborn as sns
 import pandas as pd
 from scipy.stats import entropy
 from scipy.stats.mstats import normaltest
-#sns.set_style("whitegrid", {"axes.edgecolor": "0.15"})#, "axes.spines.top": "False", "axes.spines.right": "False"})
+# sns.set_style("whitegrid")#, {"axes.edgecolor": "0.15"})#, "axes.spines.top": "False", "axes.spines.right": "False"})
 #plt.style.use('seaborn-darkgrid')
-plt.style.use('seaborn-whitegrid')
+# plt.style.use('seaborn-v0_8-whitegrid')
+# sns.set_theme(style="whitegrid")#, palette="pastel"
+sns.set_theme(style="whitegrid", rc={"axes.edgecolor": "0.15", "axes.spines.top": "False", "axes.spines.right": "False"})
+
+sns.set(font_scale=2)
 
 # set up test
-tests = ["conflict", "agreement", "goal", "habit"]#, "uncertainty"]
+tests = ["prior-only", "likelihood-only", "agreement", "conflict"]#, "uncertainty"]
 num_tests = len(tests)
 test_vals = []
 
@@ -38,20 +42,72 @@ conflict = [v]*gp+[(1-(v*(n-gp)))/6]*gp+[v]*(n-2*gp)
 npi = n
 flat = [1./npi]*npi
 
-plt.figure()
-plt.plot(range(1,npi+1), l, label='likelihood, habit, goal', linewidth=3)
-plt.plot(range(1,npi+1), p, label='prior agreement', linewidth=3)
-plt.plot(range(1,npi+1), conflict, label='prior conflict', linewidth=3)
-plt.plot(range(1,npi+1), flat, label='flat', linewidth=3)
-plt.ylim([0,0.25])
-plt.legend()
-plt.xlim([1,npi])
-plt.xticks(fontsize=14)
-plt.yticks(fontsize=14)
-plt.xlabel('policy', fontsize=16)
-plt.ylabel('probability', fontsize=16)
-plt.savefig('underlying_prior_like_for_distributions.svg')
-plt.show()
+# make df of those
+priors = []
+likelihoods = []
+posteriors = []
+conditions = []
+
+# prior-only
+priors.append(np.array(l))
+likelihoods.append(np.array(flat))
+post = priors[-1]*likelihoods[-1]
+post /= post.sum()
+posteriors.append(post)
+conditions.append('prior-only')
+# likelhood-only
+priors.append(np.array(flat))
+likelihoods.append(np.array(l))
+post = priors[-1]*likelihoods[-1]
+post /= post.sum()
+posteriors.append(post)
+conditions.append('likelihood-only')
+# agreement
+priors.append(np.array(p))
+likelihoods.append(np.array(l))
+post = priors[-1]*likelihoods[-1]
+post /= post.sum()
+posteriors.append(post)
+conditions.append('agreement')
+# conflict
+priors.append(np.array(conflict))
+likelihoods.append(np.array(l))
+post = priors[-1]*likelihoods[-1]
+post /= post.sum()
+posteriors.append(post)
+conditions.append('conflict')
+
+sns.set_theme(style="whitegrid", rc={"axes.edgecolor": "0.15", "axes.spines.top": "False", "axes.spines.right": "False"})
+
+for i,cond in enumerate(conditions):
+    plt.figure()
+    plt.plot(priors[i], '--', color='black', linewidth=3, label='prior')
+    plt.plot(likelihoods[i], color='black', linewidth=3, label='likelihood')
+    plt.title(cond, fontsize=16)
+    plt.ylim([0,0.25])
+    plt.legend(fontsize=16)
+    plt.xlim([1,npi])
+    plt.xticks(fontsize=14)
+    plt.yticks(fontsize=14)
+    plt.xlabel('policy', fontsize=16)
+    plt.ylabel('probability', fontsize=16)
+    plt.savefig('underlying_prior_like_for_'+cond+'.svg')
+    plt.show()
+
+# plt.figure()
+# plt.plot(range(1,npi+1), l, label='likelihood, habit, goal', linewidth=3)
+# plt.plot(range(1,npi+1), p, label='prior agreement', linewidth=3)
+# plt.plot(range(1,npi+1), conflict, label='prior conflict', linewidth=3)
+# plt.plot(range(1,npi+1), flat, label='flat', linewidth=3)
+# plt.ylim([0,0.25])
+# plt.legend()
+# plt.xlim([1,npi])
+# plt.xticks(fontsize=14)
+# plt.yticks(fontsize=14)
+# plt.xlabel('policy', fontsize=16)
+# plt.ylabel('probability', fontsize=16)
+# plt.savefig('underlying_prior_like_for_distributions.svg')
+# plt.show()
 
 # test function
 def run_action_selection(post, prior, like, trials = 100, crit_factor = 0.5, calc_dkl = False):
@@ -66,7 +122,7 @@ def run_action_selection(post, prior, like, trials = 100, crit_factor = 0.5, cal
         return ac_sel.RT.squeeze()
 
 # set up number of trials
-trials = 100
+trials = 1000
 
 # conflict
 prior = np.array(conflict)
@@ -96,7 +152,7 @@ post = prior*like
 post /= post.sum()
 test_vals.append([post,prior,like])
 
-# uncertainty
+# # uncertainty
 # prior = np.array(flat)
 # like = np.array(flat)
 # post = prior*like
@@ -104,18 +160,34 @@ test_vals.append([post,prior,like])
 # test_vals.append([post,prior,like])
 
 
-def plot_RT_distributions(num_tests, trials, test_vals, crit_factor=0.4):
-
-    RT = np.zeros((num_tests, trials))
-    for i, test in enumerate(tests):
-        post, prior, like = test_vals[i]
-        RT[i] = run_action_selection(post, prior, like, trials, crit_factor=crit_factor)
-        is_normal = normaltest(RT[i])
-        is_lognormal = normaltest(np.log(RT[i]))
-        print(crit_factor, test)
-        print("is normal?", is_normal)
-        print("is log normal?", is_lognormal)
-    RT = pd.DataFrame(data=RT.T, columns=tests)
+def generate_RT_distributions(num_tests, trials, test_vals, crit_factors=[0.1,0.3,0.5]):
+    
+    num_factors = len(crit_factors)
+    RTs = np.zeros(num_tests*trials*num_factors)
+    factors = np.zeros(num_tests*trials*num_factors)
+    conditions_long = []
+    
+    for j,crit_factor in enumerate(crit_factors):
+        for i, test in enumerate(tests):
+            idx = j*(num_tests*trials)+i*trials
+            post = posteriors[i]
+            prior = priors[i]
+            like = likelihoods[i]
+            assert test==conditions[i]
+            # post, prior, like = test_vals[i]
+            curr_RTs = run_action_selection(post, prior, like, trials, crit_factor=crit_factor)
+            RTs[idx:idx+trials] = curr_RTs
+            factors[idx:idx+trials] = crit_factor
+            conditions_long += [test]*trials
+            is_normal = normaltest(curr_RTs)
+            is_lognormal = normaltest(np.log(curr_RTs))
+            print(crit_factor, test)
+            print("is normal?", is_normal)
+            print("is log normal?", is_lognormal)
+    print(RTs.shape)
+    print(len(conditions))
+    RT = pd.DataFrame({'RT': RTs, 's': factors, 'condition': conditions_long})
+    print(RT)
 
     #plt.figure()
     # for i, test in enumerate(tests):
@@ -125,35 +197,66 @@ def plot_RT_distributions(num_tests, trials, test_vals, crit_factor=0.4):
     #plt.legend()
     #lt.show()
 
-    max_RT = np.amax(RT.values)
-    min_RT = np.amin(RT.values)
+    max_RT = np.amax(RTs)
+    min_RT = np.amin(RTs)
+    
+    # plt.figure()
+    # sns.displot(RT, x='RT', hue='s', row = 'condition',
+    #               alpha=0.5, bins=50, binrange=[min_RT,max_RT],edgecolor='black')
+    # # sns.histplot(RT[RT['condition']=='agreement'], x='RT', hue='s',
+    # #                           alpha=0.5, bins=50, binrange=[min_RT,max_RT],edgecolor='black')
+    # plt.xlim(min_RT,max_RT)
+    # plt.ylim([0,trials*0.9])
+    # plt.xlabel('RT (#samples)')
+    # plt.show()
+
+    # plt.figure()
+    # sns.histplot(RT[['conflict', 'agreement']], alpha=0.5, bins=50, binrange=[min_RT,max_RT],edgecolor='black')#, common_bins=False)#
+    # plt.savefig('RT_tests_histogram_conflict_agreement_'+str(crit_factor)+'factor_'+str(npi)+'npi_'+str(trials)+'trials.svg',dpi=600)
+    # plt.xlim(min_RT,max_RT)
+    # plt.ylim([0,trials*0.9])
+    # plt.xlabel('RT (#samples)')
+    # plt.show()
+
+    # plt.figure()
+    # sns.histplot(RT[["goal", "habit"]], alpha=0.5, bins=50, binrange=[min_RT,max_RT],edgecolor='black')#, common_bins=False)#
+    # plt.savefig('RT_tests_histogram_goal_habit_'+str(crit_factor)+'factor_'+str(npi)+'npi_'+str(trials)+'trials.svg',dpi=600)
+    # plt.xlim(min_RT,max_RT)
+    # plt.ylim([0,trials*0.9])
+    # plt.xlabel('RT (#samples)')
+    # plt.show()
+
+    # plt.figure()
+    # sns.histplot(RT, alpha=0.6, bins=50, binrange=[min_RT,max_RT],edgecolor='black')#, common_bins=False)#
+    # plt.savefig('RT_tests_histogram_all_'+str(crit_factor)+'factor_'+str(npi)+'npi_'+str(trials)+'trials.svg',dpi=600)
+    # plt.xlim(min_RT,max_RT)
+    # plt.ylim([0,trials*0.9])
+    # plt.xlabel('RT (#samples)')
+    # plt.show()
+
+    # if True:#max_RT < 0.9*trials:
+    #     RT.to_pickle('RT_'+str(crit_factor)+'factor_'+str(npi)+'npi_'+str(trials)+'trials.pkl')
+    return RT, max_RT, min_RT
+
+def plot_RT_distributions(RT, max_RT, min_RT):
+    
+    sns.set_theme(style="whitegrid", font_scale=2, rc={"axes.edgecolor": "0.15", "axes.spines.top": "False", "axes.spines.right": "False"})
+    # sns.set(font_scale=2)
 
     plt.figure()
-    sns.histplot(RT[['conflict', 'agreement']], alpha=0.5, bins=50, binrange=[min_RT,max_RT],edgecolor='black')#, common_bins=False)#
-    plt.savefig('RT_tests_histogram_conflict_agreement_'+str(crit_factor)+'factor_'+str(npi)+'npi_'+str(trials)+'trials.svg',dpi=600)
-    plt.xlim(min_RT,max_RT)
-    plt.ylim([0,trials*0.9])
-    plt.xlabel('RT (#samples)')
+    dp = sns.displot(RT, x='RT', hue='s', row = 'condition', row_order=tests,
+                  alpha=0.5, bins=50,edgecolor='black', aspect=2)#, bins=50, binrange=[min_RT,max_RT]
+    # sns.histplot(RT[RT['condition']=='agreement'], x='RT', hue='s',
+    #                           alpha=0.5, bins=50, binrange=[min_RT,max_RT],edgecolor='black')
+    dp.set(xlim=(0, 1000), xlabel='RT (#samples)')
+    # plt.xlim(0,max_RT)
+    # plt.ylim([0,trials+0.1*trials])
+    # plt.xticks(fontsize=14)
+    # plt.yticks(fontsize=14)
+    # plt.xlabel('RT (#samples)')#, fontsize=16)
+    #plt.ylabel('Count', fontsize=16)
+    plt.savefig('RT_tests_histogram_new_LL_'+str(npi)+'npi_'+str(trials)+'trials.svg',dpi=600)
     plt.show()
-
-    plt.figure()
-    sns.histplot(RT[["goal", "habit"]], alpha=0.5, bins=50, binrange=[min_RT,max_RT],edgecolor='black')#, common_bins=False)#
-    plt.savefig('RT_tests_histogram_goal_habit_'+str(crit_factor)+'factor_'+str(npi)+'npi_'+str(trials)+'trials.svg',dpi=600)
-    plt.xlim(min_RT,max_RT)
-    plt.ylim([0,trials*0.9])
-    plt.xlabel('RT (#samples)')
-    plt.show()
-
-    plt.figure()
-    sns.histplot(RT, alpha=0.6, bins=50, binrange=[min_RT,max_RT],edgecolor='black')#, common_bins=False)#
-    plt.savefig('RT_tests_histogram_all_'+str(crit_factor)+'factor_'+str(npi)+'npi_'+str(trials)+'trials.svg',dpi=600)
-    plt.xlim(min_RT,max_RT)
-    plt.ylim([0,trials*0.9])
-    plt.xlabel('RT (#samples)')
-    plt.show()
-
-    if True:#max_RT < 0.9*trials:
-        RT.to_pickle('RT_'+str(crit_factor)+'factor_'+str(npi)+'npi_'+str(trials)+'trials.pkl')
 
 def plot_common_histogram(factors, trials):
 
@@ -221,7 +324,7 @@ def evaluate_DKL(num_tests, trials, conflict):
     DKL_df = pd.DataFrame(data=DKL.T, columns=['factor', 'type', 'DKL'])
 
     plt.figure()
-    sns.lineplot(data=DKL_df, x='factor', y='DKL', style='type', ci=95, linewidth=2)
+    sns.lineplot(data=DKL_df, x='factor', y='DKL', style='type', errorbar=('ci', 95), linewidth=2)
     plt.xlim([factors[0], factors[-1]])
     plt.xticks(fontsize=14)
     plt.yticks(fontsize=14)
@@ -230,10 +333,88 @@ def evaluate_DKL(num_tests, trials, conflict):
     #plt.ylim([0,1.7])
     plt.savefig('dkl_threshold_factor_'+str(npi)+'npi_'+str(trials)+'trials.svg', dpi=600)
     plt.show()
+    
+    return DKL_df, factors
 
 
 def RT_of_like_entropy(trials):
     pass
+
+def plot_all(RT, DKL_df, max_RT, min_RT, factors, figsize=(16,20)):
+    
+    sns.set_theme(style="whitegrid", font_scale=2, rc={"axes.edgecolor": "0.15", "axes.spines.top": "False", "axes.spines.right": "False"})
+    
+    fig = plt.figure(layout='constrained',figsize=figsize)# 
+    axes = fig.subplots(5, 2)
+    
+    # sns.set(font_scale=2)
+    
+    # gs = axes[0, 0].get_gridspec()
+    # # remove the underlying axes
+    # for ax in axes[0, 0:]:
+    #     ax.remove()
+    # axbig = fig.add_subplot(gs[0, 0])
+    
+    # ax = axbig
+
+    # ax = axes[:,0]
+    # dp = sns.histplot(RT, x='RT', hue='s', row = 'condition', row_order=tests,
+    #               alpha=0.5, bins=50,edgecolor='black', aspect=2, ax=ax)#, bins=50, binrange=[min_RT,max_RT]
+    # sns.histplot(RT[RT['condition']=='agreement'], x='RT', hue='s',
+    #                           alpha=0.5, bins=50, binrange=[min_RT,max_RT],edgecolor='black')
+    # dp.set(xlim=(0, 1000), xlabel='RT (#samples)')
+    # plt.xlim(0,max_RT)
+    # plt.ylim([0,trials+0.1*trials])
+    # plt.xticks(fontsize=14)
+    # plt.yticks(fontsize=14)
+    # plt.xlabel('RT (#samples)')#, fontsize=16)
+    #plt.ylabel('Count', fontsize=16)
+    
+    for i,cond in enumerate(conditions):
+        ax = axes[i,0]
+        if i==0:
+            legend_flag = True
+        else:
+            legend_flag = False
+            # axes[0,0].sharex(ax)
+        dp = sns.histplot(RT[RT['condition']==cond], x='RT', hue='s', binrange=[min_RT,max_RT],
+                          alpha=0.5,edgecolor='black', bins=50, ax=ax, legend=legend_flag)#, binrange=[min_RT,max_RT]
+        # sns.histplot(RT[RT['condition']=='agreement'], x='RT', hue='s',
+        #                           alpha=0.5, bins=50, binrange=[min_RT,max_RT],edgecolor='black')
+        dp.set(xlim=(0, 1005), xlabel='RT (#samples)', ylim=(0,trials))
+        ax = axes[i,1]
+        # ax.sharex(axes[0,1])
+        ax.plot(priors[i], '--', color='black', linewidth=4, label='prior')
+        ax.plot(likelihoods[i], color='black', linewidth=4, label='likelihood')
+        ax.set_title(cond)
+        ax.set_ylim([0,0.25])
+        ax.set_xlim([1,npi])
+        ax.set_ylabel('probability')
+        ax.set_xlabel('policy')
+        if legend_flag:
+            ax.legend()
+            
+    # ax.set_xticks(fontsize=14)
+    # ax.set_yticks(fontsize=14)
+    
+    ax = axes[-1,0]
+    lp = sns.lineplot(data=DKL_df, x='factor', y='DKL', style='type', errorbar=('ci', 95), linewidth=4, ax=ax)
+    lp.set(xlim=([factors[0], factors[-1]]), xlabel='trade-off $s$', 
+           xticks=list(np.arange(factors[0]+0.05, factors[-1], 0.1)),
+           ylim=[0,2.25], yticks=np.arange(0,2.5,0.5))#, ylim=(0,1.7)
+
+    plt.xlabel('trade-off $s$')
+    plt.ylabel('$D_{KL}$')
+    #plt.ylim([0,1.7])
+    # plt.savefig('dkl_threshold_factor_'+str(npi)+'npi_'+str(trials)+'trials.svg', dpi=600)
+    # plt.show()
+    
+    fig.delaxes(axes[-1,-1])
+    
+    # plt.tight_layout()
+    
+    plt.savefig('RT_tests_full_plot_'+str(npi)+'npi_'+str(trials)+'trials.svg',dpi=600)
+    plt.show()
 
 # l_values = np.arange(1./npi, 0.16334205362982337, 0.01)
 # num_tests = len(l_values)
@@ -277,13 +458,19 @@ def RT_of_like_entropy(trials):
 # plt.title('mean RT as a function of likelihood entropy')
 # plt.show()
 
-#evaluate_DKL(num_tests, trials, test_vals[0])
+DKL_df, factors = evaluate_DKL(num_tests, trials, test_vals[0])
+DKL_df.to_pickle('DKL_conflict_df2.pkl')
 
-factors = [0.1,0.3,0.5]
-for f in factors:
-    plot_RT_distributions(num_tests, trials, test_vals, f)
-plot_common_histogram(factors, trials)
+factors_s = [0.1, 0.3, 0.5]#[0.2,0.4,0.6]
+RT, max_RT, min_RT = generate_RT_distributions(num_tests, trials, test_vals, factors_s)
+RT.to_pickle('sample_RT_df2.pkl')
+# plot_RT_distributions(RT, max_RT, min_RT)
+# plot_common_histogram(factors, trials)
 
-
-
+# RT = pd.read_pickle('sample_RT_df.pkl')
+# min_RT = np.min(RT['RT'].values)
+# max_RT = np.max(RT['RT'].values)
+# DKL_df = pd.read_pickle('DKL_conflict_df.pkl')
+# factors = np.unique(DKL_df['factor'])
+plot_all(RT, DKL_df, max_RT, min_RT, factors, figsize=(16,22),)
 
