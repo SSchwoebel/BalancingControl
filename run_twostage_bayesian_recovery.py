@@ -319,7 +319,7 @@ plt.show()
 
 # make param combinations:
 
-infer_h = False
+infer_h = True
 
 prefix = "BCC_"
 param_names = ["policy rate", "reward rate", "dec temp", "habitual tendency"]
@@ -342,7 +342,7 @@ print(fname_base)
 # define folder where we want to save data
 base_dir = os.path.join(folder,fname_base[:-1])
 
-remove_old = True
+remove_old = False
 
 # make directory if it doesnt exist
 if fname_base[:-1] not in os.listdir('data'):
@@ -363,7 +363,7 @@ elif remove_old:
         os.remove(file)
     
 
-nsubs = 10
+nsubs = 180
 true_values_tensor = ar.rand((nsubs,n_pars,1))
 
 # prob for invalid answer (e.g. no reply)
@@ -930,8 +930,8 @@ else:
 
 print("this is inference using", type(inferrer))
 
-num_steps = 250
-size_chunk = 25
+num_steps = 400
+size_chunk = 50
 total_num_iter_so_far = 0
 
 for i in range(total_num_iter_so_far, num_steps, size_chunk):

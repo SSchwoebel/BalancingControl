@@ -44,6 +44,7 @@ class Group2Perception(object):
         self.generative_model_observations = generative_model_observations
         self.generative_model_states = generative_model_states
         self.prior_rewards = prior_rewards
+        self.nr = prior_rewards.shape[0]
         self.prior_states = prior_states
         self.T = T
         self.trials = trials
@@ -191,13 +192,20 @@ class Group2Perception(object):
         # rew_messages = ar.zeros((self.nh, self.T))
         # rew_messages[:] = self.prior_rewards.matmul(generative_model_rewards)[:,None]
         observations = ar.stack(self.observations[-t-1:])
-        obs_messages = []
-        for n in range(self.nsubs):
-            prev_obs = [self.generative_model_observations[o] for o in observations[-t-1:,n]]
-            obs = prev_obs + [ar.zeros((self.nh)).to(device)+1./self.nh]*(self.T-t-1)
-            obs = [ar.stack(obs).T.to(device)]*self.npart
-            obs_messages.append(ar.stack(obs, dim=-1))
-        obs_messages = ar.stack(obs_messages, dim=-1).to(device)
+        # obs_messages = []
+        # for n in range(self.nsubs):
+        #     prev_obs = [self.generative_model_observations[o] for o in observations[-t-1:,n]]
+        #     obs = prev_obs + [ar.zeros((self.nh)).to(device)+1./self.nh]*(self.T-t-1)
+        #     obs = [ar.stack(obs).T.to(device)]*self.npart
+        #     obs_messages.append(ar.stack(obs, dim=-1))
+        # old_obs_messages = ar.stack(obs_messages, dim=-1).to(device)
+        
+        
+        prev_obs = self.generative_model_observations[observations].permute((2,0,1))[:,:,None,:]
+        exp_obs = ar.zeros(self.nh, self.T-t-1, 1, self.nsubs).to(device)+1./self.nh
+        new_obs_messages = ar.cat((prev_obs, exp_obs), dim=1)
+        obs_messages = ar.cat([new_obs_messages]*self.npart, dim=-2)
+        # print("obs correct", ar.allclose(obs_messages, old_obs_messages))
 
         # prev_obs = [self.generative_model_observations[o] for o in self.observations[-t-1:]]
         # obs = prev_obs + [ar.zeros((self.nh)).to(device)+1./self.nh]*(self.T-t-1)
@@ -218,11 +226,18 @@ class Group2Perception(object):
         # rew_messages = ar.stack(rew).T
         rewards = ar.stack(self.rewards[-t-1:])
 
-        rew_messages = []
-        for n in range(self.nsubs):
-            rew_messages.append(ar.stack([ar.stack([generative_model_rewards[r,:,i,n].to(device) for r in rewards[-t-1:,n]]  \
-                                                   + [self.prior_rewards.matmul(generative_model_rewards[:,:,i,n].to(device)).to(device)]*(self.T-t-1)).T.to(device) for i in range(self.npart)], dim=-1).to(device))
-        rew_messages = ar.stack(rew_messages, dim=-1).to(device)
+        # rew_messages = []
+        # for n in range(self.nsubs):
+        #     rew_messages.append(ar.stack([ar.stack([generative_model_rewards[r,:,i,n].to(device) for r in rewards[-t-1:,n]]  \
+        #                                            + [self.prior_rewards.matmul(generative_model_rewards[:,:,i,n].to(device)).to(device)]*(self.T-t-1)).T.to(device) for i in range(self.npart)], dim=-1).to(device))
+        # old_rew_messages = ar.stack(rew_messages, dim=-1).to(device)
+        
+        one_hot_rews = ar.nn.functional.one_hot(rewards, num_classes=self.nr).float()
+        prev_rew = ar.einsum('tnr,rspn->tspn', one_hot_rews, generative_model_rewards)
+        exp_rew = ar.einsum('r,rspn->spn', self.prior_rewards, generative_model_rewards)
+        exp_rews = ar.cat([exp_rew[None,...]]*(self.T), dim=0)
+        rew_messages = ar.cat((prev_rew, exp_rews[:self.T-t-1]), dim=0).permute((1,0,2,3))
+        # print("rew correct", ar.allclose(rew_messages, old_rew_messages))
         #print(rew.shape)
 
         # for i in range(t):
