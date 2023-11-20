@@ -274,14 +274,14 @@ plt.show()
     
 prefix = 'mbmfOrig_'
 
-use_p = False
+use_p = True
 
 if use_p:
     n_pars = 5
 else:
     n_pars = 4
 
-restrict_alpha = False
+restrict_alpha = True
 
 if use_p:
     p_str = "usep_"
@@ -320,7 +320,7 @@ elif remove_old:
     for file in agents:
         os.remove(file)
 
-nsubs = 50
+nsubs = 188
 true_values_tensor = ar.rand((nsubs,n_pars,1))
 
 # prob for invalid answer (e.g. no reply)
@@ -821,7 +821,7 @@ inferrer = inf.GeneralGroupInference(agent, structured_data)
 
 print("this is inference using", type(inferrer))
 
-num_steps = 500
+num_steps = 600
 size_chunk = 50
 total_num_iter_so_far = 0
 

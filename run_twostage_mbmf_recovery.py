@@ -354,7 +354,7 @@ elif remove_old:
         os.remove(file)
     
 
-nsubs = 50
+nsubs = 188
 true_values_tensor = ar.rand((nsubs,n_pars,1))
 
 # prob for invalid answer (e.g. no reply)
