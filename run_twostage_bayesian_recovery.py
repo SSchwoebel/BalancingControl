@@ -231,6 +231,8 @@ def run_agent(par_list, trials=trials, T=T, ns=ns, na=na):
                                            pol_lambda=pol_lambda, r_lambda=r_lambda,
                                            non_decaying=(ns-nb), dec_temp=dec_temp, 
                                            nsubs=1, infer_alpha_0=infer_h, use_h=True)
+    
+    bayes_prc.set_parameters(par_dict=perception_args)
     bayes_prc.reset()
 
     bayes_pln = agt.FittingAgent(bayes_prc, ac_sel, pol,
@@ -319,7 +321,7 @@ plt.show()
 
 # make param combinations:
 
-infer_h = False
+infer_h = True
 
 prefix = "BCC_"
 param_names = ["policy rate", "reward rate", "dec temp", "habitual tendency"]
@@ -363,7 +365,7 @@ elif remove_old:
         os.remove(file)
     
 
-nsubs = 188
+nsubs = 10
 true_values_tensor = ar.rand((nsubs,n_pars,1))
 
 # prob for invalid answer (e.g. no reply)
@@ -706,7 +708,8 @@ agent = agt.FittingAgent(bayes_prc, [], pol,
                   prior_context = prior_context,
                   #save_everything = True,
                   number_of_policies = npi,
-                  number_of_rewards = nr)
+                  number_of_rewards = nr,
+                  nsubs = nsubs)
 
 
 ###################################

@@ -28,7 +28,7 @@ class FittingAgent(object):
                  prior_context = None,
                  trials = 1, T = 10, number_of_states = 6,
                  number_of_rewards = 2,
-                 number_of_policies = 10):
+                 number_of_policies = 10, nsubs = 1):
 
         #set the modules of the agent
         self.perception = perception
@@ -41,6 +41,8 @@ class FittingAgent(object):
 
         self.T = T
         self.trials = trials
+        
+        self.nsubs = nsubs
 
         if policies is not None:
             self.policies = policies
@@ -102,7 +104,7 @@ class FittingAgent(object):
     def update_beliefs(self, tau, t, observation, reward, prev_response, context):
 
         if t==0:
-            self.possible_policies = ar.ones(self.npi, dtype=bool)[:,None]
+            self.possible_policies = ar.ones((self.npi, self.nsubs), dtype=bool)
         else:
             curr_policies = (self.policies[:,t-1][:,None] == prev_response)#[0]
             self.possible_policies = ar.logical_and(self.possible_policies, curr_policies)

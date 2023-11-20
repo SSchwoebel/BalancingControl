@@ -129,9 +129,10 @@ class Group2Perception(object):
 
         return par_dict
 
-    def set_parameters(self, locs):
+    def set_parameters(self, locs=None, par_dict=None):
 
-        par_dict = self.locs_to_pars(locs)
+        if locs is not None:
+            par_dict = self.locs_to_pars(locs)
 
         if 'policy rate' in par_dict.keys():
             self.pol_lambda = par_dict['policy rate']
