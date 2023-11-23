@@ -57,103 +57,40 @@ from inference_twostage import device
 """
 run function
 """
-def run_Bayesian_agent(par_list, trials, T, ns, na):
+def set_up_Bayesian_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs=1):
 
     #set parameters:
     #obs_unc: observation uncertainty condition
     #state_unc: state transition uncertainty condition
     #goal_pol: evaluate only policies that lead to the goal
     #utility: goal prior, preference p(o)
-    avg, Rho, perception_args, utility, infer_h, valid = par_list
-    learn_rew = 1
+    avg, perception_args, infer_h, valid = agent_par_list
+    
+    utility = []
+    
+    #ut = [0.5, 0.6, 0.7, 0.8, 0.9, 1. - 1e-5]
+    #ut = [0.95, 0.96, 0.98, 0.99]
+    #ut = [0.985]
+    ut = [0.999]
+    for u in ut:
+        utility.append(ar.zeros(nr).to(device))
+        for i in range(1,nr):
+            utility[-1][i] = u/(nr-1)#u/nr*i
+        utility[-1][0] = (1.-u)
+    
+    utility = utility[-1]
+    
 
     """
     create matrices
     """
 
-
-    #generating probability of observations in each state
-    A = ar.eye(no)
-
-
-    #state transition generative probability (matrix)
-    B = ar.zeros((ns, ns, na))
-    b1 = 0.7
-    nb1 = 1.-b1
-    b2 = 0.7
-    nb2 = 1.-b2
-
-    B[:,:,0] = array([[  0,  0,  0,  0,  0,  0,  0,],
-                          [ b1,  0,  0,  0,  0,  0,  0,],
-                          [nb1,  0,  0,  0,  0,  0,  0,],
-                          [  0,  1,  0,  1,  0,  0,  0,],
-                          [  0,  0,  0,  0,  1,  0,  0,],
-                          [  0,  0,  1,  0,  0,  1,  0,],
-                          [  0,  0,  0,  0,  0,  0,  1,],])
-
-    B[:,:,1] = array([[  0,  0,  0,  0,  0,  0,  0,],
-                          [nb2,  0,  0,  0,  0,  0,  0,],
-                          [ b2,  0,  0,  0,  0,  0,  0,],
-                          [  0,  0,  0,  1,  0,  0,  0,],
-                          [  0,  1,  0,  0,  1,  0,  0,],
-                          [  0,  0,  0,  0,  0,  1,  0,],
-                          [  0,  0,  1,  0,  0,  0,  1,],])
-
-    # B[:,:,0] = array([[  0,  0,  0,  0,  0,  0,  0,],
-    #                      [ b1,  0,  0,  0,  0,  0,  0,],
-    #                      [nb1,  0,  0,  0,  0,  0,  0,],
-    #                      [  0,  1,  0,  1,  0,  0,  0,],
-    #                      [  0,  0,  1,  0,  1,  0,  0,],
-    #                      [  0,  0,  0,  0,  0,  1,  0,],
-    #                      [  0,  0,  0,  0,  0,  0,  1,],])
-
-    # B[:,:,1] = array([[  0,  0,  0,  0,  0,  0,  0,],
-    #                      [nb2,  0,  0,  0,  0,  0,  0,],
-    #                      [ b2,  0,  0,  0,  0,  0,  0,],
-    #                      [  0,  0,  0,  1,  0,  0,  0,],
-    #                      [  0,  0,  0,  0,  1,  0,  0,],
-    #                      [  0,  1,  0,  0,  0,  1,  0,],
-    #                      [  0,  0,  1,  0,  0,  0,  1,],])
-
-    # create reward generation
-#
-#    C = ar.zeros((utility.shape[0], ns))
-#
-#    vals = array([0., 1./5., 0.95, 1./5., 1/5., 1./5.])
-#
-#    for i in range(ns):
-#        C[:,i] = [1-vals[i],vals[i]]
-#
-#    changes = array([0.01, -0.01])
-#    Rho = generate_bandit_timeseries(C, nb, trials, changes)
-
-    # agent's beliefs about reward generation
-
-    C_alphas = ar.zeros((nr, ns)) + learn_rew
+    C_alphas = ar.zeros((nr, ns)) + 1
     C_alphas[0,:3] = 100
     for i in range(1,nr):
         C_alphas[i,0] = 1
-#    C_alphas[0,1:,:] = 100
-#    for c in range(nb):
-#        C_alphas[1,c+1,c] = 100
-#        C_alphas[0,c+1,c] = 1
-    #C_alphas[:,13] = [100, 1]
 
-    #C_agent = ar.zeros((nr, ns, nc))
-    # for c in range(nc):
-    #     C_agent[:,:,c] = array([(C_alphas[:,i,c])/(C_alphas[:,i,c]).sum() for i in range(ns)]).T
     C_agent = C_alphas[:,:] / C_alphas[:,:].sum(axis=0)[None,:]
-    #array([ar.random.dirichlet(C_alphas[:,i]) for i in range(ns)]).T
-
-    # context transition matrix
-
-    transition_matrix_context = ar.ones(1)
-
-    """
-    create environment (grid world)
-    """
-
-    environment = env.MultiArmedBandid(A, B, Rho, trials = trials, T = T)
 
 
     """
@@ -192,13 +129,14 @@ def run_Bayesian_agent(par_list, trials, T, ns, na):
         ac_sel = asl.MaxSelector(trials = trials, T = T,
                                       number_of_actions = na)
 
-#    ac_sel = asl.AveragedPolicySelector(trials = trials, T = T,
-#                                        number_of_policies = npi,
-#                                        number_of_actions = na)
 
     prior_context = array([1.])
 
 #    prior_context[0] = 1.
+
+    # context transition matrix
+
+    transition_matrix_context = ar.ones(1)
 
     """
     set up agent
@@ -211,17 +149,16 @@ def run_Bayesian_agent(par_list, trials, T, ns, na):
     
     alphas = ar.zeros((npi)) + alpha_0
     prior_pi = alphas / alphas.sum(axis=0)
-    learn_habit = True
 
     # perception
     bayes_prc = prc.Group2Perception(A, B, C_agent, transition_matrix_context,
                                            state_prior, utility, prior_pi, pol,
                                            alpha_0, C_alphas,
-                                           learn_habit = learn_habit, mask=valid[:,None],
+                                           learn_habit = True, mask=valid[:,None],
                                            learn_rew = True, T=T, trials=trials,
                                            pol_lambda=pol_lambda, r_lambda=r_lambda,
                                            non_decaying=(ns-nb), dec_temp=dec_temp, 
-                                           nsubs=1, infer_alpha_0=infer_h, use_h=True)
+                                           nsubs=nsubs, infer_alpha_0=infer_h, use_h=True)
     
     bayes_prc.set_parameters(par_dict=perception_args)
     bayes_prc.reset()
@@ -234,9 +171,32 @@ def run_Bayesian_agent(par_list, trials, T, ns, na):
                       prior_context = prior_context,
                       #save_everything = True,
                       number_of_policies = npi,
-                      number_of_rewards = nr)
+                      number_of_rewards = nr,
+                      nsubs = nsubs)
     
     
+    return bayes_pln, bayes_prc
+
+
+def set_up_two_stage_env(Rho, trials, T, A, B):
+    
+        """
+        create environment (two stage task)
+        """
+
+        environment = env.MultiArmedBandid(A, B, Rho, trials = trials, T = T)
+        
+        return environment
+
+    
+def simulate_behavior(par_list, trials, T, ns, na, nr, nb, A, B):
+    
+    avg, Rho, perception_args, infer_h, valid = par_list
+    
+    environment = set_up_two_stage_env(Rho, trials, T, A, B)
+    
+    agent_par_list = [avg, perception_args, infer_h, valid]
+    bayes_pln, bayes_prc = set_up_Bayesian_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B)
     
     """
     create world
@@ -258,7 +218,7 @@ def run_Bayesian_agent(par_list, trials, T, ns, na):
 ###################################
 """inference convenience functions"""
 
-def infer(inferrer, iter_steps, fname_str):
+def infer(inferrer, iter_steps, fname_str, npart, base_dir):
 
     inferrer.infer_posterior(iter_steps=iter_steps, num_particles=npart, optim_kwargs={'lr': .01})#, param_dict
 
@@ -275,7 +235,7 @@ def infer(inferrer, iter_steps, fname_str):
     plt.savefig(os.path.join(base_dir, fname_str+'_ELBO.svg'))
     plt.show()
 
-def sample_posterior(inferrer, fname_str, n_samples=500):
+def sample_posterior(inferrer, param_names, true_vals, fname_str, base_dir, n_samples=500):
 
     sample_df = inferrer.sample_posterior(n_samples=n_samples) #inferrer.plot_posteriors(n_samples=1000)
     # inferrer.plot_posteriors(n_samples=n_samples)
@@ -289,7 +249,7 @@ def sample_posterior(inferrer, fname_str, n_samples=500):
         means = []
         trues = []
         subs = []
-        for i in range(len(data)):
+        for i in range(inferrer.nsubs):
             means.append(sample_df[sample_df['subject']==i][name].mean())
             trues.append(true_vals[i][name])
             subs.append(i)
@@ -335,7 +295,7 @@ def plot_inferred(smaller_df, fname_str, reg_fit=False):
         plt.show()
         
         
-def big_custom_plot(plot_df, fname_str, ELBO, fit_reg=False, annot=False):
+def big_custom_plot(plot_df, param_names, base_dir, fname_str, ELBO, max_dt, fit_reg=False, annot=False):
     
     axes_names = ["policy forgetting rate lambda_pi", "reward forgetting rate lambda_r", "decision temp gamma", "habitual tendency h"]
     ranges = [[0,1], [0,1], [1, max_dt], [0,1], [0, 1]]
@@ -404,7 +364,7 @@ def big_custom_plot(plot_df, fname_str, ELBO, fit_reg=False, annot=False):
     plt.show()
     
     
-def plot_results(sample_df, fname_str, ELBO, smaller_df):
+def plot_results(sample_df, param_names, fname_str, ELBO, smaller_df, base_dir, max_dt):
     
     plot_df = smaller_df.drop('subject', axis=1)\
                         .reindex(["inferred "+name for name in param_names]\
@@ -418,10 +378,10 @@ def plot_results(sample_df, fname_str, ELBO, smaller_df):
         ax.annotate("p = {:.3f}".format(p),
                     xy=(.4, .9), xycoords=ax.transAxes)
         
-    big_custom_plot(plot_df, fname_str, ELBO, fit_reg=True, annot=True)
-    big_custom_plot(plot_df, fname_str, ELBO, fit_reg=True, annot=False)
-    big_custom_plot(plot_df, fname_str, ELBO, fit_reg=False, annot=True)
-    big_custom_plot(plot_df, fname_str, ELBO, fit_reg=False, annot=False)
+    big_custom_plot(plot_df, param_names, base_dir, fname_str, ELBO, max_dt, fit_reg=True, annot=True)
+    big_custom_plot(plot_df, param_names, base_dir, fname_str, ELBO, max_dt, fit_reg=True, annot=False)
+    big_custom_plot(plot_df, param_names, base_dir, fname_str, ELBO, max_dt, fit_reg=False, annot=True)
+    big_custom_plot(plot_df, param_names, base_dir, fname_str, ELBO, max_dt, fit_reg=False, annot=False)
     
     # plt.figure()
     # sns.pairplot(sample_df, kind='reg')
@@ -476,6 +436,38 @@ if __name__=='__main__':
     na = 2 #number of actions
     npi = na**(T-1)
     nr = 2
+    
+    """
+    create matrices
+    """
+    
+    
+    #generating probability of observations in each state
+    A = ar.eye(no).to(device)
+    
+    
+    #state transition generative probability (matrix)
+    B = ar.zeros((ns, ns, na)).to(device)
+    b1 = 0.7
+    nb1 = 1.-b1
+    b2 = 0.7
+    nb2 = 1.-b2
+    
+    B[:,:,0] = array([[  0,  0,  0,  0,  0,  0,  0,],
+                          [ b1,  0,  0,  0,  0,  0,  0,],
+                          [nb1,  0,  0,  0,  0,  0,  0,],
+                          [  0,  1,  0,  1,  0,  0,  0,],
+                          [  0,  0,  0,  0,  1,  0,  0,],
+                          [  0,  0,  1,  0,  0,  1,  0,],
+                          [  0,  0,  0,  0,  0,  0,  1,],])
+    
+    B[:,:,1] = array([[  0,  0,  0,  0,  0,  0,  0,],
+                          [nb2,  0,  0,  0,  0,  0,  0,],
+                          [ b2,  0,  0,  0,  0,  0,  0,],
+                          [  0,  0,  0,  1,  0,  0,  0,],
+                          [  0,  1,  0,  0,  1,  0,  0,],
+                          [  0,  0,  0,  0,  0,  1,  0,],
+                          [  0,  0,  1,  0,  0,  0,  1,],])
 
     """create data"""
     
@@ -485,21 +477,7 @@ if __name__=='__main__':
     true_vals = []
     
     data = []
-    
-    utility = []
-    
-    #ut = [0.5, 0.6, 0.7, 0.8, 0.9, 1. - 1e-5]
-    #ut = [0.95, 0.96, 0.98, 0.99]
-    #ut = [0.985]
-    ut = [0.999]
-    for u in ut:
-        utility.append(ar.zeros(nr).to(device))
-        for i in range(1,nr):
-            utility[-1][i] = u/(nr-1)#u/nr*i
-        utility[-1][0] = (1.-u)
-    
-    utility = utility[-1]
-    
+
     Rho_data_fname = 'dawrandomwalks.mat'
     
     fname = os.path.join(folder, Rho_data_fname)
@@ -543,10 +521,10 @@ if __name__=='__main__':
     
     if infer_h:
         n_pars = 4
-        h_str = "inferh_"
+        h_str = "4param"
     else:
         n_pars = 3
-        h_str = ""
+        h_str = "3param"
         param_names = param_names[:-1]
         
     max_dt = 6
@@ -629,9 +607,9 @@ if __name__=='__main__':
         avg = True
         prob_matrix = ar.zeros((trials)) + p_invalid
         valid = ar.bernoulli(prob_matrix).bool()
-        pars = [avg, Rho,perception_args, utility, infer_h, valid]
+        pars = [avg, Rho,perception_args, infer_h, valid]
     
-        worlds.append(run_Bayesian_agent(pars, trials, T, ns, na))
+        worlds.append(simulate_behavior(pars, trials, T, ns, na, nr, nb, A, B))
     
         w = worlds[-1]
     
@@ -692,39 +670,6 @@ if __name__=='__main__':
     
         gc.collect()
     
-        #print(gc.get_count())
-    
-        # rewarded = data[-1]["rewards"][:-1,-1] == 1
-    
-        # unrewarded = rewarded==False
-    
-        # rare = ar.logical_or(ar.logical_and(data[-1]["states"][:-1,1]==2, data[-1]["actions"][:-1,0] == 0),
-        #                 ar.logical_and(data[-1]["states"][:-1,1]==1, data[-1]["actions"][:-1,0] == 1))
-    
-        # common = rare==False
-    
-        # names = ["rewarded common", "rewarded rare", "unrewarded common", "unrewarded rare"]
-    
-        # rewarded_common = ar.where(ar.logical_and(rewarded,common) == True)[0]
-        # rewarded_rare = ar.where(ar.logical_and(rewarded,rare) == True)[0]
-        # unrewarded_common = ar.where(ar.logical_and(unrewarded,common) == True)[0]
-        # unrewarded_rare = ar.where(ar.logical_and(unrewarded,rare) == True)[0]
-    
-        # index_list = [rewarded_common, rewarded_rare,
-        #               unrewarded_common, unrewarded_rare]
-    
-        # stayed = [(data[-1]["actions"][index_list[i],0] == data[-1]["actions"][index_list[i]+1,0]).sum()/float(len(index_list[i])) for i in range(4)]
-    
-        # plt.figure()
-        # g = sns.barplot(data=stayed)
-        # g.set_xticklabels(names, rotation=45, horizontalalignment='right', fontsize=16)
-        # plt.ylim([0,1])
-        # plt.yticks(ar.arange(0,1.1,0.2),fontsize=16)
-        # plt.title("habit and goal-directed", fontsize=18)
-        # plt.savefig("habit_and_goal.svg",dpi=300)
-        # plt.ylabel("stay probability")
-        # plt.show()
-    
         true_vals.append(perception_args)
     
     stayed_arr = array(stayed)
@@ -747,72 +692,8 @@ if __name__=='__main__':
     print('analyzing '+str(len(true_vals))+' data sets')
     
     
-    learn_rew = 1
-    
-    """
-    create matrices
-    """
-    
-    
-    #generating probability of observations in each state
-    A = ar.eye(no).to(device)
-    
-    
-    #state transition generative probability (matrix)
-    B = ar.zeros((ns, ns, na)).to(device)
-    b1 = 0.7
-    nb1 = 1.-b1
-    b2 = 0.7
-    nb2 = 1.-b2
-    
-    B[:,:,0] = array([[  0,  0,  0,  0,  0,  0,  0,],
-                          [ b1,  0,  0,  0,  0,  0,  0,],
-                          [nb1,  0,  0,  0,  0,  0,  0,],
-                          [  0,  1,  0,  1,  0,  0,  0,],
-                          [  0,  0,  0,  0,  1,  0,  0,],
-                          [  0,  0,  1,  0,  0,  1,  0,],
-                          [  0,  0,  0,  0,  0,  0,  1,],])
-    
-    B[:,:,1] = array([[  0,  0,  0,  0,  0,  0,  0,],
-                          [nb2,  0,  0,  0,  0,  0,  0,],
-                          [ b2,  0,  0,  0,  0,  0,  0,],
-                          [  0,  0,  0,  1,  0,  0,  0,],
-                          [  0,  1,  0,  0,  1,  0,  0,],
-                          [  0,  0,  0,  0,  0,  1,  0,],
-                          [  0,  0,  1,  0,  0,  0,  1,],])
-    
-    # B[:,:,0] = array([[  0,  0,  0,  0,  0,  0,  0,],
-    #                      [ b1,  0,  0,  0,  0,  0,  0,],
-    #                      [nb1,  0,  0,  0,  0,  0,  0,],
-    #                      [  0,  1,  0,  1,  0,  0,  0,],
-    #                      [  0,  0,  1,  0,  1,  0,  0,],
-    #                      [  0,  0,  0,  0,  0,  1,  0,],
-    #                      [  0,  0,  0,  0,  0,  0,  1,],])
-    
-    # B[:,:,1] = array([[  0,  0,  0,  0,  0,  0,  0,],
-    #                      [nb2,  0,  0,  0,  0,  0,  0,],
-    #                      [ b2,  0,  0,  0,  0,  0,  0,],
-    #                      [  0,  0,  0,  1,  0,  0,  0,],
-    #                      [  0,  0,  0,  0,  1,  0,  0,],
-    #                      [  0,  1,  0,  0,  0,  1,  0,],
-    #                      [  0,  0,  1,  0,  0,  0,  1,],])
-    
-    # create reward generation
-    #
-    #    C = ar.zeros((utility.shape[0], ns))
-    #
-    #    vals = array([0., 1./5., 0.95, 1./5., 1/5., 1./5.])
-    #
-    #    for i in range(ns):
-    #        C[:,i] = [1-vals[i],vals[i]]
-    #
-    #    changes = array([0.01, -0.01])
-    #    Rho = generate_bandit_timeseries(C, nb, trials, changes)
-    
-    # agent's beliefs about reward generation
-    
     C_alphas = ar.zeros((nr, ns)).to(device)
-    C_alphas += learn_rew
+    C_alphas += 1
     C_alphas[0,:3] = 100
     for i in range(1,nr):
         C_alphas[i,0] = 1
@@ -928,11 +809,6 @@ if __name__=='__main__':
     # inferrer = inf.SingleInference(agent, structured_data)#data[0])
     
     inferrer = inf.GeneralGroupInference(agent, structured_data)
-    
-    if infer_h:
-        prefix = "h_"
-    else:
-        prefix = ""
     
     print("this is inference using", type(inferrer))
     
