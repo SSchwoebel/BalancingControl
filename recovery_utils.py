@@ -7,11 +7,10 @@ Created on Mon Sep 13 14:09:11 2021
 """
 
 
-import torch as ar
-array = ar.tensor
+import torch
 
-ar.set_num_threads(1)
-print("torch threads", ar.get_num_threads())
+torch.set_num_threads(1)
+print("torch threads", torch.get_num_threads())
 
 
 import pyro
@@ -43,13 +42,13 @@ import sys
 from numpy import eye
 from statsmodels.stats.multitest import multipletests
 from scipy.io import loadmat
-#device = ar.device("cuda") if ar.cuda.is_available() else ar.device("cpu")
-#device = ar.device("cuda")
-#device = ar.device("cpu")
+#device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+#device = torch.device("cuda")
+#device = torch.device("cpu")
 
 from inference_twostage import device
 
-#ar.autograd.set_detect_anomaly(True)
+#torch.autograd.set_detect_anomaly(True)
 ###################################
 ###################################
 
@@ -57,7 +56,7 @@ from inference_twostage import device
 """
 run function
 """
-def set_up_Bayesian_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs=1):
+def set_up_Bayesian_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs=1, **kwargs):
 
     #set parameters:
     #obs_unc: observation uncertainty condition
@@ -73,7 +72,7 @@ def set_up_Bayesian_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs
     #ut = [0.985]
     ut = [0.999]
     for u in ut:
-        utility.append(ar.zeros(nr).to(device))
+        utility.append(torch.zeros(nr).to(device))
         for i in range(1,nr):
             utility[-1][i] = u/(nr-1)#u/nr*i
         utility[-1][0] = (1.-u)
@@ -85,7 +84,7 @@ def set_up_Bayesian_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs
     create matrices
     """
 
-    C_alphas = ar.zeros((nr, ns)) + 1
+    C_alphas = torch.zeros((nr, ns)) + 1
     C_alphas[0,:3] = 100
     for i in range(1,nr):
         C_alphas[i,0] = 1
@@ -97,7 +96,7 @@ def set_up_Bayesian_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs
     create policies
     """
 
-    pol = array(list(itertools.product(list(range(na)), repeat=T-1)))
+    pol = torch.tensor(list(itertools.product(list(range(na)), repeat=T-1)))
 
     #pol = pol[-2:]
     npi = pol.shape[0]
@@ -108,7 +107,7 @@ def set_up_Bayesian_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs
     set state prior (where agent thinks it starts)
     """
 
-    state_prior = ar.zeros((ns))
+    state_prior = torch.zeros((ns))
 
     state_prior[0] = 1.
 
@@ -130,13 +129,13 @@ def set_up_Bayesian_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs
                                       number_of_actions = na)
 
 
-    prior_context = array([1.])
+    prior_context = torch.tensor([1.])
 
 #    prior_context[0] = 1.
 
     # context transition matrix
 
-    transition_matrix_context = ar.ones(1)
+    transition_matrix_context = torch.ones(1)
 
     """
     set up agent
@@ -147,7 +146,7 @@ def set_up_Bayesian_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs
     dec_temp = perception_args["dec temp"]    
     alpha_0 = perception_args["habitual tendency"]
     
-    alphas = ar.zeros((npi)) + alpha_0
+    alphas = torch.zeros((npi)) + alpha_0
     prior_pi = alphas / alphas.sum(axis=0)
 
     # perception
@@ -250,21 +249,23 @@ def sample_posterior(inferrer, param_names, true_vals, fname_str, base_dir, n_sa
         trues = []
         subs = []
         for i in range(inferrer.nsubs):
+            print(sample_df['subject']==i)
+            print(true_vals['subject'][0]==i)
             means.append(sample_df[sample_df['subject']==i][name].mean())
-            trues.append(true_vals[i][name])
+            trues.append(true_vals[true_vals['subject']==i][name])
             subs.append(i)
 
-        smaller_df["inferred "+name] = ar.tensor(means)
-        smaller_df["true "+name] = ar.tensor(trues)
-        smaller_df["subject"] = ar.tensor(subs)
+        smaller_df["inferred "+name] = torch.tensor(means)
+        smaller_df["true "+name] = torch.tensor(trues)
+        smaller_df["subject"] = torch.tensor(subs)
         
     smaller_file = os.path.join(base_dir, fname_str+'_smaller_df.csv')
     smaller_df.to_csv(smaller_file)
 
     total_df = sample_df.copy()
     for name in param_names:
-        total_df["true "+name] = ar.tensor(smaller_df["true "+name]).repeat(n_samples)
-        total_df["inferred "+name] = ar.tensor(smaller_df["inferred "+name]).repeat(n_samples)
+        total_df["true "+name] = torch.tensor(smaller_df["true "+name]).repeat(n_samples)
+        total_df["inferred "+name] = torch.tensor(smaller_df["inferred "+name]).repeat(n_samples)
 
     total_file = os.path.join(base_dir, fname_str+'_total_df.csv')
     total_df.to_csv(total_file)
@@ -421,6 +422,178 @@ def plot_results(sample_df, param_names, fname_str, ELBO, smaller_df, base_dir, 
     # sns.heatmap(plot_df.corr(), annot=True, fmt='.2f', alpha=p_opacity, 
     #             cmap='vlag', vmin=-1, vmax=1)
     # plt.show()
+    
+def run_BCC_simulations(nsubs, infer_h, fname_base, base_dir, Rho, trials, T, 
+                        nb, ns, no, na, npi, nr, never_reward, A, B, p_invalid,
+                        max_dt=6, remove_old=True):
+    
+    if infer_h:
+        n_pars = 4
+    else:
+        n_pars = 3
+
+    # if it does exist, empty previous results, if we want that (remove_old==True)
+    if remove_old:
+            
+        svgs = glob.glob(os.path.join(base_dir,"*.svg"))
+        for file in svgs:
+            os.remove(file)
+            
+        csvs = glob.glob(os.path.join(base_dir,"*.csv"))
+        for file in csvs:
+            os.remove(file)
+            
+        saves = glob.glob(os.path.join(base_dir,"*.save"))
+        for file in saves:
+            os.remove(file)
+            
+        agents = glob.glob(os.path.join(base_dir,"twostage_agent*"))
+        for file in agents:
+            os.remove(file)
+            
+        outputs = glob.glob(os.path.join(base_dir,"*.json"))
+        for file in outputs:
+            os.remove(file)
+    
+    
+    true_values_tensor = torch.rand((nsubs,n_pars,1))
+    
+    true_vals = []
+    data = []
+    
+    stayed = []
+    indices = []
+    
+    for k, pars in enumerate(true_values_tensor):
+    
+        if infer_h:
+            pl, rl, norm_dt, h = pars
+            tend = h
+        else:
+            pl, rl, norm_dt = pars
+            tend = torch.tensor([1])
+        
+        dt = max_dt*norm_dt+1
+        
+        # print(pl, rl, dt, tend)
+        
+        perception_args = {"subject": torch.tensor([k]), "policy rate": pl, "reward rate": rl, "dec temp": dt, "habitual tendency": tend}
+        
+        print(perception_args)
+        
+        worlds = []
+        l = []
+        avg = True
+        prob_matrix = torch.zeros((trials)) + p_invalid
+        valid = torch.bernoulli(prob_matrix).bool()
+        pars = [avg, Rho,perception_args, infer_h, valid]
+        
+        worlds.append(simulate_behavior(pars, trials, T, ns, na, nr, nb, A, B))
+        
+        w = worlds[-1]
+        
+        rewarded = w.rewards[:trials-1,-1] == 1
+        
+        unrewarded = rewarded==False
+        
+        rare = torch.logical_or(torch.logical_and(w.environment.hidden_states[:trials-1,1]==2, w.actions[:trials-1,0] == 0),
+                       torch.logical_and(w.environment.hidden_states[:trials-1,1]==1, w.actions[:trials-1,0] == 1))
+        
+        common = rare==False
+        
+        rewarded_common = torch.where(torch.logical_and(rewarded,common) == True)[0]
+        rewarded_rare = torch.where(torch.logical_and(rewarded,rare) == True)[0]
+        unrewarded_common = torch.where(torch.logical_and(unrewarded,common) == True)[0]
+        unrewarded_rare = torch.where(torch.logical_and(unrewarded,rare) == True)[0]
+        
+        index_list = [rewarded_common, rewarded_rare,
+                     unrewarded_common, unrewarded_rare]
+        
+        stayed_list = [(w.actions[index_list[i],0] == w.actions[index_list[i]+1,0]).sum()/float(len(index_list[i])) for i in range(4)]
+        
+        stayed.append(stayed_list)
+        
+        run_name = "twostage_agent_daw_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tend)+".json"
+        fname_behavior = os.path.join(base_dir, run_name)
+        
+        data.append({"subject": torch.tensor([k]), "actions": w.actions, "observations": w.observations, "rewards": w.rewards, "states": w.environment.hidden_states, 'valid': valid})
+        
+        pickled_behavior = pickle.encode(data[-1])
+        with open(fname_behavior, 'w') as outfile:
+            json.dump(pickled_behavior, outfile)
+        
+        pickled_behavior = 0
+        
+        gc.collect()
+    
+        true_vals.append(perception_args)
+    
+    stayed_arr = torch.tensor(stayed)
+    
+    # structure data
+    
+    data_obs = torch.stack([d["observations"] for d in data], dim=-1)
+    data_rew = torch.stack([d["rewards"] for d in data], dim=-1)
+    data_act = torch.stack([d["actions"] for d in data], dim=-1)
+    data_val = torch.stack([d["valid"] for d in data], dim=-1)
+    data_ind = torch.stack([d["subject"] for d in data], dim=-1)
+
+    structured_data = {"subject": data_ind, "observations": data_obs, "rewards": data_rew, "actions": data_act, "valid": data_val}
+    
+    # structure true vals
+    
+    true_pol_rate = torch.stack([t["policy rate"] for t in true_vals], dim=-1)
+    true_rew_rate = torch.stack([t["reward rate"] for t in true_vals], dim=-1)
+    true_dec_temp = torch.stack([t["dec temp"] for t in true_vals], dim=-1)
+    true_hab_tend = torch.stack([t["habitual tendency"] for t in true_vals], dim=-1)
+    true_ind = torch.stack([t["subject"] for t in true_vals], dim=-1)
+    
+    structured_true_vals = {"subject": true_ind, "policy rate": true_pol_rate, "reward rate": true_rew_rate, "dec temp": true_dec_temp, "habitual tendency": true_hab_tend}
+    
+    # save to disk
+    
+    # stayed arr
+    fname_stayed = os.path.join(base_dir, "twostage_agent_daw_stayed_arr.json")
+    pickled_stayed_arr = pickle.encode(stayed_arr)
+    with open(fname_stayed, 'w') as outfile:
+        json.dump(pickled_stayed_arr, outfile)
+        
+    # data 
+    fname_data = os.path.join(base_dir, "twostage_agent_daw_data.json")
+    pickled_data = pickle.encode(structured_data)
+    with open(fname_data, 'w') as outfile:
+        json.dump(pickled_data, outfile)
+        
+    # true values 
+    fname_true_vals = os.path.join(base_dir, "twostage_agent_daw_true_vals.json")
+    pickled_true_vals = pickle.encode(structured_true_vals)
+    with open(fname_true_vals, 'w') as outfile:
+        json.dump(pickled_true_vals, outfile)
+    
+    return stayed_arr, structured_true_vals, structured_data
+
+
+def load_simulation_outputs(base_dir):
+
+    # stayed arr
+    fname_stayed = os.path.join(base_dir, "twostage_agent_daw_stayed_arr.json")
+    with open(fname_stayed, 'r') as infile:
+        loaded_stayed = json.load(infile)
+    stayed_arr = pickle.decode(loaded_stayed)
+        
+    # data 
+    fname_data = os.path.join(base_dir, "twostage_agent_daw_data.json")
+    with open(fname_data, 'r') as infile:
+        loaded_data = json.load(infile)
+    structured_data = pickle.decode(loaded_data)
+        
+    # true values 
+    fname_true_vals = os.path.join(base_dir, "twostage_agent_daw_true_vals.json")
+    with open(fname_true_vals, 'r') as infile:
+        loaded_true_vals = json.load(infile)
+    structured_true_vals = pickle.decode(loaded_true_vals)
+    
+    return stayed_arr, structured_true_vals, structured_data
 
 
 """run inference"""
@@ -443,17 +616,17 @@ if __name__=='__main__':
     
     
     #generating probability of observations in each state
-    A = ar.eye(no).to(device)
+    A = torch.eye(no).to(device)
     
     
     #state transition generative probability (matrix)
-    B = ar.zeros((ns, ns, na)).to(device)
+    B = torch.zeros((ns, ns, na)).to(device)
     b1 = 0.7
     nb1 = 1.-b1
     b2 = 0.7
     nb2 = 1.-b2
     
-    B[:,:,0] = array([[  0,  0,  0,  0,  0,  0,  0,],
+    B[:,:,0] = torch.tensor([[  0,  0,  0,  0,  0,  0,  0,],
                           [ b1,  0,  0,  0,  0,  0,  0,],
                           [nb1,  0,  0,  0,  0,  0,  0,],
                           [  0,  1,  0,  1,  0,  0,  0,],
@@ -461,7 +634,7 @@ if __name__=='__main__':
                           [  0,  0,  1,  0,  0,  1,  0,],
                           [  0,  0,  0,  0,  0,  0,  1,],])
     
-    B[:,:,1] = array([[  0,  0,  0,  0,  0,  0,  0,],
+    B[:,:,1] = torch.tensor([[  0,  0,  0,  0,  0,  0,  0,],
                           [nb2,  0,  0,  0,  0,  0,  0,],
                           [ b2,  0,  0,  0,  0,  0,  0,],
                           [  0,  0,  0,  1,  0,  0,  0,],
@@ -487,22 +660,22 @@ if __name__=='__main__':
     
     never_reward = ns-nb
     
-    Rho = ar.zeros((trials, nr, ns))
+    Rho = torch.zeros((trials, nr, ns))
     
     Rho[:,1,:never_reward] = 0.
     Rho[:,0,:never_reward] = 1.
     
-    Rho[:,1,never_reward:never_reward+2] = ar.from_numpy(rew_probs[0,:,:]).permute((1,0))
-    Rho[:,0,never_reward:never_reward+2] = ar.from_numpy(1-rew_probs[0,:,:]).permute((1,0))
+    Rho[:,1,never_reward:never_reward+2] = torch.from_numpy(rew_probs[0,:,:]).permute((1,0))
+    Rho[:,0,never_reward:never_reward+2] = torch.from_numpy(1-rew_probs[0,:,:]).permute((1,0))
     
-    Rho[:,1,never_reward+2:] = ar.from_numpy(rew_probs[1,:,:]).permute((1,0))
-    Rho[:,0,never_reward+2:] = ar.from_numpy(1-rew_probs[1,:,:]).permute((1,0))
+    Rho[:,1,never_reward+2:] = torch.from_numpy(rew_probs[1,:,:]).permute((1,0))
+    Rho[:,0,never_reward+2:] = torch.from_numpy(1-rew_probs[1,:,:]).permute((1,0))
     
     plt.figure(figsize=(10,5))
     for i in range(4):
         plt.plot(Rho[:,1,3+i], label="$p_{}$".format(i+1), linewidth=4)
     plt.ylim([0,1])
-    plt.yticks(ar.arange(0,1.1,0.2),fontsize=18)
+    plt.yticks(torch.arange(0,1.1,0.2),fontsize=18)
     plt.ylabel("reward probability", fontsize=20)
     plt.xlim([-0.1, trials+0.1])
     plt.xticks(range(0,trials+1,50),fontsize=18)
@@ -558,7 +731,7 @@ if __name__=='__main__':
         
     
     nsubs = 10
-    true_values_tensor = ar.rand((nsubs,n_pars,1))
+    true_values_tensor = torch.rand((nsubs,n_pars,1))
     
     # prob for invalid answer (e.g. no reply)
     p_invalid = 1.-1./201.
@@ -573,7 +746,7 @@ if __name__=='__main__':
             tend = h
         else:
             pl, rl, norm_dt = pars
-            tend = ar.tensor([1])
+            tend = torch.tensor([1])
     
         dt = max_dt*norm_dt+1
     
@@ -581,7 +754,7 @@ if __name__=='__main__':
         
         perception_args = {"policy rate": pl, "reward rate": rl, "dec temp": dt, "habitual tendency": tend}
     
-        # init = array([0.6, 0.4, 0.6, 0.4])
+        # init = torch.tensor([0.6, 0.4, 0.6, 0.4])
     
         # Rho_fname = 'twostep_rho.json'
     
@@ -600,50 +773,50 @@ if __name__=='__main__':
         #     if arr_type == "numpy":
         #         Rho[:] = pickle.decode(data)[:trials]
         #     else:
-        #         Rho[:] = ar.from_numpy(pickle.decode(data))[:trials]
+        #         Rho[:] = torch.from_numpy(pickle.decode(data))[:trials]
     
         worlds = []
         l = []
         avg = True
-        prob_matrix = ar.zeros((trials)) + p_invalid
-        valid = ar.bernoulli(prob_matrix).bool()
+        prob_matrix = torch.zeros((trials)) + p_invalid
+        valid = torch.bernoulli(prob_matrix).bool()
         pars = [avg, Rho,perception_args, infer_h, valid]
     
         worlds.append(simulate_behavior(pars, trials, T, ns, na, nr, nb, A, B))
     
         w = worlds[-1]
     
-        # rewarded = ar.where(w.rewards[:trials-1,-1] == 1)[0]
+        # rewarded = torch.where(w.rewards[:trials-1,-1] == 1)[0]
     
-        # unrewarded = ar.where(w.rewards[:trials-1,-1] == 0)[0]
+        # unrewarded = torch.where(w.rewards[:trials-1,-1] == 0)[0]
     
         rewarded = w.rewards[:trials-1,-1] == 1
     
         unrewarded = rewarded==False#w.rewards[:trials-1,-1] == 0
     
-        # rare = ar.cat((ar.where(own_logical_and(w.environment.hidden_states[:,1]==2, w.actions[:,0] == 0) == True)[0],
-        #                  ar.where(own_logical_and(w.environment.hidden_states[:,1]==1, w.actions[:,0] == 1) == True)[0]))
+        # rare = torch.cat((torch.where(own_logical_and(w.environment.hidden_states[:,1]==2, w.actions[:,0] == 0) == True)[0],
+        #                  torch.where(own_logical_and(w.environment.hidden_states[:,1]==1, w.actions[:,0] == 1) == True)[0]))
         # rare.sort()
     
-        # common = ar.cat((ar.where(own_logical_and(w.environment.hidden_states[:,1]==2, w.actions[:,0] == 1) == True)[0],
-        #                    ar.where(own_logical_and(w.environment.hidden_states[:,1]==1, w.actions[:,0] == 0) == True)[0]))
+        # common = torch.cat((torch.where(own_logical_and(w.environment.hidden_states[:,1]==2, w.actions[:,0] == 1) == True)[0],
+        #                    torch.where(own_logical_and(w.environment.hidden_states[:,1]==1, w.actions[:,0] == 0) == True)[0]))
         # common.sort()
     
-        rare = ar.logical_or(ar.logical_and(w.environment.hidden_states[:trials-1,1]==2, w.actions[:trials-1,0] == 0),
-                       ar.logical_and(w.environment.hidden_states[:trials-1,1]==1, w.actions[:trials-1,0] == 1))
+        rare = torch.logical_or(torch.logical_and(w.environment.hidden_states[:trials-1,1]==2, w.actions[:trials-1,0] == 0),
+                       torch.logical_and(w.environment.hidden_states[:trials-1,1]==1, w.actions[:trials-1,0] == 1))
     
         common = rare==False#own_logical_or(own_logical_and(w.environment.hidden_states[:trials-1,1]==2, w.actions[:trials-1,0] == 1),
                  #        own_logical_and(w.environment.hidden_states[:trials-1,1]==1, w.actions[:trials-1,0] == 0))
     
         names = ["rewarded common", "rewarded rare", "unrewarded common", "unrewarded rare"]
     
-        # index_list = [ar.intersect1d(rewarded, common), ar.intersect1d(rewarded, rare),
-        #              ar.intersect1d(unrewarded, common), ar.intersect1d(unrewarded, rare)]
+        # index_list = [torch.intersect1d(rewarded, common), torch.intersect1d(rewarded, rare),
+        #              torch.intersect1d(unrewarded, common), torch.intersect1d(unrewarded, rare)]
     
-        rewarded_common = ar.where(ar.logical_and(rewarded,common) == True)[0]
-        rewarded_rare = ar.where(ar.logical_and(rewarded,rare) == True)[0]
-        unrewarded_common = ar.where(ar.logical_and(unrewarded,common) == True)[0]
-        unrewarded_rare = ar.where(ar.logical_and(unrewarded,rare) == True)[0]
+        rewarded_common = torch.where(torch.logical_and(rewarded,common) == True)[0]
+        rewarded_rare = torch.where(torch.logical_and(rewarded,rare) == True)[0]
+        unrewarded_common = torch.where(torch.logical_and(unrewarded,common) == True)[0]
+        unrewarded_rare = torch.where(torch.logical_and(unrewarded,rare) == True)[0]
     
         index_list = [rewarded_common, rewarded_rare,
                      unrewarded_common, unrewarded_rare]
@@ -672,14 +845,14 @@ if __name__=='__main__':
     
         true_vals.append(perception_args)
     
-    stayed_arr = array(stayed)
+    stayed_arr = torch.tensor(stayed)
     
     learn_habit = True
     plt.figure()
     g = sns.barplot(data=stayed_arr)
     g.set_xticklabels(names, rotation=45, horizontalalignment='right', fontsize=16)
     plt.ylim([0,1])
-    plt.yticks(ar.arange(0,1.1,0.2),fontsize=16)
+    plt.yticks(torch.arange(0,1.1,0.2),fontsize=16)
     if learn_habit:
         plt.title("habit and goal-directed", fontsize=18)
         plt.savefig("habit_and_goal.svg",dpi=300)
@@ -692,7 +865,7 @@ if __name__=='__main__':
     print('analyzing '+str(len(true_vals))+' data sets')
     
     
-    C_alphas = ar.zeros((nr, ns)).to(device)
+    C_alphas = torch.zeros((nr, ns)).to(device)
     C_alphas += 1
     C_alphas[0,:3] = 100
     for i in range(1,nr):
@@ -703,22 +876,22 @@ if __name__=='__main__':
     #        C_alphas[0,c+1,c] = 1
     #C_alphas[:,13] = [100, 1]
     
-    #C_agent = ar.zeros((nr, ns, nc))
+    #C_agent = torch.zeros((nr, ns, nc))
     # for c in range(nc):
-    #     C_agent[:,:,c] = array([(C_alphas[:,i,c])/(C_alphas[:,i,c]).sum() for i in range(ns)]).T
+    #     C_agent[:,:,c] = torch.tensor([(C_alphas[:,i,c])/(C_alphas[:,i,c]).sum() for i in range(ns)]).T
     C_agent = C_alphas[:,:] / C_alphas[:,:].sum(axis=0)[None,:]
-    #array([ar.random.dirichlet(C_alphas[:,i]) for i in range(ns)]).T
+    #torch.tensor([torch.random.dirichlet(C_alphas[:,i]) for i in range(ns)]).T
     
     # context transition matrix
     
-    transition_matrix_context = ar.ones(1).to(device)
+    transition_matrix_context = torch.ones(1).to(device)
     
     
     """
     create policies
     """
     
-    pol = array(list(itertools.product(list(range(na)), repeat=T-1))).to(device)
+    pol = torch.tensor(list(itertools.product(list(range(na)), repeat=T-1))).to(device)
     
     #pol = pol[-2:]
     npi = pol.shape[0]
@@ -728,32 +901,32 @@ if __name__=='__main__':
     set state prior (where agent thinks it starts)
     """
     
-    state_prior = ar.zeros((ns)).to(device)
+    state_prior = torch.zeros((ns)).to(device)
     
     state_prior[0] = 1.
     
-    prior_context = array([1.]).to(device)
+    prior_context = torch.tensor([1.]).to(device)
     
     #    prior_context[0] = 1.
-    prior_pi = ar.zeros(npi) / ar.zeros(npi).sum()
+    prior_pi = torch.zeros(npi) / torch.zeros(npi).sum()
     """
     set up agent
     """
     #bethe agent
     
-    data_obs = ar.stack([d["observations"] for d in data], dim=-1)
-    data_rew = ar.stack([d["rewards"] for d in data], dim=-1)
-    data_act = ar.stack([d["actions"] for d in data], dim=-1)
+    data_obs = torch.stack([d["observations"] for d in data], dim=-1)
+    data_rew = torch.stack([d["rewards"] for d in data], dim=-1)
+    data_act = torch.stack([d["actions"] for d in data], dim=-1)
     
     structured_data = {"observations": data_obs, "rewards": data_rew, "actions": data_act}
     
     # perception
-    pol_lambda = ar.tensor([1])
-    r_lambda = ar.tensor([0.5])
-    dec_temp = ar.tensor([2])   
-    alpha_0 = ar.tensor([1])
+    pol_lambda = torch.tensor([1])
+    r_lambda = torch.tensor([0.5])
+    dec_temp = torch.tensor([2])   
+    alpha_0 = torch.tensor([1])
     
-    alphas = ar.zeros((npi)) + alpha_0
+    alphas = torch.zeros((npi)) + alpha_0
     prior_pi = alphas / alphas.sum(axis=0)
     learn_habit = True
     
@@ -764,22 +937,22 @@ if __name__=='__main__':
     #     obs_message_tau = []
     #     rew_message_tau = []
     #     for t in range(T):
-    #         observations = ar.stack(data_obs[tau][-t-1:])
+    #         observations = torch.stack(data_obs[tau][-t-1:])
     #         obs_messages = []
     #         for n in range(nsubs):
     #             prev_obs = [A[o] for o in observations[-t-1:,n]]
-    #             obs = prev_obs + [ar.zeros((ns)).to(device)+1./ns]*(T-t-1)
-    #             obs = [ar.stack(obs).T.to(device)]*npart
-    #             obs_messages.append(ar.stack(obs, dim=-1))
-    #         obs_messages = ar.stack(obs_messages, dim=-1).to(device)
+    #             obs = prev_obs + [torch.zeros((ns)).to(device)+1./ns]*(T-t-1)
+    #             obs = [torch.stack(obs).T.to(device)]*npart
+    #             obs_messages.append(torch.stack(obs, dim=-1))
+    #         obs_messages = torch.stack(obs_messages, dim=-1).to(device)
     #         obs_message_tau.append(obs_messages)
         
-    #         rewards = ar.stack(data_rew[tau][-t-1:])
+    #         rewards = torch.stack(data_rew[tau][-t-1:])
     #         rew_messages = []
     #         for n in range(nsubs):
-    #             rew_messages.append(ar.stack([ar.stack([generative_model_rewards[r,:,i,n].to(device) for r in rewards[-t-1:,n]]  \
+    #             rew_messages.append(torch.stack([torch.stack([generative_model_rewards[r,:,i,n].to(device) for r in rewards[-t-1:,n]]  \
     #                                                    + [utility.matmul(generative_model_rewards[:,:,i,n].to(device)).to(device)]*(self.T-t-1)).T.to(device) for i in range(self.npart)], dim=-1).to(device))
-    #         rew_messages = ar.stack(rew_messages, dim=-1).to(device)
+    #         rew_messages = torch.stack(rew_messages, dim=-1).to(device)
     #         rew_message_tau.append(rew_messages)
             
     #     obs_message_list.append(obs_message_tau)
