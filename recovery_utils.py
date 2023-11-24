@@ -249,10 +249,8 @@ def sample_posterior(inferrer, param_names, true_vals, fname_str, base_dir, n_sa
         trues = []
         subs = []
         for i in range(inferrer.nsubs):
-            print(sample_df['subject']==i)
-            print(true_vals['subject'][0]==i)
             means.append(sample_df[sample_df['subject']==i][name].mean())
-            trues.append(true_vals[true_vals['subject']==i][name])
+            trues.append(true_vals[name][true_vals['subject']==i])
             subs.append(i)
 
         smaller_df["inferred "+name] = torch.tensor(means)
