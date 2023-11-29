@@ -15,6 +15,7 @@ import matplotlib.pylab as plt
 import seaborn as sns
 import numpy as np
 import distributions as analytical_dists
+import json
 
 from tqdm import tqdm
 import pyro
@@ -1889,7 +1890,7 @@ class GeneralGroupInference(object):
     def init_svi(self, optim_kwargs={'lr': .01},
                  num_particles=10):
 
-        pyro.clear_param_store()
+        #pyro.clear_param_store()
 
         self.svi = pyro.infer.SVI(model=self.model,
                   guide=self.guide,
@@ -2079,5 +2080,23 @@ class GeneralGroupInference(object):
         pyro.get_param_store().save(fname)
 
     def load_parameters(self, fname):
-
+        
+        pyro.clear_param_store()
         pyro.get_param_store().load(fname)
+
+    def parameters(self):
+
+        params = pyro.get_param_store()
+        return {key: params[key] for key in params.keys()}
+
+    def save_elbo(self, fname):
+
+        with open(fname, 'w') as outfile:
+            json.dump([float(l) for l in self.loss], outfile)
+
+    def load_elbo(self, fname):
+
+        with open(fname, 'r') as infile:
+            loss = json.load(infile)
+
+        self.loss = [ar.tensor(l) for l in loss]

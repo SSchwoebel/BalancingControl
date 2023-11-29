@@ -593,6 +593,46 @@ def load_simulation_outputs(base_dir):
     
     return stayed_arr, structured_true_vals, structured_data
 
+def set_up_inference_agent(n_agents, infer_h, base_dir, global_experiment_parameters, valid, remove_old=True):
+
+    # if it does exist, empty previous results, if we want that (remove_old==True)
+    if remove_old:
+
+        svgs = glob.glob(os.path.join(base_dir,"*.svg"))
+        for file in svgs:
+            os.remove(file)
+
+        csvs = glob.glob(os.path.join(base_dir,"*.csv"))
+        for file in csvs:
+            os.remove(file)
+
+        saves = glob.glob(os.path.join(base_dir,"*.save"))
+        for file in saves:
+            os.remove(file)
+
+        agents = glob.glob(os.path.join(base_dir,"twostage_agent*"))
+        for file in agents:
+            os.remove(file)
+
+        outputs = glob.glob(os.path.join(base_dir,"*.json"))
+        for file in outputs:
+            os.remove(file)
+
+    # perception args for init, will instantly be over-written, but have to be set for initialization
+    pol_lambda = torch.tensor([1.])
+    r_lambda = torch.tensor([0.5])
+    dec_temp = torch.tensor([2.])   
+    alpha_0 = torch.tensor([1.])
+
+    perception_args = {"policy rate": pol_lambda, "reward rate": r_lambda, "dec temp": dec_temp, "habitual tendency": alpha_0}
+
+    avg = True
+
+    agent_par_list = [avg, perception_args, infer_h, valid]
+    bayes_agent, bayes_perception = set_up_Bayesian_agent(agent_par_list, **global_experiment_parameters, nsubs=n_agents)
+
+    return bayes_agent
+
 
 """run inference"""
 if __name__=='__main__':
