@@ -144,7 +144,7 @@ def set_up_Bayesian_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs
     pol_lambda = perception_args["policy rate"]
     r_lambda = perception_args["reward rate"]
     dec_temp = perception_args["dec temp"]    
-    alpha_0 = perception_args["habitual tendency"]
+    alpha_0 = 1./perception_args["habitual tendency"]
     
     alphas = torch.zeros((npi)) + alpha_0
     prior_pi = alphas / alphas.sum(axis=0)

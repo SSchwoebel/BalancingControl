@@ -1753,6 +1753,8 @@ class GeneralGroupInference(object):
 
     def __init__(self, agent, data):
 
+        pyro.clear_param_store()
+
         self.agent = agent
         self.trials = agent.trials
         self.T = agent.T
