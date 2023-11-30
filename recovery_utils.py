@@ -271,6 +271,21 @@ def sample_posterior(inferrer, param_names, true_vals, fname_str, base_dir, n_sa
     return total_df, smaller_df, sample_df
 
 
+def load_samples(base_dir, fname_str):
+
+    sample_file = os.path.join(base_dir, fname_str+'_sample_df.csv')
+    sample_df = pd.read_csv(sample_file)
+
+    smaller_file = os.path.join(base_dir, fname_str+'_smaller_df.csv')
+    smaller_df = pd.read_csv(smaller_file)
+
+    total_file = os.path.join(base_dir, fname_str+'_total_df.csv')
+    total_df = pd.read_csv(total_file)
+
+    return total_df, smaller_df, sample_df
+
+
+
 def plot_inferred(smaller_df, fname_str, reg_fit=False):
     
     plot_df = smaller_df.drop('subject', axis=1)
