@@ -177,6 +177,122 @@ def set_up_Bayesian_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs
     return bayes_pln, bayes_prc
 
 
+def set_up_mfmb_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs=1, **kwargs):
+
+    #set parameters:
+    #obs_unc: observation uncertainty condition
+    #state_unc: state transition uncertainty condition
+    #goal_pol: evaluate only policies that lead to the goal
+    #utility: goal prior, preference p(o)
+    avg, perception_args, use_orig, use_p, restrict_alpha, valid = agent_par_list
+
+    utility = []
+    
+    #ut = [0.5, 0.6, 0.7, 0.8, 0.9, 1. - 1e-5]
+    #ut = [0.95, 0.96, 0.98, 0.99]
+    #ut = [0.985]
+    ut = [0.999]
+    for u in ut:
+        utility.append(torch.zeros(nr).to(device))
+        for i in range(1,nr):
+            utility[-1][i] = u/(nr-1)#u/nr*i
+        utility[-1][0] = (1.-u)
+    
+    utility = utility[-1]
+
+
+    """
+    create policies
+    """
+
+    pol = torch.tensor(list(itertools.product(list(range(na)), repeat=T-1)))
+
+    #pol = pol[-2:]
+    npi = pol.shape[0]
+
+
+    """
+    set state prior (where agent thinks it starts)
+    """
+
+    state_prior = torch.zeros((ns))
+
+    state_prior[0] = 1.
+
+    """
+    set action selection method
+    """
+
+    if avg:
+
+        sel = 'avg'
+
+        ac_sel = asl.AveragedSelector(trials = trials, T = T,
+                                      number_of_actions = na)
+    else:
+
+        sel = 'max'
+
+        ac_sel = asl.MaxSelector(trials = trials, T = T,
+                                      number_of_actions = na)
+
+#    ac_sel = asl.AveragedPolicySelector(trials = trials, T = T,
+#                                        number_of_policies = npi,
+#                                        number_of_actions = na)
+
+    prior_context = torch.tensor([1.])
+
+#    prior_context[0] = 1.
+
+    """
+    set up agent
+    """
+
+
+    Q_mf_init = [torch.zeros((3,na)), torch.zeros((3,na))]
+    Q_mb_init = [torch.zeros((3,na)), torch.zeros((3,na))]
+
+    # perception
+    if use_orig:
+        lamb = perception_args["discount"]
+        alpha = perception_args["learning rate"]
+        beta = perception_args["dec temp"]
+        w = perception_args["weight"]
+        p = perception_args["repetition"]
+        max_dt = perception_args["max dt"]
+        min_alpha = perception_args["min learning rate"]
+        
+        mbmf_prc = prc.mfmbOrig2Perception(B, pol, Q_mf_init, Q_mb_init, utility,
+                                        lamb, alpha, beta, w,
+                                        p, nsubs=1, use_p=use_p, mask=valid[:,None],
+                                        restrict_alpha=restrict_alpha,
+                                        max_dt=max_dt, min_alpha=min_alpha)
+    else:
+        lamb = perception_args["discount"]
+        alpha = perception_args["learning rate"]
+        beta_mf = perception_args["mf weight"]
+        beta_mb = perception_args["mb weight"]
+        p = perception_args["repetition"]
+        max_dt = perception_args["max dt"]
+        min_alpha = perception_args["min learning rate"]
+        
+        mbmf_prc = prc.mfmb3Perception(B, pol, Q_mf_init, Q_mb_init, utility,
+                                    lamb, alpha, beta_mf, beta_mb,
+                                    p, nsubs=1, use_p=use_p, mask=valid[:,None],
+                                    restrict_alpha=restrict_alpha,
+                                    max_dt=max_dt, min_alpha=min_alpha)
+    mbmf_prc.reset()
+
+    planner = agt.FittingAgent(mbmf_prc, ac_sel, pol,
+                      trials = trials, T = T,
+                      number_of_states = ns,
+                      #save_everything = True,
+                      number_of_policies = npi,
+                      number_of_rewards = nr)
+
+    return planner, mbmf_prc
+
+
 def set_up_two_stage_env(Rho, trials, T, A, B):
     
         """
@@ -188,20 +304,45 @@ def set_up_two_stage_env(Rho, trials, T, A, B):
         return environment
 
     
-def simulate_behavior(par_list, trials, T, ns, na, nr, nb, A, B):
+def simulate_BCC_behavior(par_list, trials, T, ns, na, nr, nb, A, B):
     
     avg, Rho, perception_args, infer_h, valid = par_list
     
     environment = set_up_two_stage_env(Rho, trials, T, A, B)
     
     agent_par_list = [avg, perception_args, infer_h, valid]
-    bayes_pln, bayes_prc = set_up_Bayesian_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B)
+    planner, perception = set_up_Bayesian_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B)
     
     """
     create world
     """
 
-    w = world.GroupWorld(environment, bayes_pln, trials = trials, T = T)
+    w = world.GroupWorld(environment, planner, trials = trials, T = T)
+
+    """
+    simulate experiment
+    """
+
+    w.simulate_experiment(range(trials))
+
+
+    return w
+
+
+def simulate_mfmb_behavior(pars, trials, T, ns, na, nr, nb, A, B):
+    
+    avg, Rho, perception_args, use_orig, use_p, restrict_alpha, valid = pars
+    
+    environment = set_up_two_stage_env(Rho, trials, T, A, B)
+    
+    agent_par_list = [avg, perception_args, use_orig, use_p, restrict_alpha, valid]
+    planner, perception = set_up_mfmb_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B)
+    
+    """
+    create world
+    """
+
+    w = world.GroupWorld(environment, planner, trials = trials, T = T)
 
     """
     simulate experiment
@@ -501,7 +642,7 @@ def run_BCC_simulations(nsubs, infer_h, fname_base, base_dir, Rho, trials, T,
         valid = torch.bernoulli(prob_matrix).bool()
         pars = [avg, Rho,perception_args, infer_h, valid]
         
-        worlds.append(simulate_behavior(pars, trials, T, ns, na, nr, nb, A, B))
+        worlds.append(simulate_BCC_behavior(pars, trials, T, ns, na, nr, nb, A, B))
         
         w = worlds[-1]
         
@@ -530,6 +671,187 @@ def run_BCC_simulations(nsubs, infer_h, fname_base, base_dir, Rho, trials, T,
         fname_behavior = os.path.join(base_dir, run_name)
         
         data.append({"subject": torch.tensor([k]), "actions": w.actions, "observations": w.observations, "rewards": w.rewards, "states": w.environment.hidden_states, 'valid': valid})
+        
+        pickled_behavior = pickle.encode(data[-1])
+        with open(fname_behavior, 'w') as outfile:
+            json.dump(pickled_behavior, outfile)
+        
+        pickled_behavior = 0
+        
+        gc.collect()
+    
+        true_vals.append(perception_args)
+    
+    stayed_arr = torch.tensor(stayed)
+    
+    # structure data
+    
+    data_obs = torch.stack([d["observations"] for d in data], dim=-1)
+    data_rew = torch.stack([d["rewards"] for d in data], dim=-1)
+    data_act = torch.stack([d["actions"] for d in data], dim=-1)
+    data_val = torch.stack([d["valid"] for d in data], dim=-1)
+    data_ind = torch.stack([d["subject"] for d in data], dim=-1)
+
+    structured_data = {"subject": data_ind, "observations": data_obs, "rewards": data_rew, "actions": data_act, "valid": data_val}
+    
+    # structure true vals
+    
+    true_pol_rate = torch.stack([t["policy rate"] for t in true_vals], dim=-1)
+    true_rew_rate = torch.stack([t["reward rate"] for t in true_vals], dim=-1)
+    true_dec_temp = torch.stack([t["dec temp"] for t in true_vals], dim=-1)
+    true_hab_tend = torch.stack([t["habitual tendency"] for t in true_vals], dim=-1)
+    true_ind = torch.stack([t["subject"] for t in true_vals], dim=-1)
+    
+    structured_true_vals = {"subject": true_ind, "policy rate": true_pol_rate, "reward rate": true_rew_rate, "dec temp": true_dec_temp, "habitual tendency": true_hab_tend}
+    
+    # save to disk
+    
+    # stayed arr
+    fname_stayed = os.path.join(base_dir, "twostage_agent_daw_stayed_arr.json")
+    pickled_stayed_arr = pickle.encode(stayed_arr)
+    with open(fname_stayed, 'w') as outfile:
+        json.dump(pickled_stayed_arr, outfile)
+        
+    # data 
+    fname_data = os.path.join(base_dir, "twostage_agent_daw_data.json")
+    pickled_data = pickle.encode(structured_data)
+    with open(fname_data, 'w') as outfile:
+        json.dump(pickled_data, outfile)
+        
+    # true values 
+    fname_true_vals = os.path.join(base_dir, "twostage_agent_daw_true_vals.json")
+    pickled_true_vals = pickle.encode(structured_true_vals)
+    with open(fname_true_vals, 'w') as outfile:
+        json.dump(pickled_true_vals, outfile)
+    
+    return stayed_arr, structured_true_vals, structured_data
+
+
+def run_mfmb_simulations(nsubs, use_orig, use_p, restrict_alpha, fname_base, base_dir, Rho, trials, T, 
+                        nb, ns, no, na, npi, nr, never_reward, A, B, p_invalid,
+                        max_dt=6, remove_old=True):
+    
+    if use_p:
+        n_pars = 5
+    else:
+        n_pars = 4
+
+    if restrict_alpha:
+        min_alpha = 0.1
+    else:
+        restr_str = ""
+        min_alpha = 0
+
+    # if it does exist, empty previous results, if we want that (remove_old==True)
+    if remove_old:
+            
+        svgs = glob.glob(os.path.join(base_dir,"*.svg"))
+        for file in svgs:
+            os.remove(file)
+            
+        csvs = glob.glob(os.path.join(base_dir,"*.csv"))
+        for file in csvs:
+            os.remove(file)
+            
+        saves = glob.glob(os.path.join(base_dir,"*.save"))
+        for file in saves:
+            os.remove(file)
+            
+        agents = glob.glob(os.path.join(base_dir,"twostage_agent*"))
+        for file in agents:
+            os.remove(file)
+            
+        outputs = glob.glob(os.path.join(base_dir,"*.json"))
+        for file in outputs:
+            os.remove(file)
+    
+    
+    true_values_tensor = torch.rand((nsubs,n_pars,1))
+    
+    true_vals = []
+    data = []
+    
+    stayed = []
+    indices = []
+    
+    for i, pars in enumerate(true_values_tensor):
+    
+        # make parameters for original mb mf: discount lambda, learning rate, dec temp, balancing w, perserveration
+        if use_orig:
+            if use_p:
+                discount, norm_lr, norm_dt, weight, perserv = pars
+            else:
+                discount, norm_lr, norm_dt, weight = pars
+                perserv = torch.tensor([0])
+        
+            dt = max_dt*norm_dt
+            if restrict_alpha:
+                lr = min_alpha + norm_lr*(1.-min_alpha)
+            else:
+                lr = norm_lr
+            perception_args = {"discount": discount, "learning rate": lr, "dec temp": dt, "weight": weight, "repetition": perserv, 
+                                "max dt": max_dt, "min learning rate": min_alpha}
+            
+        # make parameters for two beta mb mf: discount lambda, learning rate, mb dec temp, mf dec temp, perserveration
+        else:
+            if use_p:
+                discount, norm_lr, norm_dt_mf, norm_dt_mb, norm_perserv = pars
+                perserv = max_dt*norm_perserv
+            else:
+                discount, norm_lr, norm_dt_mf, norm_dt_mb = pars
+                perserv = torch.tensor([0])
+        
+            dt_mf = max_dt*norm_dt_mf
+            dt_mb = max_dt*norm_dt_mb
+            if restrict_alpha:
+                lr = min_alpha + norm_lr*(1.-min_alpha)
+            else:
+                lr = norm_lr
+
+            perception_args = {"discount": discount, "learning rate": lr, "mf weight": dt_mf, "mb weight": dt_mb, "repetition": perserv, 
+                                "max dt": max_dt, "min learning rate": min_alpha}
+            
+        print(perception_args)
+        
+        worlds = []
+        l = []
+        avg = True
+        prob_matrix = torch.zeros((trials)) + p_invalid
+        valid = torch.bernoulli(prob_matrix).bool()
+        pars = [avg, Rho,perception_args, use_orig, use_p, restrict_alpha, valid]
+        
+        worlds.append(simulate_mfmb_behavior(pars, trials, T, ns, na, nr, nb, A, B))
+        
+        w = worlds[-1]
+        
+        rewarded = w.rewards[:trials-1,-1] == 1
+        
+        unrewarded = rewarded==False
+        
+        rare = torch.logical_or(torch.logical_and(w.environment.hidden_states[:trials-1,1]==2, w.actions[:trials-1,0] == 0),
+                       torch.logical_and(w.environment.hidden_states[:trials-1,1]==1, w.actions[:trials-1,0] == 1))
+        
+        common = rare==False
+        
+        rewarded_common = torch.where(torch.logical_and(rewarded,common) == True)[0]
+        rewarded_rare = torch.where(torch.logical_and(rewarded,rare) == True)[0]
+        unrewarded_common = torch.where(torch.logical_and(unrewarded,common) == True)[0]
+        unrewarded_rare = torch.where(torch.logical_and(unrewarded,rare) == True)[0]
+        
+        index_list = [rewarded_common, rewarded_rare,
+                     unrewarded_common, unrewarded_rare]
+        
+        stayed_list = [(w.actions[index_list[i],0] == w.actions[index_list[i]+1,0]).sum()/float(len(index_list[i])) for i in range(4)]
+        
+        stayed.append(stayed_list)
+        
+        if use_orig:
+            run_name = "twostage_agent_daw_mbmfOrig"+str(i)+"_disc"+str(discount)+"_lr"+str(lr)+"_dt"+str(dt)+"weight"+str(weight)+"_perserv"+str(perserv)+".json"
+        else:
+            run_name = "twostage_agent_daw_mbmf"+str(i)+"_disc"+str(discount)+"_lr"+str(lr)+"_dt_mf"+str(dt_mf)+"_dt_mb"+str(dt_mb)+"_perserv"+str(perserv)+".json"
+        fname_behavior = os.path.join(base_dir, run_name)
+        
+        data.append({"subject": torch.tensor([i]), "actions": w.actions, "observations": w.observations, "rewards": w.rewards, "states": w.environment.hidden_states, 'valid': valid})
         
         pickled_behavior = pickle.encode(data[-1])
         with open(fname_behavior, 'w') as outfile:
