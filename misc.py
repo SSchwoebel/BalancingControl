@@ -422,6 +422,26 @@ def flanker_timeseries2(trials, states=None, flankers=None, contexts=None, state
 
     return Rho, states, flankers, contexts, state_trans, correct_choice, congruent
 
+def RDM_timeseries(coherence_levels, trials):
+    
+    n_coh = len(coherence_levels)
+    if trials%n_coh != 0:
+        print("trials are not a multiple of coherence levels")
+        extra_trials = trials%n_coh
+        
+    coherence_trials = trials//n_coh * coherence_levels + coherence_levels[:extra_trials]
+    
+    np.random.shuffle(coherence_trials)
+    
+    choice_trials = 0.5 + np.array(coherence_trials)
+    
+    contingencies = np.array([[np.ones(trials), np.zeros(trials)], [choice_trials, 1-choice_trials], [1-choice_trials, choice_trials]]).T
+    
+    correct = (choice_trials > 0.5).astype(int)
+    
+    return contingencies, correct, coherence_trials, choice_trials
+    
+    
 
 def plot_habit_learning(w, results, save_figs=False, fname=''):
 
