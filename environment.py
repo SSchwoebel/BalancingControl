@@ -91,7 +91,7 @@ class FakeGridWorld(object):
 class MultiArmedBandid(object):
 
     def __init__(self, Omega, Theta, Rho,
-                 trials = 1, T = 10):
+                 trials = 1, T = 10, correct_choice=None):
 
         #set probability distribution used for generating observations
         self.Omega = Omega.copy()
@@ -112,6 +112,9 @@ class MultiArmedBandid(object):
         self.hidden_states = np.zeros((trials, T), dtype = int)
 
         self.trials = trials
+        
+        if correct_choice is not None:
+            self.correct_choice = correct_choice
 
     def set_initial_states(self, tau):
         #start in lower corner

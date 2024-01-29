@@ -435,6 +435,8 @@ def RDM_timeseries(coherence_levels, trials):
     
     choice_trials = 0.5 + np.array(coherence_trials)
     
+    print(choice_trials)
+    
     contingencies = np.array([[np.ones(trials), np.zeros(trials)], [choice_trials, 1-choice_trials], [1-choice_trials, choice_trials]]).T
     
     correct = (choice_trials > 0.5).astype(int)

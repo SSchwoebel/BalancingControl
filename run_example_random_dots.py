@@ -94,7 +94,8 @@ def run_agent(par_list, trials, T, ns, na, nr, nc, f, states, contingencies, \
     """
 
     environment = env.MultiArmedBandid(A, B, Rho, \
-                                    trials = trials, T = T)
+                                    trials = trials, T = T, \
+                                        correct_choice=correct_choice)
 
 
     """
@@ -123,7 +124,7 @@ def run_agent(par_list, trials, T, ns, na, nr, nc, f, states, contingencies, \
     set action selection method
     """
 
-    ac_sel = asl.DirichletSelector(trials=trials, T=T, number_of_actions=na, factor=f, calc_dkl=False, calc_entropy=False, draw_true_post=True)
+    ac_sel = asl.DirichletSelector(trials=trials, T=T, number_of_actions=na, factor=f, calc_dkl=False, calc_entropy=False, draw_true_post=False)
 
     """
     set context prior
@@ -182,7 +183,9 @@ def run_agent(par_list, trials, T, ns, na, nr, nc, f, states, contingencies, \
 set condition dependent up parameters
 """
 
-def run_RDM_simulations(repetitions, folder):
+def run_RDM_simulations(repetitions, folder, rerun_simulations=False):
+    
+    print("running RDM simulations...")
 
     trials = 100
     T = 2
@@ -198,7 +201,7 @@ def run_RDM_simulations(repetitions, folder):
     trans = 0.
     unc = 0
     
-    coherence_levels = [0.5, 0.25, 0.1, -0.1, -0.25, -0.5]
+    coherence_levels = [0.20, 0.15, 0.10, -0.10, -0.15, -0.20]
 
     contingencies, correct_choice, coherence_trials, choice_trials = RDM_timeseries(coherence_levels, trials)
     Rho = contingencies
@@ -218,12 +221,12 @@ def run_RDM_simulations(repetitions, folder):
 
         
         prefix = ""
-        run_name = "RDM_"+prefix+"_test.json"
+        run_name = "RDM_"+prefix+"_test2.json"
         fname = os.path.join(folder, run_name)
         
         jsonpickle_numpy.register_handlers()
 
-        if run_name in os.listdir(folder):
+        if not rerun_simulations and (run_name in os.listdir(folder)):
             with open(fname, 'r') as infile:
                 data = json.load(infile)
 
@@ -246,7 +249,6 @@ def run_RDM_simulations(repetitions, folder):
                                     r_lambda = r_lambda))
             w = worlds[-1]
             print("============")
-            print(w.agent.prior_policies[-1])
             choices = w.actions[:,0]
             correct = (choices == correct_choice)
             print("percent correct:", correct.sum()/trials)
@@ -291,12 +293,13 @@ def run_RDM_simulations(repetitions, folder):
 
 
 
-def analyze_flanker_simulations(folder):
+def analyze_RDM_simulations(folder):
+    
+    print("preparing analyses and plots...")
 
-    tendencies = [1,10,100, 250]#[1,10,25,50,75,100, 250,1000]#1,10,100,
-    probs = [90,95,99]
-    uncertainties = [0,0.1,0.2,0.3,0.5,0.7,1,5,10]#,15,20]
-    run_name = "flanker_alpha_h"+str(int(tendencies[0]))+"_t"+str(probs[0])+"_u"+str(uncertainties[0])+"_f3.5_ut0.99_test.json"
+    prefix = ""
+    tendencies = [1000]
+    run_name = "RDM_"+prefix+"_test2.json"
     fname = os.path.join(folder, run_name)
 
     jsonpickle_numpy.register_handlers()
@@ -305,149 +308,127 @@ def analyze_flanker_simulations(folder):
         data = json.load(infile)
 
     worlds_old = pickle.decode(data)
-    print(len(worlds_old))
+    print("number of agents:", len(worlds_old))
 
     repetitions = len(worlds_old)
     trials = worlds_old[0].trials
-    num_types = len(tendencies)*len(probs)*len(uncertainties)
+    num_types = len(tendencies)
     correct = np.zeros(repetitions*trials*num_types)
+    contingency = np.zeros(repetitions*trials*num_types)
+    coherence = np.zeros(repetitions*trials*num_types)
     RT = np.zeros(repetitions*trials*num_types)
     agent = np.zeros(repetitions*trials*num_types)
-    congruent = np.zeros(repetitions*trials*num_types)
     trial_num = np.zeros(repetitions*trials*num_types)
-    epoch = np.zeros(repetitions*trials*num_types)
-    tend_arr = np.zeros(repetitions*trials*num_types)
-    prob_arr = np.zeros(repetitions*trials*num_types)
-    unc_arr  = np.zeros(repetitions*trials*num_types)
     binned_RT = np.zeros(repetitions*trials*num_types)
-    prev_congruent = np.zeros(repetitions*trials*num_types) - 1
     non_dec_time = 100
 
     bin_size = 250
     t_s = 0.2
 
     sim_type = 0
-    for tendency in tendencies:#,3,5,10,30,50,100]: #1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]:
-        for trans in probs:#[100,99,98,97,96,95,94]:
-            for unc in uncertainties:
-                print(tendency, trans, unc)
+    for tendency in tendencies:
 
-                run_name = "flanker_alpha_h"+str(int(tendency))+"_t"+str(trans)+"_u"+str(unc)+"_f3.5_ut0.99_test.json"
-                fname = os.path.join(folder, run_name)
+        jsonpickle_numpy.register_handlers()
 
-                jsonpickle_numpy.register_handlers()
+        with open(fname, 'r') as infile:
+            data = json.load(infile)
 
-                with open(fname, 'r') as infile:
-                    data = json.load(infile)
+        worlds_old = pickle.decode(data)
 
-                worlds_old = pickle.decode(data)
+        repetitions = len(worlds_old)
+        trials = worlds_old[0].trials
 
-                repetitions = len(worlds_old)
-                trials = worlds_old[0].trials
+        offset = sim_type*repetitions*trials
 
-                offset = sim_type*repetitions*trials
+        for i in range(repetitions):
+            w = worlds_old[i]
+            correct[offset+i*trials:offset+(i+1)*trials] = (w.actions[:,0] == w.environment.correct_choice).astype(int)
+            contingency[offset+i*trials:offset+(i+1)*trials] = w.environment.Rho[:,0,1]
+            coherence[offset+i*trials:offset+(i+1)*trials] = np.around(w.environment.Rho[:,0,1] - 0.5, decimals=2)
+            np.testing.assert_allclose((contingency[offset+i*trials:offset+(i+1)*trials] > 0.5).astype(int), w.environment.correct_choice)
+            np.testing.assert_allclose((coherence[offset+i*trials:offset+(i+1)*trials] > 0).astype(int), w.environment.correct_choice)
+            RT[offset+i*trials:offset+(i+1)*trials] = t_s*w.agent.action_selection.RT[:,0] + non_dec_time
+            agent[offset+i*trials:offset+(i+1)*trials] = i
+            trial_num[offset+i*trials:offset+(i+1)*trials] = np.arange(0,trials)
+            # binned_RT[offset+i*trials:offset+(i+1)*trials] = t_s*(bin_size//2 + bin_size*(w.agent.action_selection.RT[:,0]//bin_size)) +non_dec_time
 
-                for i in range(repetitions):
-                    w = worlds_old[i]
-                    correct[offset+i*trials:offset+(i+1)*trials] = (w.actions[:,0] == w.environment.correct_choice).astype(int)
-                    RT[offset+i*trials:offset+(i+1)*trials] = t_s*w.agent.action_selection.RT[:,0] + non_dec_time
-                    agent[offset+i*trials:offset+(i+1)*trials] = i
-                    congruent[offset+i*trials:offset+(i+1)*trials] = np.logical_not(w.environment.congruent)
-                    trial_num[offset+i*trials:offset+(i+1)*trials] = np.arange(0,trials)
-                    epoch[offset+i*trials:offset+(i+1)*trials] = [-1]*10 + [0]*20 + [1]*20 + [2]*20 + [3]*(trials-70)
-                    tend_arr[offset+i*trials:offset+(i+1)*trials] = tendency
-                    prob_arr[offset+i*trials:offset+(i+1)*trials] = trans
-                    unc_arr[offset+i*trials:offset+(i+1)*trials] = unc#/100
-                    binned_RT[offset+i*trials:offset+(i+1)*trials] = t_s*(bin_size//2 + bin_size*(w.agent.action_selection.RT[:,0]//bin_size)) +non_dec_time
-                    prev_congruent[offset+i*trials:offset+(i+1)*trials][1:] = congruent[offset+i*trials:offset+(i+1)*trials][:-1]
-
-                sim_type+=1
+        sim_type+=1
 
     data_dict = {"correct": correct, "RT": RT, "agent": agent,
-                 "congruent": congruent, "binned_RT": binned_RT,
-                 "trial_num": trial_num, "epoch": epoch,
-                 "uncertainty": unc_arr, "tendencies": tend_arr,
-                 "trans_probs": prob_arr, "prev_cong": prev_congruent}
+                 "contingency": contingency, "coherence": coherence,
+                 # "congruent": congruent, "binned_RT": binned_RT,
+                 "trial_num": trial_num}
     data = pd.DataFrame(data_dict)
 
-    # plt.figure()
-    # for i in range(0,3):
-    #     sns.lineplot(x='num_in_run', y='RT', data=data.query('epoch == @i'), style='congruent', label=str(i), ci = 95, estimator=np.nanmean, linewidth=3)
-    # plt.show()
-    tendency=100
-    trans=90
-    unc=0.2
+    print(data)
+
     cutoff = non_dec_time + 500#5000#2*500
-    plt.figure()
-    plt.title("tendency "+str(tendency)+", trans "+str(trans))
-    sns.lineplot(x='uncertainty', y='RT', data=data.query('tendencies==@tendency and trans_probs==@trans and uncertainty<1.1 and binned_RT<=@cutoff'), style='congruent', ci = 95, estimator=np.nanmean, linewidth=3)
-    #plt.ylim([200,1000])
-    plt.gca().invert_xaxis()
-    plt.show()
 
     plt.figure()
-    plt.title("tendency "+str(tendency)+", trans "+str(trans))
-    sns.lineplot(x='trans_probs', y='RT', data=data.query('tendencies==@tendency and uncertainty==@unc and binned_RT<=@cutoff'), style='congruent', ci = 95, estimator=np.nanmean, linewidth=3)
-    #plt.ylim([200,1000])
-    #plt.gca().invert_xaxis()
-    plt.show()
-
-    # accuracy
-    plt.figure()
-    #plt.title("tendency "+str(tendency)+", trans "+str(trans)+", unc "+str(unc))
-    sns.lineplot(x='binned_RT', y='correct', data=data.query('tendencies==@tendency and trans_probs==@trans and uncertainty==@unc and binned_RT<=@cutoff'), style='congruent', ci = 95, estimator=np.nanmean, linewidth=3)
+    sns.lineplot(x='contingency', y='RT', data=data, errorbar=('ci', 95), estimator=np.nanmean, linewidth=3)#, style='congruent'
     #plt.plot([0+bin_size,cutoff-bin_size], [0.5,0.5], '--', color='grey', alpha=0.5)
-    plt.ylim([0,1.05])
+    # plt.ylim([0,1.05])
     plt.yticks(fontsize=16)
     plt.xticks(fontsize=16)
-    plt.xlabel("RT", fontsize=16)
-    plt.ylabel("Prop correct", fontsize=16)
-    plt.savefig("accuracy.svg")
-    plt.show()
-    plt.figure()
-    plt.title("tendency "+str(tendency)+", trans "+str(trans)+", unc "+str(unc))
-    sns.lineplot(x='binned_RT', y='correct', data=data.query('tendencies==@tendency and uncertainty==@unc and binned_RT<=@cutoff'), style='congruent', hue='trans_probs', ci = 95, estimator=np.nanmean, linewidth=3)
-    #plt.ylim([0,1])
-    plt.show()
-    plt.figure()
-    plt.title("tendency "+str(tendency)+", trans "+str(trans)+", unc "+str(unc))
-    sns.lineplot(x='binned_RT', y='correct', data=data.query('tendencies==@tendency and trans_probs==@trans and binned_RT<=@cutoff'), style='congruent', hue='uncertainty', ci = 95, estimator=np.nanmean, linewidth=3)
-    #plt.ylim([0,1])
-    plt.show()
-
-    plt.figure()
-    sns.histplot(x='RT', data=data.query('tendencies==@tendency and trans_probs==@trans and uncertainty==@unc and binned_RT<=@cutoff'), hue='congruent', binwidth=t_s*bin_size)
-    plt.savefig("RT_histogram.svg")
-    plt.show()
-
-    # gratton
-    plt.figure(figsize=(4,5))
-    palette = [(0,0,0), (0,0,0)]
-    #plt.title("tendency "+str(tendency)+", trans "+str(trans)+", unc "+str(unc))
-    sns.lineplot(x='prev_cong', y='RT', data=data.query('tendencies==@tendency and trans_probs==@trans and uncertainty==@unc and trial_num>0'), style='congruent', hue='congruent', ci = 95, estimator=np.nanmean, linewidth=3, markers=True, markersize=12, palette=palette)
-    #plt.ylim([200,1000])
-    plt.xticks([0,1], labels=["CON", "INC"], fontsize=16)
-    plt.yticks(fontsize=16)
-    plt.xlim([-0.25,1.25])
-    plt.ylim([200,700])
-    plt.xlabel("Previous trial type", fontsize=16)
+    plt.xlabel("contingency", fontsize=16)
     plt.ylabel("RT", fontsize=16)
-    plt.savefig("gratton.svg")
+    # plt.savefig("cont_RT.svg")
     plt.show()
+    
     plt.figure()
-    plt.title("tendency "+str(tendency)+", trans "+str(trans)+", unc "+str(unc))
-    sns.lineplot(x='prev_cong', y='RT', data=data.query('tendencies==@tendency and uncertainty==@unc and trial_num>0 and binned_RT<=@cutoff'), style='congruent', hue='trans_probs', ci = 95, estimator=np.nanmean, linewidth=3)
-    #plt.ylim([200,1000])
+    sns.lineplot(x='contingency', y='RT', data=data, errorbar=('ci', 95), style='correct', estimator=np.nanmean, linewidth=3)#, style='congruent'
+    #plt.plot([0+bin_size,cutoff-bin_size], [0.5,0.5], '--', color='grey', alpha=0.5)
+    # plt.ylim([0,1.05])
+    plt.yticks(fontsize=16)
+    plt.xticks(fontsize=16)
+    plt.xlabel("coherence", fontsize=16)
+    plt.ylabel("RT", fontsize=16)
+    # plt.savefig("cont_RT.svg")
     plt.show()
-    plt.figure()
-    plt.title("tendency "+str(tendency)+", trans "+str(trans)+", unc "+str(unc))
-    sns.lineplot(x='prev_cong', y='RT', data=data.query('tendencies==@tendency and trans_probs==@trans and trial_num>0 and binned_RT<=@cutoff'), style='congruent', hue='uncertainty', ci = 95, estimator=np.nanmean, linewidth=3)
-    #plt.ylim([200,1000])
-    plt.show()
+    
     # plt.figure()
-    # sns.lineplot(x='num_in_run', y='RT', data=data.query('congruent == 1 and trial_num > 50'), ci = 95, estimator=np.nanmedian, linewidth=3)
-    # sns.lineplot(x='num_in_run', y='RT', data=data.query('congruent == 0 and trial_num > 50'), ci = 95, estimator=np.nanmedian, linewidth=3)
+    # sns.lineplot(x='contingency', y='RT', data=data, style='congruent', ci = 95, estimator=np.nanmean, linewidth=3)
+    # #plt.plot([0+bin_size,cutoff-bin_size], [0.5,0.5], '--', color='grey', alpha=0.5)
+    # plt.ylim([0,1.05])
+    # plt.yticks(fontsize=16)
+    # plt.xticks(fontsize=16)
+    # plt.xlabel("contingency", fontsize=16)
+    # plt.ylabel("RT", fontsize=16)
+    # # plt.savefig("cont_RT.svg")
     # plt.show()
+    
+    # plt.figure()
+    # plt.title("tendency "+str(tendency)+", trans "+str(trans)+", unc "+str(unc))
+    # sns.lineplot(x='binned_RT', y='correct', data=, style='congruent', hue='trans_probs', ci = 95, estimator=np.nanmean, linewidth=3)
+    # #plt.ylim([0,1])
+    # plt.show()
+    # plt.figure()
+    # plt.title("tendency "+str(tendency)+", trans "+str(trans)+", unc "+str(unc))
+    # sns.lineplot(x='binned_RT', y='correct', data=data.query('tendencies==@tendency and trans_probs==@trans and binned_RT<=@cutoff'), style='congruent', hue='uncertainty', ci = 95, estimator=np.nanmean, linewidth=3)
+    # #plt.ylim([0,1])
+    # plt.show()
+
+    plt.figure()
+    sns.histplot(x='RT', data=data)#, binwidth=t_s*bin_size)
+    # plt.savefig("RT_histogram.svg")
+    plt.show()
+    
+    plt.figure()
+    sns.histplot(x='RT', data=data, hue='coherence')#, binwidth=t_s*bin_size)
+    # plt.savefig("RT_histogram_coh.svg")
+    plt.show()
+    
+    plt.figure()
+    sns.histplot(x='RT', data=data, y='correct')#, binwidth=t_s*bin_size)
+    # plt.savefig("RT_histogram.svg")
+    plt.show()
+    
+    plt.figure()
+    sns.histplot(x='RT', data=data, y='correct', hue='coherence')#, binwidth=t_s*bin_size)
+    # plt.savefig("RT_histogram_coh.svg")
+    plt.show()
+    
+    # sns.histplot(x='RT', data=data.query('tendencies==@tendency and trans_probs==@trans and uncertainty==@unc and binned_RT<=@cutoff'), hue='congruent', binwidth=t_s*bin_size)
 
     return data, bin_size
 
@@ -462,16 +443,17 @@ def main():
     if not os.path.isdir(folder):
         os.mkdir(folder)
 
-    repetitions = 15
+    repetitions = 25
 
     """
     run simulations
     """
+    rerun_simulations = True
     # runs simulations with varying habitual tendency and reward probability
     # results are stored in data folder
-    run_RDM_simulations(repetitions, folder)
+    run_RDM_simulations(repetitions, folder, rerun_simulations=rerun_simulations)
 
-    #data, bin_size = analyze_flanker_simulations(folder)
+    data, bin_size = analyze_RDM_simulations(folder)
     return data, bin_size
 
 
