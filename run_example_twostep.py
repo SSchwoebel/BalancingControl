@@ -42,7 +42,7 @@ import bottleneck as bn
 import gc
 #ar.set_printoptions(threshold = 100000, precision = 5)
 
-from inference_twostage import device
+from inference import device
 
 """
 set parameters

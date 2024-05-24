@@ -17,7 +17,7 @@ from misc import ln
 #device = ar.device("cuda")
 #device = ar.device("cpu")
 
-from inference_twostage import device
+from inference import device
 
 class World(object):
 

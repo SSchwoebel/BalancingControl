@@ -17,7 +17,7 @@ from opt_einsum import contract
 #device = ar.device("cpu")
 
 try:
-    from inference_twostage import device
+    from inference import device
 except:
     device = ar.device("cpu")
 

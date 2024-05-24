@@ -14,7 +14,7 @@ import pyro.distributions as dist
 import agent as agt
 import perception as prc
 import action_selection as asl
-import inference_twostage as inf
+import inference as inf
 
 import itertools
 import matplotlib.pylab as plt
@@ -36,7 +36,7 @@ import gc
 #device = ar.device("cuda")
 #device = ar.device("cpu")
 
-from inference_twostage import device
+from inference import device
 import distributions as analytical_dists
 import numpy as np
 

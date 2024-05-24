@@ -1,358 +1,500 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Wed Jul  8 18:31:45 2020
+Created on Mon Sep 13 11:21:08 2021
 
 @author: sarah
 """
 
-import pymc3 as pm
+import torch as ar
+array = ar.tensor
+from torch.distributions import constraints, biject_to
 import numpy as np
-import matplotlib.pyplot as plt
+import pandas as pd
+import matplotlib.pylab as plt
+import seaborn as sns
+import numpy as np
+import distributions as analytical_dists
+import json
 
-import world
+from tqdm import tqdm
+import pyro
+import pyro.distributions as dist
 import agent as agt
 import perception as prc
+import action_selection as asl
 
-plt.style.use('seaborn-darkgrid')
-print('Running on PyMC3 v{}'.format(pm.__version__))
+pyro.clear_param_store()
 
-# for reproducibility here's some version info for modules used in this notebook
-import theano
-import theano.tensor as tt
+#device = ar.device("cuda") if ar.cuda.is_available() else ar.device("cpu")
+#device = ar.device("cuda")
+device = ar.device("cpu")
+#torch.set_num_threads(4)
+print("Running on device", device)
+
+
+class SingleInference(object):
+
+    def __init__(self, agent, data):
+
+        self.agent = agent
+        self.trials = agent.trials
+        self.T = agent.T
+        self.data = data
+        self.nsum = len(data)
+        print("init", self.data["observations"].shape)
+
+    def model(self):
+        # generative model of behavior with Normally distributed params (within subject!!)
+
+        # tell pyro about prior over parameters: alpha and beta of lambda which is between 0 and 1
+        # alpha = beta = 1 equals uniform prior
+        alpha_lamb_pi = ar.ones(1).to(device)
+        beta_lamb_pi = ar.ones(1).to(device)
+        # sample initial vaue of parameter from Beta distribution
+        lamb_pi = pyro.sample('lamb_pi', dist.Beta(alpha_lamb_pi, beta_lamb_pi)).to(device)
+
+        # tell pyro about prior over parameters: alpha and beta of lambda which is between 0 and 1
+        # alpha = beta = 1 equals uniform prior
+        alpha_lamb_r = ar.ones(1).to(device)
+        beta_lamb_r = ar.ones(1).to(device)
+        # sample initial vaue of parameter from Beta distribution
+        lamb_r = pyro.sample('lamb_r', dist.Beta(alpha_lamb_r, beta_lamb_r)).to(device)
+
+        # # tell pyro about prior over parameters: alpha and beta of h which is between 0 and 1
+        # # alpha = beta = 1 equals uniform prior
+        # alpha_h = ar.ones(1).to(device)
+        # beta_h = ar.ones(1).to(device)
+        # # sample initial vaue of parameter from Beta distribution
+        # h = pyro.sample('h', dist.Beta(alpha_h, beta_h)).to(device)
+
+        # tell pyro about prior over parameters: decision temperature
+        # uniform between 0 and 20??
+        concentration_dec_temp = ar.tensor(1.).to(device)
+        rate_dec_temp = ar.tensor(0.5).to(device)
+        # sample initial vaue of parameter from normal distribution
+        dec_temp = pyro.sample('dec_temp', dist.Gamma(concentration_dec_temp, rate_dec_temp)).to(device)
+        param_dict = {"pol_lambda": lamb_pi[:,None], "r_lambda": lamb_r[:,None], "dec_temp": dec_temp[:,None]}#, "h": h
+
+        self.agent.reset(param_dict)
+        #self.agent.set_parameters(pol_lambda=lamb_pi, r_lambda=lamb_r, dec_temp=dec_temp)
+
+
+        for tau in pyro.markov(range(self.trials)):
+            for t in range(self.T):
+
+                if t==0:
+                    prev_response = None
+                    context = None
+                else:
+                    prev_response = self.data["actions"][tau, t-1]
+                    context = None
+
+                observation = self.data["observations"][tau, t]
+
+                reward = self.data["rewards"][tau, t]
+
+                self.agent.update_beliefs(tau, t, observation, reward, prev_response, context)
+
+                if t < self.T-1:
+
+                    probs = self.agent.perception.posterior_actions[-1]
+                    #print(probs)
+                    if ar.any(ar.isnan(probs)):
+                        print(probs)
+                        print(dec_temp, lamb_pi, lamb_r)
+
+                    curr_response = self.data["actions"][tau, t]
+                    #print(curr_response)
+                    # print(tau, t, probs, curr_response)
+                    #print(tau,t,param_dict)
+
+                    pyro.sample('res_{}_{}'.format(tau, t), dist.Categorical(probs.T), obs=curr_response)
+
+
+    def guide(self):
+        # approximate posterior. assume MF: each param has his own univariate Normal.
+
+        # tell pyro about posterior over parameters: alpha and beta of lambda which is between 0 and 1
+        alpha_lamb_pi = pyro.param("alpha_lamb_pi", ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)#greater_than_eq(1.))
+        beta_lamb_pi = pyro.param("beta_lamb_pi", ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)#greater_than_eq(1.))
+        # sample vaue of parameter from Beta distribution
+        # print()
+        # print(alpha_lamb_pi, beta_lamb_pi)
+        lamb_pi = pyro.sample('lamb_pi', dist.Beta(alpha_lamb_pi, beta_lamb_pi)).to(device)
+
+        # tell pyro about posterior over parameters: alpha and beta of lambda which is between 0 and 1
+        alpha_lamb_r = pyro.param("alpha_lamb_r", ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)#greater_than_eq(1.))
+        beta_lamb_r = pyro.param("beta_lamb_r", ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)#greater_than_eq(1.))
+        # sample initial vaue of parameter from Beta distribution
+        lamb_r = pyro.sample('lamb_r', dist.Beta(alpha_lamb_r, beta_lamb_r)).to(device)
+
+        # # tell pyro about posterior over parameters: alpha and beta of lambda which is between 0 and 1
+        # alpha_h = pyro.param("alpha_h", ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)#greater_than_eq(1.))
+        # beta_h = pyro.param("beta_h", ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)#greater_than_eq(1.))
+        # # sample initial vaue of parameter from Beta distribution
+        # h = pyro.sample('h', dist.Beta(alpha_h, beta_h)).to(device)
+
+        # tell pyro about posterior over parameters: mean and std of the decision temperature
+        concentration_dec_temp = pyro.param("concentration_dec_temp", ar.ones(1)*3., constraint=ar.distributions.constraints.positive).to(device)#interval(0., 7.))
+        rate_dec_temp = pyro.param("rate_dec_temp", ar.ones(1), constraint=ar.distributions.constraints.positive).to(device)
+        # sample initial vaue of parameter from normal distribution
+        dec_temp = pyro.sample('dec_temp', dist.Gamma(concentration_dec_temp, rate_dec_temp)).to(device)
+
+        param_dict = {"alpha_lamb_pi": alpha_lamb_pi, "beta_lamb_pi": beta_lamb_pi, "lamb_pi": lamb_pi,
+                      "alpha_lamb_r": alpha_lamb_r, "beta_lamb_r": beta_lamb_r, "lamb_r": lamb_r,
+                      #"alpha_h": alpha_h, "beta_h": beta_h, "h": h,
+                      "concentration_dec_temp": concentration_dec_temp, "rate_dec_temp": rate_dec_temp, "dec_temp": dec_temp}
+        #print(param_dict)
+
+        return param_dict
+
+
+    def infer_posterior(self,
+                        iter_steps=1000,
+                        num_particles=10,
+                        optim_kwargs={'lr': .01}):
+        """Perform SVI over free model parameters.
+        """
+
+        pyro.clear_param_store()
+
+        svi = pyro.infer.SVI(model=self.model,
+                  guide=self.guide,
+                  optim=pyro.optim.Adam(optim_kwargs),
+                  loss=pyro.infer.Trace_ELBO(num_particles=num_particles,
+                                  #set below to true once code is vectorized
+                                  vectorize_particles=True))
 
+        loss = []
+        pbar = tqdm(range(iter_steps), position=0)
+        for step in pbar:#range(iter_steps):
+            loss.append(ar.tensor(svi.step()).to(device))
+            pbar.set_description("Mean ELBO %6.2f" % ar.tensor(loss[-20:]).mean())
+            if ar.isnan(loss[-1]):
+                break
 
-
-class LogLike(tt.Op):
-
-    """
-    Specify what type of object will be passed and returned to the Op when it is
-    called. In our case we will be passing it a vector of values (the parameters
-    that define our model) and returning a single "scalar" value (the
-    log-likelihood)
-    """
-    itypes = [tt.dvector] # expects a vector of parameter values when called
-    otypes = [tt.dmatrix, tt.dmatrix] # outputs a single scalar value (the log likelihood)
-
-    def __init__(self, loglike, fixed):
-
-        # add inputs as class attributes
-        self.likelihood = loglike
-        self.fixed = fixed
-
-    def perform(self, node, inputs, outputs):
-        # the method that is used when calling the Op
-        parameters, = inputs  # this will contain my variables
-
-        # call the log-likelihood function
-        probs_a, probs_r = self.likelihood(parameters,self.fixed)
-
-        outputs[0][0] = np.array(probs_a) # output the log-likelihood
-        outputs[1][0] = np.array(probs_r) # output the log-likelihood
-
-
-class Inferrer:
-    def __init__(self, worlds, min_h, max_h, nvals=9, test_trials=None):
-
-        self.nruns = len(worlds)
-        self.nvals = nvals
-
-        w = worlds[0]
-
-        self.create_sample_space(min_h, max_h)
-
-        self.setup_agent(w, test_trials=test_trials)
-
-        self.actions = np.array([w.actions[:,0] for w in worlds])
-
-        self.rewards = np.array([w.rewards[:,1] for w in worlds])
-
-        self.inferrer = LogLike(self.agent.fit_model, self.fixed)
-
-    def setup_agent(self, w, first_trial=0, test_trials=None):
-
-        ns = w.environment.Theta.shape[0]
-        nr = w.environment.Rho.shape[1]
-        na = w.environment.Theta.shape[2]
-        nc = w.agent.perception.generative_model_rewards.shape[2]
-        T = w.T
-        trials = w.trials
-        observations = w.observations.copy()
-        rewards = w.rewards.copy()
-        actions = w.actions.copy()
-        utility = w.agent.perception.prior_rewards.copy()
-        A = w.agent.perception.generative_model_observations.copy()
-        B = w.agent.perception.generative_model_states.copy()
-
-        if test_trials is None:
-            test_trials = np.arange(0, trials, 1, dtype=int)
-
-        transition_matrix_context = w.agent.perception.transition_matrix_context.copy()
-
-        # concentration parameters
-        C_alphas = np.ones((nr, ns, nc))
-        # initialize state in front of levers so that agent knows it yields no reward
-        C_alphas[0,0,:] = 100
-        for i in range(1,nr):
-            C_alphas[i,0,:] = 1
-
-        # agent's initial estimate of reward generation probability
-        C_agent = np.zeros((nr, ns, nc))
-        for c in range(nc):
-            C_agent[:,:,c] = np.array([(C_alphas[:,i,c])/(C_alphas[:,i,c]).sum() for i in range(ns)]).T
-
-        pol = w.agent.policies.copy()
-
-        #pol = pol[-2:]
-        npi = pol.shape[0]
-
-        # prior over policies
-
-        alpha = 1
-        alphas = np.zeros_like(w.agent.perception.dirichlet_pol_params.copy()) + alpha
-
-        prior_pi = alphas.copy()
-        prior_pi /= prior_pi.sum(axis=0)
-
-        state_prior = np.zeros((ns))
-
-        state_prior[0] = 1.
-
-        prior_context = np.zeros((nc)) + 1./(nc)#np.dot(transition_matrix_context, w.agent.posterior_context[-1,-1])
-
-    #    prior_context[0] = 1.
-
-        pol_par = alphas
-
-        # perception
-        bayes_prc = prc.HierarchicalPerception(A, B, C_agent, transition_matrix_context, state_prior, utility, prior_pi, pol_par, C_alphas, T=T)
-
-        bayes_pln = agt.BayesianPlanner(bayes_prc, None, pol,
-                          trials = trials, T = T,
-                          prior_states = state_prior,
-                          prior_policies = prior_pi,
-                          number_of_states = ns,
-                          prior_context = prior_context,
-                          learn_habit = True,
-                          #save_everything = True,
-                          number_of_policies = npi,
-                          number_of_rewards = nr)
-
-        self.agent = world.FakeWorld(bayes_pln, observations, rewards, actions, trials = trials, T = T)
-
-        self.fixed = {'rew_mod': C_agent, 'beta_rew': C_alphas}
-
-        self.likelihood = np.zeros((self.nruns, len(self.sample_space)), dtype=np.float64)
-
-        for i in range(self.nruns):
-            print("precalculating likelihood run ", i)
-            for j,h in enumerate(self.sample_space):
-                alpha = 1./h
-                self.likelihood[i,j] \
-                    = self.agent.fit_model(alpha, self.fixed, test_trials)
-            #self.likelihood[i] /= self.likelihood[i].sum()
-            #print(self.likelihood[i])
-
-    def group_likelihood(self, p):
-
-        def logp(likelihood):
-            #p_D_p = tt.log(tt.dot(likelihood, p).prod())
-            logps = tt.log(p) + likelihood
-            # ps = tt.exp(logps).sum(axis=1)
-            # p_D_p = tt.log(ps).sum()
-            p_D_p = pm.logsumexp(logps, axis=1).sum()
-            return p_D_p
-
-        return logp
-
-
-    def run_single_inference(self, idx=None, ndraws=300, nburn=100, cores=4):
-
-        minimum = 0.
-        maximum = len(self.sample_space) - 1
-
-        # if idx is not None:
-        #     runs = [idx]
-        # else:
-        #     runs = range(self.nruns)
-
-        # with pm.Model() as smodel:
-
-        #     a = pm.Gamma('a', alpha=1., beta=1., shape=self.nvals)
-        #     for i in runs:
-        #         p_i = pm.Dirichlet('p_{}'.format(i), a=a, shape=self.nvals, observed=self.likelihood[i])
-
-        #     p = pm.Dirichlet('p', a=a, shape=self.nvals)
-        #     h = pm.Categorical('h', p)
-
-        if idx is not None:
-            runs = [idx]
-        else:
-            runs = range(self.nruns)
-
-        with pm.Model() as smodel:
-
-            a = pm.Gamma('a', alpha=1., beta=.5, shape=self.nvals) #[1]*self.nvals #
-
-            p = pm.Dirichlet('p', a=a, shape=self.nvals)
-
-            group_p = pm.DensityDist('gp', self.group_likelihood(p), observed=tt.log(self.likelihood))
-
-            mean_category = (np.arange(0,self.nvals,1) * p).sum() / self.factor
-            h = pm.Deterministic('h', mean_category)#1./self.create_alpha_val(mean_category))#pm.Categorical('h', p)
-            #h1 = pm.Categorical('h1', p)
-
-            # uniform priors on h
-            #hab_ten = pm.Categorical('h')
-
-            # # convert to a tensor
-            # alpha = tt.as_tensor_variable([10**(hab_ten/4.)])
-            # probs_a, probs_r = self.inferrer(alpha)
-
-            # # use a DensityDist
-            # pm.Categorical('actions', probs_a, observed=self.actions[idx])
-            # pm.Categorical('rewards', probs_r, observed=self.rewards[idx])
-
-            # step = pm.Metropolis()#S=np.ones(1)*0.01)
-
-            trace = pm.sample(ndraws, tune=nburn, discard_tuned_samples=True, cores=cores)#, step=step
-
-            # plot the traces
+        self.loss = [l.cpu() for l in loss]
+
+        alpha_lamb_pi = pyro.param("alpha_lamb_pi").data.numpy()
+        beta_lamb_pi = pyro.param("beta_lamb_pi").data.numpy()
+        alpha_lamb_r = pyro.param("alpha_lamb_r").data.numpy()
+        beta_lamb_r = pyro.param("beta_lamb_r").data.numpy()
+        alpha_h = pyro.param("alpha_lamb_r").data.numpy()
+        beta_h = pyro.param("beta_lamb_r").data.numpy()
+        concentration_dec_temp = pyro.param("concentration_dec_temp").data.numpy()
+        rate_dec_temp = pyro.param("rate_dec_temp").data.numpy()
+
+        param_dict = {"alpha_lamb_pi": alpha_lamb_pi, "beta_lamb_pi": beta_lamb_pi,
+                      "alpha_lamb_r": alpha_lamb_r, "beta_lamb_r": beta_lamb_r,
+                      "alpha_h": alpha_h, "beta_h": beta_h,
+                      "concentration_dec_temp": concentration_dec_temp, "rate_dec_temp": rate_dec_temp}
+
+        return self.loss, param_dict
+
+    def sample_posterior(self, n_samples=5):
+        # keys = ["lamb_pi", "lamb_r", "h", "dec_temp"]
+
+        lamb_pi_global = np.zeros((n_samples, 1))
+        lamb_r_global = np.zeros((n_samples, 1))
+        # alpha_0_global = np.zeros((n_samples, self.nsubs))
+        dec_temp_global = np.zeros((n_samples, 1))
+
+        for i in range(n_samples):
+            sample = self.guide()
+            for key in sample.keys():
+                sample.setdefault(key, ar.ones(1))
+            lamb_pi = sample["r_lambda"]
+            lamb_r = sample["pol_lambda"]
+            #alpha_0 = sample["h"]
+            dec_temp = sample["dec_temp"]
+
+            lamb_pi_global[i] = lamb_pi.detach().numpy()
+            lamb_r_global[i] = lamb_r.detach().numpy()
+            #alpha_0_global[i] = alpha_0.detach().numpy()
+            dec_temp_global[i] = dec_temp.detach().numpy()
+
+        lamb_pi_flat = np.array([lamb_pi_global[i,n] for i in range(n_samples) for n in range(1)])
+        lamb_r_flat = np.array([lamb_r_global[i,n] for i in range(n_samples) for n in range(1)])
+        #alpha_0_flat = np.array([alpha_0_global[i,n] for i in range(n_samples) for n in range(self.nsubs)])
+        dec_temp_flat = np.array([dec_temp_global[i,n] for i in range(n_samples) for n in range(1)])
+
+        subs_flat = np.array([n for i in range(n_samples) for n in range(1)])
+
+
+        sample_dict = {"lamb_pi": lamb_pi_flat, "lamb_r": lamb_r_flat,
+                       #h": alpha_0_flat,
+                       "dec_temp": dec_temp_flat, "subject": subs_flat}
+
+        sample_df = pd.DataFrame(sample_dict)
+
+        return sample_df
+
+    def analytical_posteriors(self):
+
+        alpha_lamb_pi = pyro.param("alpha_lamb_pi").data.cpu().numpy()
+        beta_lamb_pi = pyro.param("beta_lamb_pi").data.cpu().numpy()
+        alpha_lamb_r = pyro.param("alpha_lamb_r").data.cpu().numpy()
+        beta_lamb_r = pyro.param("beta_lamb_r").data.cpu().numpy()
+        alpha_h = pyro.param("alpha_h").data.cpu().numpy()
+        beta_h = pyro.param("beta_h").data.cpu().numpy()
+        concentration_dec_temp = pyro.param("concentration_dec_temp").data.cpu().numpy()
+        rate_dec_temp = pyro.param("rate_dec_temp").data.cpu().numpy()
+
+        param_dict = {"alpha_lamb_pi": alpha_lamb_pi, "beta_lamb_pi": beta_lamb_pi,
+                      "alpha_lamb_r": alpha_lamb_r, "beta_lamb_r": beta_lamb_r,
+                      "alpha_h": alpha_h, "beta_h": beta_h,
+                      "concentration_dec_temp": concentration_dec_temp, "rate_dec_temp": rate_dec_temp}
+
+        x_lamb = np.arange(0.01,1.,0.01)
+
+        y_lamb_pi = analytical_dists.Beta(x_lamb, alpha_lamb_pi, beta_lamb_pi)
+        y_lamb_r = analytical_dists.Beta(x_lamb, alpha_lamb_r, beta_lamb_r)
+        y_h = analytical_dists.Beta(x_lamb, alpha_h, beta_h)
+
+        x_dec_temp = np.arange(0.01,10.,0.01)
+
+        y_dec_temp = analytical_dists.Gamma(x_dec_temp, concentration=concentration_dec_temp, rate=rate_dec_temp)
+
+        xs = [x_lamb, x_lamb, x_lamb, x_dec_temp]
+        ys = [y_lamb_pi, y_lamb_r, y_h, y_dec_temp]
+
+        return xs, ys, param_dict
+
+
+    def plot_posteriors(self):
+
+        #df, param_dict = self.sample_posteriors()
+
+        xs, ys, param_dict = self.analytical_posteriors()
+
+        lamb_pi_name = "$\\lambda_{\\pi}$ as Beta($\\alpha$="+str(param_dict["alpha_lamb_pi"][0])+", $\\beta$="+str(param_dict["beta_lamb_pi"][0])+")"
+        lamb_r_name = "$\\lambda_{r}$ as Beta($\\alpha$="+str(param_dict["alpha_lamb_r"][0])+", $\\beta$="+str(param_dict["beta_lamb_r"][0])+")"
+        h_name = "h"
+        dec_temp_name = "$\\gamma$ as Gamma(conc="+str(param_dict["concentration_dec_temp"][0])+", rate="+str(param_dict["rate_dec_temp"][0])+")"
+        names = [lamb_pi_name, lamb_r_name, h_name, dec_temp_name]
+        xlabels = ["forgetting rate prior policies: $\\lambda_{\pi}$",
+                   "forgetting rate reward probabilities: $\\lambda_{r}$",
+                   "h",
+                   "decision temperature: $\\gamma$"]
+        #xlims = {"lamb_pi": [0,1], "lamb_r": [0,1], "dec_temp": [0,10]}
+
+        for i in range(len(xs)):
             plt.figure()
-            _ = pm.traceplot(trace)#, lines=('h', 1./alpha_true))
+            plt.title(names[i])
+            plt.plot(xs[i],ys[i])
+            plt.xlim([xs[i][0]-0.01,xs[i][-1]+0.01])
+            plt.xlabel(xlabels[i])
             plt.show()
-            # plt.figure()
-            # _ = pm.plot_posterior(trace, var_names=['h'], ref_val=(1./alpha_true))
-            # plt.show()
 
-            # save the traces
-            self.samples = trace['h', nburn:]
+        print(param_dict)
 
-    def analyze_samples(self, samples):
 
-        dist = np.array([len(np.where(samples==i)[0]) for i in range(len(self.sample_space))], dtype=np.float64)
+    def save_parameters(self, fname):
 
-        dist /= dist.sum()
+        pyro.get_param_store().save(fname)
 
-        return dist
+    def load_parameters(self, fname):
 
-    def analyze_dist(self, dist):
+        pyro.get_param_store().load(fname)
 
-        mean = (dist * self.sample_space).sum()
 
-        variance = (dist * np.abs((self.sample_space - mean)**2)).sum()
 
-        mode = self.sample_space[np.argmax(dist)]
+class GeneralGroupInference(object):
 
-        return mode, mean, variance
+    def __init__(self, agent, data):
 
-    def create_alpha_val(self, sample):
+        pyro.clear_param_store()
 
-        return 10**(sample / self.factor)
+        self.agent = agent
+        self.trials = agent.trials
+        self.T = agent.T
+        self.data = data
+        self.nsubs = len(data['rewards'][0,0])
+        self.svi = None
+        self.loss = []
+        self.npars = self.agent.perception.npars
+        self.mask = agent.perception.mask
 
-    def create_sample_space(self, min_h, max_h):
+    def model(self):
+        """
+        Generative model of behavior with a NormalGamma
+        prior over free model parameters.
+        """
 
-        min_exponent = -np.log10(max_h)
-        max_exponent = -np.log10(min_h)
+        # define hyper priors over model parameters
+        a = pyro.param('a', ar.ones(self.npars), constraint=constraints.positive)
+        lam = pyro.param('lam', ar.ones(self.npars), constraint=constraints.positive)
+        tau = pyro.sample('tau', dist.Gamma(a, a/lam).to_event(1))
 
-        delta = max_exponent - min_exponent
+        sig = 1/ar.sqrt(tau)
 
-        step = delta / (self.nvals - 1)
+        # each model parameter has a hyperprior defining group level mean
+        m = pyro.param('m', ar.zeros(self.npars))
+        s = pyro.param('s', ar.ones(self.npars), constraint=constraints.positive)
+        mu = pyro.sample('mu', dist.Normal(m, s*sig).to_event(1))
 
-        self.sample_space = 10**(-np.arange(min_exponent, max_exponent+step, step))
 
-        self.factor = (self.nvals - 1.) / delta
+        with pyro.plate('subject', self.nsubs) as ind:
 
-    def run_group_inference(self, ndraws=300, nburn=100, cores=5):
 
-        curr_model = self.group_model()
+            base_dist = dist.Normal(0., 1.).expand_by([self.npars]).to_event(1)
+            transform = dist.transforms.AffineTransform(mu, sig)
+            locs = pyro.sample('locs', dist.TransformedDistribution(base_dist, [transform]))
 
-        with curr_model:
+            self.agent.reset(locs)
 
-            step = pm.Metropolis()#S=np.ones(1)*0.01)
+            for tau in pyro.markov(range(self.trials)):
+                for t in range(self.T):
 
-            trace = pm.sample(ndraws, tune=nburn, discard_tuned_samples=True, step=step, cores=cores)
+                    if t==0:
+                        prev_response = None
+                        context = None
+                    else:
+                        prev_response = self.data["actions"][tau, t-1]
+                        context = None
 
-            # plot the traces
-#            plt.figure()
-#            _ = pm.traceplot(trace)#, lines=('h', 1./alpha_true))
-#            plt.show()
-#            plt.figure()
-#            _ = pm.plot_posterior(trace, var_names=['h'], ref_val=(1./alpha_true))
-#            plt.show()
+                    observation = self.data["observations"][tau, t]
 
-            # save the traces
-            fname = pm.save_trace(trace)
+                    reward = self.data["rewards"][tau, t]
 
-        return fname
+                    self.agent.update_beliefs(tau, t, observation, reward, prev_response, context)
 
-    def single_model(self, idx):
+                    if t < self.T-1:
 
-        minimum = 0.
-        maximum = 8.
-        sample_space = np.arange(minimum, maximum+1, 1)
-        sample_space = 1./10**(sample_space/4.)
+                        probs = self.agent.perception.posterior_actions[-1]
+                        if ar.any(ar.isnan(probs)):
+                            print(probs)
+                            #print(param_dict)
+                            print(tau,t)
 
-        with pm.Model() as smodel:
-            # uniform priors on h
-            hab_ten = pm.DiscreteUniform('h', 0., 8.)
+                        curr_response = self.data["actions"][tau, t]
 
-            # convert to a tensor
-            alpha = tt.as_tensor_variable([10**(hab_ten/4.)])
-            probs_a, probs_r = self.inferrer(alpha)
+                        pyro.sample('res_{}_{}'.format(tau, t), dist.Categorical(probs.permute(1,2,0)).mask(self.mask[tau]), obs=curr_response)
 
-            # use a DensityDist
-            pm.Categorical('actions', probs_a, observed=self.actions[idx])
-            pm.Categorical('rewards', probs_r, observed=self.rewards[idx])
 
-        return smodel, sample_space
 
-    def group_model(self):
+    def guide(self):
 
-        with pm.Model() as gmodel:
-            # uniform priors on h
-            m = pm.DiscreteUniform('h', 0., 20.)
-            std = pm.InverseGamma('s', 3., 0.5)
-            mean = 2*m+1
-            alphas = np.arange(1., 101., 5.)
-            p = self.discreteNormal(alphas, mean, std)
+        trns = biject_to(constraints.positive)
 
-            for i in range(self.nruns):
-                hab_ten = pm.Categorical('h_{}'.format(i), p)
+        m_hyp = pyro.param('m_hyp', ar.zeros(2*self.npars))
+        st_hyp = pyro.param('scale_tril_hyp',
+                       ar.eye(2*self.npars),
+                       constraint=constraints.lower_cholesky)
 
-                alpha = tt.as_tensor_variable([hab_ten])
-                probs_a, probs_r = self.inferrer(alpha)
+        hyp = pyro.sample('hyp',
+                     dist.MultivariateNormal(m_hyp, scale_tril=st_hyp),
+                     infer={'is_auxiliary': True})
 
-                # use a DensityDist
-                pm.Categorical('actions_{}'.format(i), probs_a, observed=self.actions[i])
-                pm.Categorical('rewards_{}'.format(i), probs_r, observed=self.rewards[i])
+        unc_mu = hyp[..., :self.npars]
+        unc_tau = hyp[..., self.npars:]
 
-        return gmodel
+        c_tau = trns(unc_tau)
 
-    def discreteNormal(self, x, mean, std):
+        ld_tau = trns.inv.log_abs_det_jacobian(c_tau, unc_tau)
+        ld_tau = dist.util.sum_rightmost(ld_tau, ld_tau.dim() - c_tau.dim() + 1)
 
-        p = np.exp(-(x - mean)**2/(2*std**2))
-        p /= p.sum()
-        return p
+        mu = pyro.sample("mu", dist.Delta(unc_mu, event_dim=1))
+        tau = pyro.sample("tau", dist.Delta(c_tau, log_density=ld_tau, event_dim=1))
 
-    def plot_inference(self, samples, model='single', idx=None):
+        m_locs = pyro.param('m_locs', ar.zeros(self.nsubs, self.npars))
+        st_locs = pyro.param('scale_tril_locs',
+                        ar.eye(self.npars).repeat(self.nsubs, 1, 1),
+                        constraint=constraints.lower_cholesky)
+
+        with pyro.plate('subject', self.nsubs):
+            locs = pyro.sample("locs", dist.MultivariateNormal(m_locs, scale_tril=st_locs))
+
+        return {'tau': tau, 'mu': mu, 'locs': locs}
+
+    def init_svi(self, optim_kwargs={'lr': .01},
+                 num_particles=10):
+
+        #pyro.clear_param_store()
+
+        self.svi = pyro.infer.SVI(model=self.model,
+                  guide=self.guide,
+                  optim=pyro.optim.Adam(optim_kwargs),
+                  loss=pyro.infer.Trace_ELBO(num_particles=num_particles,
+                                  #set below to true once code is vectorized
+                                  vectorize_particles=True))
+
+
+    def infer_posterior(self,
+                        iter_steps=1000, optim_kwargs={'lr': .01},
+                                     num_particles=10):
+        """Perform SVI over free model parameters.
+        """
+
+        #pyro.clear_param_store()
+        if self.svi is None:
+            self.init_svi(optim_kwargs, num_particles)
+
+        loss = []
+        pbar = tqdm(range(iter_steps), position=0)
+        for step in pbar:#range(iter_steps):
+            loss.append(ar.tensor(self.svi.step()).to(device))
+            pbar.set_description("Mean ELBO %6.2f" % ar.tensor(loss[-20:]).mean())
+            if ar.isnan(loss[-1]):
+                break
+
+        self.loss += [l.cpu() for l in loss]
+
+    def sample_posterior_predictive(self, n_samples=5):
 
         pass
-        # if model=='single':
-        #     curr_model = self.single_model(idx)
-        # elif model=='group':
-        #     curr_model = self.group_model()
 
-        # with curr_model:
+    def sample_posterior(self, n_samples=5):
+        # keys = ["lamb_pi", "lamb_r", "h", "dec_temp"]
 
-        #     # save the traces
-        #     trace = pm.load_trace(trace_name)
+        param_names = self.agent.perception.param_names
+        sample_dict = {param: [] for param in param_names}
+        sample_dict["subject"] = []
 
-        #     # plot the traces
-        #     plt.figure()
-        #     _ = pm.traceplot(trace)#, lines=('h', 1./alpha_true))
-        #     plt.show()
-    #        plt.figure()
-    #        _ = pm.plot_posterior(trace, var_names=['h'], ref_val=(1./alpha_true))
-    #        plt.show()
+        for i in range(n_samples):
+            sample = self.guide()
+            for key in sample.keys():
+                sample.setdefault(key, ar.ones(1))
 
+            par_sample = self.agent.locs_to_pars(sample["locs"])
+
+            for param in param_names:
+                sample_dict[param].extend(list(par_sample[param].detach().numpy()))
+
+            sample_dict["subject"].extend(list(range(self.nsubs)))
+
+        sample_df = pd.DataFrame(sample_dict)
+
+        return sample_df
+
+    def analytical_posteriors(self):
+
+        pass
+
+
+    def save_parameters(self, fname):
+
+        pyro.get_param_store().save(fname)
+
+    def load_parameters(self, fname):
+        
+        pyro.clear_param_store()
+        pyro.get_param_store().load(fname)
+
+    def parameters(self):
+
+        params = pyro.get_param_store()
+        return {key: params[key] for key in params.keys()}
+
+    def save_elbo(self, fname):
+
+        with open(fname, 'w') as outfile:
+            json.dump([float(l) for l in self.loss], outfile)
+
+    def load_elbo(self, fname):
+
+        with open(fname, 'r') as infile:
+            loss = json.load(infile)
+
+        self.loss = [ar.tensor(l) for l in loss]

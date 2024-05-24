@@ -20,7 +20,7 @@ import environment as env
 import agent as agt
 import perception as prc
 import action_selection as asl
-import inference_twostage as inf
+import inference as inf
 
 import itertools
 import matplotlib.pylab as plt
@@ -46,7 +46,7 @@ from scipy.io import loadmat
 #device = torch.device("cuda")
 #device = torch.device("cpu")
 
-from inference_twostage import device
+from inference import device
 
 #torch.autograd.set_detect_anomaly(True)
 ###################################
