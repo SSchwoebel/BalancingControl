@@ -164,11 +164,7 @@ def set_up_Bayesian_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs
 
     bayes_pln = agt.FittingAgent(bayes_prc, ac_sel, pol,
                       trials = trials, T = T,
-                      prior_states = state_prior,
-                      prior_policies = prior_pi,
                       number_of_states = ns,
-                      prior_context = prior_context,
-                      #save_everything = True,
                       number_of_policies = npi,
                       number_of_rewards = nr,
                       nsubs = nsubs)
