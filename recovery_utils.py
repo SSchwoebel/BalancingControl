@@ -785,7 +785,7 @@ def run_mfmb_simulations(nsubs, use_orig, use_p, restrict_alpha, fname_base, bas
                 lr = min_alpha + norm_lr*(1.-min_alpha)
             else:
                 lr = norm_lr
-            perception_args = {"discount": discount, "learning rate": lr, "dec temp": dt, "weight": weight, "repetition": perserv, 
+            perception_args = {"subject": torch.tensor([i]), "discount": discount, "learning rate": lr, "dec temp": dt, "weight": weight, "repetition": perserv, 
                                 "max dt": max_dt, "min learning rate": min_alpha}
             
         # make parameters for two beta mb mf: discount lambda, learning rate, mb dec temp, mf dec temp, perserveration
@@ -804,7 +804,7 @@ def run_mfmb_simulations(nsubs, use_orig, use_p, restrict_alpha, fname_base, bas
             else:
                 lr = norm_lr
 
-            perception_args = {"discount": discount, "learning rate": lr, "mf weight": dt_mf, "mb weight": dt_mb, "repetition": perserv, 
+            perception_args = {"subject": torch.tensor([i]), "discount": discount, "learning rate": lr, "mf weight": dt_mf, "mb weight": dt_mb, "repetition": perserv, 
                                 "max dt": max_dt, "min learning rate": min_alpha}
             
         print(perception_args)
@@ -873,13 +873,15 @@ def run_mfmb_simulations(nsubs, use_orig, use_p, restrict_alpha, fname_base, bas
     
     # structure true vals
     
-    true_pol_rate = torch.stack([t["policy rate"] for t in true_vals], dim=-1)
-    true_rew_rate = torch.stack([t["reward rate"] for t in true_vals], dim=-1)
-    true_dec_temp = torch.stack([t["dec temp"] for t in true_vals], dim=-1)
-    true_hab_tend = torch.stack([t["habitual tendency"] for t in true_vals], dim=-1)
+    true_discount = torch.stack([t["discount"] for t in true_vals], dim=-1)
+    true_learn_rate = torch.stack([t["learning rate"] for t in true_vals], dim=-1)
+    true_mf_weight = torch.stack([t["mf weight"] for t in true_vals], dim=-1)
+    true_mb_weight = torch.stack([t["mb weight"] for t in true_vals], dim=-1)
+    true_repetition = torch.stack([t["repetition"] for t in true_vals], dim=-1)
     true_ind = torch.stack([t["subject"] for t in true_vals], dim=-1)
     
-    structured_true_vals = {"subject": true_ind, "policy rate": true_pol_rate, "reward rate": true_rew_rate, "dec temp": true_dec_temp, "habitual tendency": true_hab_tend}
+    structured_true_vals = {"subject": true_ind, "discount": true_discount, "learning rate": true_learn_rate, 
+                            "mf weight": true_mf_weight, "mb weight": true_mb_weight, "repetition": true_repetition}
     
     # save to disk
     
@@ -926,7 +928,7 @@ def load_simulation_outputs(base_dir):
     
     return stayed_arr, structured_true_vals, structured_data
 
-def set_up_inference_agent(n_agents, infer_h, base_dir, global_experiment_parameters, valid, remove_old=True):
+def set_up_Bayesian_inference_agent(n_agents, infer_h, base_dir, global_experiment_parameters, valid, remove_old=True):
 
     # if it does exist, empty previous results, if we want that (remove_old==True)
     if remove_old:
@@ -965,6 +967,48 @@ def set_up_inference_agent(n_agents, infer_h, base_dir, global_experiment_parame
     bayes_agent, bayes_perception = set_up_Bayesian_agent(agent_par_list, **global_experiment_parameters, nsubs=n_agents)
 
     return bayes_agent
+
+def set_up_mbmf_inference_agent(n_agents, use_orig, use_p, restrict_alpha, max_dt, min_alpha, base_dir, global_experiment_parameters, valid, remove_old=True):
+
+    # if it does exist, empty previous results, if we want that (remove_old==True)
+    if remove_old:
+
+        svgs = glob.glob(os.path.join(base_dir,"*.svg"))
+        for file in svgs:
+            os.remove(file)
+
+        csvs = glob.glob(os.path.join(base_dir,"*.csv"))
+        for file in csvs:
+            os.remove(file)
+
+        saves = glob.glob(os.path.join(base_dir,"*.save"))
+        for file in saves:
+            os.remove(file)
+
+        agents = glob.glob(os.path.join(base_dir,"twostage_agent*"))
+        for file in agents:
+            os.remove(file)
+
+        outputs = glob.glob(os.path.join(base_dir,"*.json"))
+        for file in outputs:
+            os.remove(file)
+
+    # perception args for init, will instantly be over-written, but have to be set for initialization
+    discount = torch.tensor([0.99])
+    lr = torch.tensor([0.05])
+    dt_mf = torch.tensor([2.])
+    dt_mb = torch.tensor([2.])
+    perserv = torch.tensor([0.1])
+
+    perception_args = {"discount": discount, "learning rate": lr, "mf weight": dt_mf, "mb weight": dt_mb, "repetition": perserv, 
+                        "max dt": max_dt, "min learning rate": min_alpha}
+    
+    avg = True
+
+    agent_par_list = [avg, perception_args, use_orig, use_p, restrict_alpha, valid]
+    mbmf_agent, perception = set_up_mfmb_agent(agent_par_list, **global_experiment_parameters, nsubs=n_agents)
+
+    return mbmf_agent
 
 
 """run inference"""
