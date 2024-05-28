@@ -2500,11 +2500,11 @@ class mfmb3Perception(object):
         Q_mf = ar.stack([self.Q_mf[-1][t][self.observations[-1][i],:,:,i] for i in range(self.nsubs)], dim=-1)
 
         if t==0:
-            rep = ar.eye(self.na)[:,self.prev_first_action[-1]][:,None,:]
+            rep = ar.eye(self.na)[:,self.prev_first_action[-1]][:,None,:]#ar.nn.functional.one_hot(self.prev_first_action[-1]).permute(1,0)[:,None,:]
         else:
-            rep = 0
+            rep = ar.zeros(self.na, self.npart, self.nsubs)
 
-        exponent = self.beta_mb*Q_mb + self.beta_mf*Q_mf + self.p*rep
+        exponent = self.beta_mb[None,...]*Q_mb + self.beta_mf[None,...]*Q_mf + self.p[None,...]*rep
 
         action_probs = ar.softmax(exponent, dim=0)
 
