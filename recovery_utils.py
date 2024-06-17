@@ -153,7 +153,7 @@ def set_up_Bayesian_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs
     bayes_prc = prc.Group2Perception(A, B, C_agent, transition_matrix_context,
                                            state_prior, utility, prior_pi, pol,
                                            alpha_0, C_alphas,
-                                           learn_habit = True, mask=valid[:,None],
+                                           learn_habit = True, mask=valid,
                                            learn_rew = True, T=T, trials=trials,
                                            pol_lambda=pol_lambda, r_lambda=r_lambda,
                                            non_decaying=(ns-nb), dec_temp=dec_temp, 
@@ -260,7 +260,7 @@ def set_up_mfmb_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs=1, 
         
         mbmf_prc = prc.mfmbOrig2Perception(B, pol, Q_mf_init, Q_mb_init, utility,
                                         lamb, alpha, beta, w,
-                                        p, nsubs=1, use_p=use_p, mask=valid[:,None],
+                                        p, nsubs=1, use_p=use_p, mask=valid,
                                         restrict_alpha=restrict_alpha,
                                         max_dt=max_dt, min_alpha=min_alpha)
     else:
@@ -274,7 +274,7 @@ def set_up_mfmb_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs=1, 
         
         mbmf_prc = prc.mfmb3Perception(B, pol, Q_mf_init, Q_mb_init, utility,
                                     lamb, alpha, beta_mf, beta_mb,
-                                    p, nsubs=1, use_p=use_p, mask=valid[:,None],
+                                    p, nsubs=1, use_p=use_p, mask=valid,
                                     restrict_alpha=restrict_alpha,
                                     max_dt=max_dt, min_alpha=min_alpha)
     mbmf_prc.reset()
@@ -579,8 +579,10 @@ def run_BCC_simulations(nsubs, infer_h, fname_base, base_dir, Rho, trials, T,
     
     if infer_h:
         n_pars = 4
+        agent_type = 'BCC_4param'
     else:
         n_pars = 3
+        agent_type = 'BCC_3param'
 
     # if it does exist, empty previous results, if we want that (remove_old==True)
     if remove_old:
@@ -634,7 +636,7 @@ def run_BCC_simulations(nsubs, infer_h, fname_base, base_dir, Rho, trials, T,
         worlds = []
         l = []
         avg = True
-        prob_matrix = torch.zeros((trials)) + p_invalid
+        prob_matrix = torch.zeros((trials,1)) + p_invalid
         valid = torch.bernoulli(prob_matrix).bool()
         pars = [avg, Rho,perception_args, infer_h, valid]
         
@@ -663,7 +665,7 @@ def run_BCC_simulations(nsubs, infer_h, fname_base, base_dir, Rho, trials, T,
         
         stayed.append(stayed_list)
         
-        run_name = "twostage_agent_daw_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tend)+".json"
+        run_name = "twostage_agent_daw_"+agent_type+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tend)+".json"
         fname_behavior = os.path.join(base_dir, run_name)
         
         data.append({"subject": torch.tensor([k]), "actions": w.actions, "observations": w.observations, "rewards": w.rewards, "states": w.environment.hidden_states, 'valid': valid})
@@ -685,7 +687,7 @@ def run_BCC_simulations(nsubs, infer_h, fname_base, base_dir, Rho, trials, T,
     data_obs = torch.stack([d["observations"] for d in data], dim=-1)
     data_rew = torch.stack([d["rewards"] for d in data], dim=-1)
     data_act = torch.stack([d["actions"] for d in data], dim=-1)
-    data_val = torch.stack([d["valid"] for d in data], dim=-1)
+    data_val = torch.cat([d["valid"] for d in data], dim=-1)
     data_ind = torch.stack([d["subject"] for d in data], dim=-1)
 
     structured_data = {"subject": data_ind, "observations": data_obs, "rewards": data_rew, "actions": data_act, "valid": data_val}
@@ -703,19 +705,19 @@ def run_BCC_simulations(nsubs, infer_h, fname_base, base_dir, Rho, trials, T,
     # save to disk
     
     # stayed arr
-    fname_stayed = os.path.join(base_dir, "twostage_agent_daw_stayed_arr.json")
+    fname_stayed = os.path.join(base_dir, "twostage_agent_daw_"+agent_type+"_stayed_arr.json")
     pickled_stayed_arr = pickle.encode(stayed_arr)
     with open(fname_stayed, 'w') as outfile:
         json.dump(pickled_stayed_arr, outfile)
         
     # data 
-    fname_data = os.path.join(base_dir, "twostage_agent_daw_data.json")
+    fname_data = os.path.join(base_dir, "twostage_agent_daw_"+agent_type+"_data.json")
     pickled_data = pickle.encode(structured_data)
     with open(fname_data, 'w') as outfile:
         json.dump(pickled_data, outfile)
         
     # true values 
-    fname_true_vals = os.path.join(base_dir, "twostage_agent_daw_true_vals.json")
+    fname_true_vals = os.path.join(base_dir, "twostage_agent_daw_"+agent_type+"_true_vals.json")
     pickled_true_vals = pickle.encode(structured_true_vals)
     with open(fname_true_vals, 'w') as outfile:
         json.dump(pickled_true_vals, outfile)
@@ -729,8 +731,16 @@ def run_mfmb_simulations(nsubs, use_orig, use_p, restrict_alpha, fname_base, bas
     
     if use_p:
         n_pars = 5
+        if use_orig:
+            agent_type = 'mbmfOrig_5param'
+        else:
+            agent_type = 'mbmf_5param'
     else:
         n_pars = 4
+        if use_orig:
+            agent_type = 'mbmfOrig_4param'
+        else:
+            agent_type = 'mbmf_4param'
 
     if restrict_alpha:
         min_alpha = 0.1
@@ -812,7 +822,7 @@ def run_mfmb_simulations(nsubs, use_orig, use_p, restrict_alpha, fname_base, bas
         worlds = []
         l = []
         avg = True
-        prob_matrix = torch.zeros((trials)) + p_invalid
+        prob_matrix = torch.zeros((trials,1)) + p_invalid
         valid = torch.bernoulli(prob_matrix).bool()
         pars = [avg, Rho,perception_args, use_orig, use_p, restrict_alpha, valid]
         
@@ -842,9 +852,9 @@ def run_mfmb_simulations(nsubs, use_orig, use_p, restrict_alpha, fname_base, bas
         stayed.append(stayed_list)
         
         if use_orig:
-            run_name = "twostage_agent_daw_mbmfOrig"+str(i)+"_disc"+str(discount)+"_lr"+str(lr)+"_dt"+str(dt)+"weight"+str(weight)+"_perserv"+str(perserv)+".json"
+            run_name = "twostage_agent_daw_"+agent_type+"_"+str(i)+"_disc"+str(discount)+"_lr"+str(lr)+"_dt"+str(dt)+"weight"+str(weight)+"_perserv"+str(perserv)+".json"
         else:
-            run_name = "twostage_agent_daw_mbmf"+str(i)+"_disc"+str(discount)+"_lr"+str(lr)+"_dt_mf"+str(dt_mf)+"_dt_mb"+str(dt_mb)+"_perserv"+str(perserv)+".json"
+            run_name = "twostage_agent_daw_"+agent_type+"_"+str(i)+"_disc"+str(discount)+"_lr"+str(lr)+"_dt_mf"+str(dt_mf)+"_dt_mb"+str(dt_mb)+"_perserv"+str(perserv)+".json"
         fname_behavior = os.path.join(base_dir, run_name)
         
         data.append({"subject": torch.tensor([i]), "actions": w.actions, "observations": w.observations, "rewards": w.rewards, "states": w.environment.hidden_states, 'valid': valid})
@@ -866,7 +876,7 @@ def run_mfmb_simulations(nsubs, use_orig, use_p, restrict_alpha, fname_base, bas
     data_obs = torch.stack([d["observations"] for d in data], dim=-1)
     data_rew = torch.stack([d["rewards"] for d in data], dim=-1)
     data_act = torch.stack([d["actions"] for d in data], dim=-1)
-    data_val = torch.stack([d["valid"] for d in data], dim=-1)
+    data_val = torch.cat([d["valid"] for d in data], dim=-1)
     data_ind = torch.stack([d["subject"] for d in data], dim=-1)
 
     structured_data = {"subject": data_ind, "observations": data_obs, "rewards": data_rew, "actions": data_act, "valid": data_val}
@@ -886,19 +896,19 @@ def run_mfmb_simulations(nsubs, use_orig, use_p, restrict_alpha, fname_base, bas
     # save to disk
     
     # stayed arr
-    fname_stayed = os.path.join(base_dir, "twostage_agent_daw_stayed_arr.json")
+    fname_stayed = os.path.join(base_dir, "twostage_agent_daw_"+agent_type+"_stayed_arr.json")
     pickled_stayed_arr = pickle.encode(stayed_arr)
     with open(fname_stayed, 'w') as outfile:
         json.dump(pickled_stayed_arr, outfile)
         
     # data 
-    fname_data = os.path.join(base_dir, "twostage_agent_daw_data.json")
+    fname_data = os.path.join(base_dir, "twostage_agent_daw_"+agent_type+"_data.json")
     pickled_data = pickle.encode(structured_data)
     with open(fname_data, 'w') as outfile:
         json.dump(pickled_data, outfile)
         
     # true values 
-    fname_true_vals = os.path.join(base_dir, "twostage_agent_daw_true_vals.json")
+    fname_true_vals = os.path.join(base_dir, "twostage_agent_daw_"+agent_type+"_true_vals.json")
     pickled_true_vals = pickle.encode(structured_true_vals)
     with open(fname_true_vals, 'w') as outfile:
         json.dump(pickled_true_vals, outfile)
@@ -906,22 +916,22 @@ def run_mfmb_simulations(nsubs, use_orig, use_p, restrict_alpha, fname_base, bas
     return stayed_arr, structured_true_vals, structured_data
 
 
-def load_simulation_outputs(base_dir):
+def load_simulation_outputs(base_dir, agent_type):
 
     # stayed arr
-    fname_stayed = os.path.join(base_dir, "twostage_agent_daw_stayed_arr.json")
+    fname_stayed = os.path.join(base_dir, "twostage_agent_daw_"+agent_type+"_stayed_arr.json")
     with open(fname_stayed, 'r') as infile:
         loaded_stayed = json.load(infile)
     stayed_arr = pickle.decode(loaded_stayed)
         
     # data 
-    fname_data = os.path.join(base_dir, "twostage_agent_daw_data.json")
+    fname_data = os.path.join(base_dir, "twostage_agent_daw_"+agent_type+"_data.json")
     with open(fname_data, 'r') as infile:
         loaded_data = json.load(infile)
     structured_data = pickle.decode(loaded_data)
         
     # true values 
-    fname_true_vals = os.path.join(base_dir, "twostage_agent_daw_true_vals.json")
+    fname_true_vals = os.path.join(base_dir, "twostage_agent_daw_"+agent_type+"_true_vals.json")
     with open(fname_true_vals, 'r') as infile:
         loaded_true_vals = json.load(infile)
     structured_true_vals = pickle.decode(loaded_true_vals)
@@ -1110,9 +1120,11 @@ if __name__=='__main__':
     if infer_h:
         n_pars = 4
         h_str = "4param"
+        agent_type = "BCC_4param"
     else:
         n_pars = 3
         h_str = "3param"
+        agent_type = "BCC_3param"
         param_names = param_names[:-1]
         
     max_dt = 6
@@ -1240,7 +1252,7 @@ if __name__=='__main__':
     
         stayed.append(stayed_list)
     
-        run_name = "twostage_agent_daw_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tend)+".json"
+        run_name = "twostage_agent_daw_"+agent_type+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tend)+".json"
         fname = os.path.join(folder, run_name)
     
         # actions = w.actions.numpy()
