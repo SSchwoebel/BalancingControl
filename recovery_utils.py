@@ -513,6 +513,15 @@ def big_custom_plot(plot_df, param_names, base_dir, fname_str, ELBO, param_range
     
     plt.savefig(os.path.join(base_dir, fname_str+"_big_plot"+name_str+".svg"))
     plt.show()
+
+
+def annot_corrfunc(x, y, **kws):
+    (r, p) = pearsonr(x, y)
+    ax = plt.gca()
+    ax.annotate("r = {:.2f} ".format(r),
+                xy=(.1, .9), xycoords=ax.transAxes)
+    ax.annotate("p = {:.3f}".format(p),
+                xy=(.4, .9), xycoords=ax.transAxes)
     
     
 def plot_results(sample_df, param_names, fname_str, ELBO, smaller_df, base_dir, max_dt):
@@ -520,14 +529,6 @@ def plot_results(sample_df, param_names, fname_str, ELBO, smaller_df, base_dir, 
     plot_df = smaller_df.drop('subject', axis=1)\
                         .reindex(["inferred "+name for name in param_names]\
                                  +["true "+name for name in param_names], axis=1)
-        
-    def annot_corrfunc(x, y, **kws):
-        (r, p) = pearsonr(x, y)
-        ax = plt.gca()
-        ax.annotate("r = {:.2f} ".format(r),
-                    xy=(.1, .9), xycoords=ax.transAxes)
-        ax.annotate("p = {:.3f}".format(p),
-                    xy=(.4, .9), xycoords=ax.transAxes)
         
     big_custom_plot(plot_df, param_names, base_dir, fname_str, ELBO, max_dt, fit_reg=True, annot=True)
     # big_custom_plot(plot_df, param_names, base_dir, fname_str, ELBO, max_dt, fit_reg=True, annot=False)
