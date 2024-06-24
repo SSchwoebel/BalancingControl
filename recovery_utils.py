@@ -446,10 +446,10 @@ def plot_inferred(smaller_df, fname_str, reg_fit=False):
         plt.show()
         
         
-def big_custom_plot(plot_df, param_names, base_dir, fname_str, ELBO, max_dt, fit_reg=False, annot=False):
+def big_custom_plot(plot_df, param_names, base_dir, fname_str, ELBO, param_ranges, fit_reg=False, annot=False):
     
-    axes_names = ["policy forgetting rate lambda_pi", "reward forgetting rate lambda_r", "decision temp gamma", "habitual tendency h"]
-    ranges = [[0,1], [0,1], [1, max_dt], [0,1], [0, 1]]
+    axes_names = param_names
+    ranges = param_ranges
     positions = [[0,0], [0,1], [1,0], [1,1]]
 
     fig = plt.figure(layout='constrained', figsize=(14,12))
