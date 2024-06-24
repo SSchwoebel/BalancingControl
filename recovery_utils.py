@@ -450,7 +450,7 @@ def big_custom_plot(plot_df, param_names, base_dir, fname_str, ELBO, param_range
     
     axes_names = param_names
     ranges = param_ranges
-    positions = [[0,0], [0,1], [1,0], [1,1]]
+    positions = [[0,0], [0,1], [1,0], [1,1], [0,2]]
 
     fig = plt.figure(layout='constrained', figsize=(14,12))
     axes = fig.subplots(3, 3)
@@ -802,7 +802,7 @@ def run_mfmb_simulations(nsubs, use_orig, use_p, restrict_alpha, fname_base, bas
         else:
             if use_p:
                 discount, norm_lr, norm_dt_mf, norm_dt_mb, norm_perserv = pars
-                perserv = max_dt*norm_perserv
+                perserv = norm_perserv#max_dt*
             else:
                 discount, norm_lr, norm_dt_mf, norm_dt_mb = pars
                 perserv = torch.tensor([0])

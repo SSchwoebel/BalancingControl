@@ -2359,7 +2359,7 @@ class mfmb3Perception(object):
                         "learning rate": alpha,
                         "mf weight": self.max_dt*ar.sigmoid(locs[...,2]),
                         "mb weight": self.max_dt*ar.sigmoid(locs[...,3]),
-                        "repetition": self.max_dt*ar.sigmoid(locs[...,4])}
+                        "repetition": ar.sigmoid(locs[...,4])}
         else:
             par_dict = {"discount": ar.sigmoid(locs[...,0]),
                         "learning rate": alpha,
