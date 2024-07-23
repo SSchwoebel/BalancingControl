@@ -368,7 +368,7 @@ class GeneralGroupInference(object):
                             #print(param_dict)
                             print(tau,t)
 
-                        curr_response = self.data["actions"][tau, t]
+                        curr_response = self.data["actions"][tau, t]*self.mask[tau].long()
 
                         pyro.sample('res_{}_{}'.format(tau, t), dist.Categorical(probs.permute(1,2,0)).mask(self.mask[tau]), obs=curr_response)
 

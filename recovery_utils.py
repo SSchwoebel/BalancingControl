@@ -63,7 +63,7 @@ def set_up_Bayesian_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs
     #state_unc: state transition uncertainty condition
     #goal_pol: evaluate only policies that lead to the goal
     #utility: goal prior, preference p(o)
-    avg, perception_args, infer_h, valid = agent_par_list
+    avg, perception_args, infer_h, valid, use_h = agent_par_list
     
     utility = []
     
@@ -157,7 +157,7 @@ def set_up_Bayesian_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs
                                            learn_rew = True, T=T, trials=trials,
                                            pol_lambda=pol_lambda, r_lambda=r_lambda,
                                            non_decaying=(ns-nb), dec_temp=dec_temp, 
-                                           nsubs=nsubs, infer_alpha_0=infer_h, use_h=True)
+                                           nsubs=nsubs, infer_alpha_0=infer_h, use_h=use_h)
     
     bayes_prc.set_parameters(par_dict=perception_args)
     bayes_prc.reset()
@@ -302,11 +302,11 @@ def set_up_two_stage_env(Rho, trials, T, A, B):
     
 def simulate_BCC_behavior(par_list, trials, T, ns, na, nr, nb, A, B):
     
-    avg, Rho, perception_args, infer_h, valid = par_list
+    avg, Rho, perception_args, infer_h, valid, use_h = par_list
     
     environment = set_up_two_stage_env(Rho, trials, T, A, B)
     
-    agent_par_list = [avg, perception_args, infer_h, valid]
+    agent_par_list = [avg, perception_args, infer_h, valid, use_h]
     planner, perception = set_up_Bayesian_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B)
     
     """
@@ -576,11 +576,13 @@ def plot_results(sample_df, param_names, fname_str, ELBO, smaller_df, base_dir, 
     
 def run_BCC_simulations(nsubs, infer_h, fname_base, base_dir, Rho, trials, T, 
                         nb, ns, no, na, npi, nr, never_reward, A, B, p_invalid,
-                        max_dt=6, remove_old=True):
+                        max_dt=6, remove_old=True, use_h=True):
     
     if infer_h:
         n_pars = 4
         agent_type = 'BCC_4param'
+        if not use_h:
+            agent_type += "_htest"
     else:
         n_pars = 3
         agent_type = 'BCC_3param'
@@ -621,7 +623,10 @@ def run_BCC_simulations(nsubs, infer_h, fname_base, base_dir, Rho, trials, T,
     
         if infer_h:
             pl, rl, norm_dt, h = pars
-            tend = h
+            if use_h:
+                tend = h
+            else:
+                tend = 10*h
         else:
             pl, rl, norm_dt = pars
             tend = torch.tensor([1])
@@ -639,7 +644,7 @@ def run_BCC_simulations(nsubs, infer_h, fname_base, base_dir, Rho, trials, T,
         avg = True
         prob_matrix = torch.zeros((trials,1)) + p_invalid
         valid = torch.bernoulli(prob_matrix).bool()
-        pars = [avg, Rho,perception_args, infer_h, valid]
+        pars = [avg, Rho,perception_args, infer_h, valid, use_h]
         
         worlds.append(simulate_BCC_behavior(pars, trials, T, ns, na, nr, nb, A, B))
         
@@ -939,7 +944,7 @@ def load_simulation_outputs(base_dir, agent_type):
     
     return stayed_arr, structured_true_vals, structured_data
 
-def set_up_Bayesian_inference_agent(n_agents, infer_h, base_dir, global_experiment_parameters, valid, remove_old=True):
+def set_up_Bayesian_inference_agent(n_agents, infer_h, base_dir, global_experiment_parameters, valid, remove_old=True, use_h=True):
 
     # if it does exist, empty previous results, if we want that (remove_old==True)
     if remove_old:
@@ -974,7 +979,7 @@ def set_up_Bayesian_inference_agent(n_agents, infer_h, base_dir, global_experime
 
     avg = True
 
-    agent_par_list = [avg, perception_args, infer_h, valid]
+    agent_par_list = [avg, perception_args, infer_h, valid, use_h]
     bayes_agent, bayes_perception = set_up_Bayesian_agent(agent_par_list, **global_experiment_parameters, nsubs=n_agents)
 
     return bayes_agent
