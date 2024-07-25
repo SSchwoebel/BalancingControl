@@ -456,7 +456,9 @@ class Group2Perception(object):
         # print(chosen_pol.shape)
         #print(chosen_pol)
 #        self.dirichlet_pol_params[chosen_pol,:] += posterior_context.sum(axis=0)/posterior_context.sum()
-        dirichlet_pol_params = (1-self.pol_lambda*self.mask[tau])[None,:,:] * self.dirichlet_pol_params[-1] + (1 - (1-self.pol_lambda*self.mask[tau]))[None,:,:]*self.dirichlet_pol_params_init + chosen_pol#*self.dirichlet_pol_params_init
+        dirichlet_pol_params = (1-self.pol_lambda*self.mask[tau])[None,:,:] * self.dirichlet_pol_params[-1] \
+                                + (1 - (1-self.pol_lambda*self.mask[tau]))[None,:,:]*self.dirichlet_pol_params_init \
+                                + chosen_pol*self.mask[tau][None,:]#*self.dirichlet_pol_params_init
         #dirichlet_pol_params[(chosen_pol[0],list(range(self.npart)))] += 1#posterior_context
 
         prior_policies = dirichlet_pol_params / dirichlet_pol_params.sum(axis=0)[None,...]#ar.exp(scs.digamma(self.dirichlet_pol_params) - scs.digamma(self.dirichlet_pol_params.sum(axis=0))[None,:])
@@ -488,21 +490,18 @@ class Group2Perception(object):
         dirichlet_rew_params = self.dirichlet_rew_params[0].clone().to(device)#.detach()
         # dirichlet_rew_params = ar.ones_like(self.dirichlet_rew_params_init)#self.dirichlet_rew_params_init.clone()
         # dirichlet_rew_params[:,:self.non_decaying] = self.dirichlet_rew_params[-1][:,:self.non_decaying]
-        dirichlet_rew_params[:,self.non_decaying:,:,:] = (1-self.r_lambda*self.mask[tau])[None,None,:,:] * self.dirichlet_rew_params[-1][:,self.non_decaying:,:,:] +1 - (1-self.r_lambda*self.mask[tau])[None,None,:,:]
+        dirichlet_rew_params[:,self.non_decaying:,:,:] = (1-self.r_lambda*self.mask[tau])[None,None,:,:] * self.dirichlet_rew_params[-1][:,self.non_decaying:,:,:] \
+                                                            +1 - (1-self.r_lambda*self.mask[tau])[None,None,:,:]
         #dirichlet_rew_params[reward[0],:,:,:] += states #* posterior_context[None,:]
 
-        # TODO: EVIL LOOP!
-        for s in range(self.nsubs):
-            dirichlet_rew_params[reward[s],:,:,s] += states[...,s]
+        vec_rewards = ar.eye(self.nr)[:,reward]
+        vec_subjects = ar.eye(self.nsubs)
+        matrix_index = ar.einsum('rn,nm->rm', vec_rewards, vec_subjects)
+        addition = states[None,...]*matrix_index[:,None,None,:]*self.mask[None,None,tau,...]
+        new_rew_params = dirichlet_rew_params + addition
 
-        #one_hot_rews = ar.nn.functional.one_hot(reward, num_classes=self.nr).float()
-        #new_rew_params = ar.einsum('rsmn,nr->rsmn', dirichlet_rew_params, one_hot_rews)
-        #new_rew_params = dirichlet_rew_params + ar.einsum('rsmn,smn->rsmn', new_rew_params, states)
-        #dirichlet_rew_params = dirichlet_rew_params[one_hot_rews,:,:,:] + states
-        #ar.testing.assert_allclose(dirichlet_rew_params, new_rew_params)
-
-        generative_model_rewards = dirichlet_rew_params / dirichlet_rew_params.sum(axis=0)[None,...]
-        self.dirichlet_rew_params.append(dirichlet_rew_params.to(device))
+        generative_model_rewards = new_rew_params / new_rew_params.sum(axis=0)[None,...]
+        self.dirichlet_rew_params.append(new_rew_params.to(device))
         self.generative_model_rewards.append(generative_model_rewards.to(device))
 
         #return dirichlet_rew_params
