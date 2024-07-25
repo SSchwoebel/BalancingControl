@@ -371,41 +371,40 @@ def infer(inferrer, iter_steps, fname_str, npart, base_dir):
     plt.savefig(os.path.join(base_dir, fname_str+'_ELBO.svg'))
     plt.show()
 
-def sample_posterior(inferrer, param_names, true_vals, fname_str, base_dir, n_samples=500):
+def sample_posterior(inferrer, param_names, fname_str, base_dir, n_samples=500, true_vals=None):
 
     sample_df = inferrer.sample_posterior(n_samples=n_samples) #inferrer.plot_posteriors(n_samples=1000)
     # inferrer.plot_posteriors(n_samples=n_samples)
+    if true_vals is not None:
+        append_trues = True
+    else:
+        append_trues = False
     
     sample_file = os.path.join(base_dir, fname_str+'_sample_df.csv')
     sample_df.to_csv(sample_file)
     
-    smaller_df = pd.DataFrame()
+    mean_df = pd.DataFrame()
 
     for name in param_names:
         means = []
-        trues = []
+        if append_trues:
+            trues = []
         subs = []
         for i in range(inferrer.nsubs):
             means.append(sample_df[sample_df['subject']==i][name].mean())
-            trues.append(true_vals[name][true_vals['subject']==i])
+            if append_trues:
+                trues.append(true_vals[name][true_vals['subject']==i])
             subs.append(i)
 
-        smaller_df["inferred "+name] = torch.tensor(means)
-        smaller_df["true "+name] = torch.tensor(trues)
-        smaller_df["subject"] = torch.tensor(subs)
+        mean_df["inferred "+name] = torch.tensor(means)
+        if append_trues:
+            mean_df["true "+name] = torch.tensor(trues)
+        mean_df["subject"] = torch.tensor(subs)
         
-    smaller_file = os.path.join(base_dir, fname_str+'_smaller_df.csv')
-    smaller_df.to_csv(smaller_file)
+    smaller_file = os.path.join(base_dir, fname_str+'_mean_df.csv')
+    mean_df.to_csv(smaller_file)
 
-    total_df = sample_df.copy()
-    for name in param_names:
-        total_df["true "+name] = torch.tensor(smaller_df["true "+name]).repeat(n_samples)
-        total_df["inferred "+name] = torch.tensor(smaller_df["inferred "+name]).repeat(n_samples)
-
-    total_file = os.path.join(base_dir, fname_str+'_total_df.csv')
-    total_df.to_csv(total_file)
-
-    return total_df, smaller_df, sample_df
+    return mean_df, sample_df
 
 
 def load_samples(base_dir, fname_str):
@@ -413,19 +412,16 @@ def load_samples(base_dir, fname_str):
     sample_file = os.path.join(base_dir, fname_str+'_sample_df.csv')
     sample_df = pd.read_csv(sample_file)
 
-    smaller_file = os.path.join(base_dir, fname_str+'_smaller_df.csv')
-    smaller_df = pd.read_csv(smaller_file)
+    mean_file = os.path.join(base_dir, fname_str+'_mean_df.csv')
+    mean_df = pd.read_csv(mean_file)
 
-    total_file = os.path.join(base_dir, fname_str+'_total_df.csv')
-    total_df = pd.read_csv(total_file)
-
-    return total_df, smaller_df, sample_df
+    return mean_df, sample_df
 
 
 
-def plot_inferred(smaller_df, fname_str, reg_fit=False):
+def plot_inferred(mean_df, fname_str, reg_fit=False):
     
-    plot_df = smaller_df.drop('subject', axis=1)
+    plot_df = mean_df.drop('subject', axis=1)
                         
     axes_names = ["policy forgetting rate lambda_pi", "reward forgetting rate lambda_r", "decision temp gamma", "habitual tendency h"]
     ranges = [[0,1], [0,1], [1, max_dt], [0,1], [0, 1]]
@@ -497,7 +493,7 @@ def big_custom_plot(plot_df, param_names, base_dir, fname_str, ELBO, param_range
     sns.heatmap(plot_df.corr(), annot=True, fmt='.2f', alpha=p_opacity, 
                 cmap='vlag', vmin=-1, vmax=1, ax=ax)
     
-    # sns.heatmap(smaller_df.corr(), annot=True, fmt='.2f', ax=ax)#[pval_corrected<alphaB]
+    # sns.heatmap(mean_df.corr(), annot=True, fmt='.2f', ax=ax)#[pval_corrected<alphaB]
         
     try:
         plt.tight_layout()
@@ -521,12 +517,12 @@ def annot_corrfunc(x, y, **kws):
     ax.annotate("r = {:.2f} ".format(r),
                 xy=(.1, .9), xycoords=ax.transAxes)
     ax.annotate("p = {:.3f}".format(p),
-                xy=(.4, .9), xycoords=ax.transAxes)
+                xy=(.5, .9), xycoords=ax.transAxes)
     
     
-def plot_results(sample_df, param_names, fname_str, ELBO, smaller_df, base_dir, max_dt):
+def plot_results(sample_df, param_names, fname_str, ELBO, mean_df, base_dir, max_dt):
     
-    plot_df = smaller_df.drop('subject', axis=1)\
+    plot_df = mean_df.drop('subject', axis=1)\
                         .reindex(["inferred "+name for name in param_names]\
                                  +["true "+name for name in param_names], axis=1)
         
@@ -1429,12 +1425,12 @@ if __name__=='__main__':
     
         infer(inferrer, size_chunk, fname_str)
         total_num_iter_so_far += size_chunk
-        full_df, smaller_df, sample_df = sample_posterior(inferrer, fname_str) 
+        full_df, mean_df, sample_df = sample_posterior(inferrer, fname_str) 
         
         # plot_posterior(full_df, fname_str)
         # plot_correlations(full_df, fname_str)
         
-        plot_results(sample_df, fname_str, inferrer.loss, smaller_df)
+        plot_results(sample_df, fname_str, inferrer.loss, mean_df)
         
         print("This is recovery for the twostage task using the "+model_name+"with "+str(nsubs)+" agents.")
         print("The settings are: infer h", infer_h)
