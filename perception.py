@@ -392,7 +392,7 @@ class Group2Perception(object):
                                                   self.posterior_policies[tau,t])
         #if reward > 0:
         # check later if stuff still works!
-        if self.learn_rew:# and t==self.T-1:
+        if self.learn_rew and t==self.T-1:
             self.update_beliefs_dirichlet_rew_params(tau, t, reward)
 
     def update_beliefs_states(self, tau, t, observation, reward, possible_policies):
@@ -424,7 +424,7 @@ class Group2Perception(object):
 
         # print("softmax", likelihood)
         # print("norm1", ar.pow(norm,self.dec_temp))
-        posterior_policies = likelihood * self.prior_policies[-1]*self.mask[tau] / (likelihood * self.prior_policies[-1]).sum(axis=0)
+        posterior_policies = likelihood * self.prior_policies[-1]*self.mask[tau][None,...] / (likelihood * self.prior_policies[-1]).sum(axis=0)
         # print("unnorm", likelihood * self.prior_policies[-1])
         # print("norm", (likelihood * self.prior_policies[-1]).sum(axis=0))
         # print("post", posterior_policies)

@@ -65,19 +65,7 @@ def set_up_Bayesian_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs
     #utility: goal prior, preference p(o)
     avg, perception_args, infer_h, valid, use_h = agent_par_list
     
-    utility = []
-    
-    #ut = [0.5, 0.6, 0.7, 0.8, 0.9, 1. - 1e-5]
-    #ut = [0.95, 0.96, 0.98, 0.99]
-    #ut = [0.985]
-    ut = [0.999]
-    for u in ut:
-        utility.append(torch.zeros(nr).to(device))
-        for i in range(1,nr):
-            utility[-1][i] = u/(nr-1)#u/nr*i
-        utility[-1][0] = (1.-u)
-    
-    utility = utility[-1]
+    utility = torch.tensor([0.01, 0.99])
     
 
     """
@@ -85,7 +73,7 @@ def set_up_Bayesian_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs
     """
 
     C_alphas = torch.zeros((nr, ns)) + 1
-    C_alphas[0,:3] = 100
+    C_alphas[0,:(ns-nb)] = 100
     for i in range(1,nr):
         C_alphas[i,0] = 1
 
@@ -572,7 +560,7 @@ def plot_results(sample_df, param_names, fname_str, ELBO, mean_df, base_dir, max
     
 def run_BCC_simulations(nsubs, infer_h, fname_base, base_dir, Rho, trials, T, 
                         nb, ns, no, na, npi, nr, never_reward, A, B, p_invalid,
-                        max_dt=6, remove_old=True, use_h=True):
+                        mask=None, max_dt=6, remove_old=True, use_h=True):
     
     if infer_h:
         n_pars = 4
@@ -638,8 +626,11 @@ def run_BCC_simulations(nsubs, infer_h, fname_base, base_dir, Rho, trials, T,
         worlds = []
         l = []
         avg = True
-        prob_matrix = torch.zeros((trials,1)) + p_invalid
-        valid = torch.bernoulli(prob_matrix).bool()
+        if mask is not None:
+            valid = mask[:,[k]]
+        else:
+            prob_matrix = torch.zeros((trials,1)) + p_invalid
+            valid = torch.bernoulli(prob_matrix).bool()
         pars = [avg, Rho,perception_args, infer_h, valid, use_h]
         
         worlds.append(simulate_BCC_behavior(pars, trials, T, ns, na, nr, nb, A, B))
