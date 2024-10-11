@@ -16,18 +16,28 @@ class HierarchicalPerception(object):
                  dirichlet_pol_params = None,
                  dirichlet_rew_params = None,
                  generative_model_context = None,
-                 T=5, pol_lambda=0, r_lambda=0, non_decaying=0, dec_temp=1.):
+                 T=5, trials=10, 
+                 pol_lambda=0, 
+                 r_lambda=0, 
+                 non_decaying=0, 
+                 dec_temp=1.,
+                 possible_rewards = None,
+                 infer_context = False,
+                 prior_context = np.array([1]),
+                 hidden_state_mapping = False,       
+                 nm = None                          # dimension of the mapping from hidden state, in the TGT, the true hidden state (nh) is the planet identity and npl is correspondingly the number of planets that can be visited. 
+                ):
 
-        self.generative_model_observations = generative_model_observations.copy()
-        if len(generative_model_states.shape) <= 3:
-            self.generative_model_states = generative_model_states.copy()[:,:,:,None]
-        else:
-            self.generative_model_states = generative_model_states.copy()
-        self.generative_model_rewards = generative_model_rewards.copy()
-        self.transition_matrix_context = transition_matrix_context.copy()
-        self.prior_rewards = prior_rewards.copy()
-        self.prior_states = prior_states.copy()
-        self.prior_policies = prior_policies.copy()
+        self.generative_model_observations = generative_model_observations
+
+
+        self.generative_model_states = generative_model_states # ghost context dimension should be added in the run_agent function, same for generative_model_rewards 
+        
+        self.generative_model_rewards = generative_model_rewards
+        self.transition_matrix_context = transition_matrix_context
+        self.prior_rewards = prior_rewards
+        self.prior_states = prior_states
+        self.prior_policies = prior_policies
         self.npi = prior_policies.shape[0]
         self.T = T
         self.nh = prior_states.shape[0]
@@ -35,28 +45,21 @@ class HierarchicalPerception(object):
         self.r_lambda = r_lambda
         self.non_decaying = non_decaying
         self.dec_temp = dec_temp
+        self.possible_rewards = possible_rewards,
+        self.infer_context = infer_context
+        self.nc = prior_context.size
+        self.hidden_state_mapping = hidden_state_mapping
 
-        if len(generative_model_rewards.shape) > 2:
-            self.infer_context = True
-            self.nc = generative_model_rewards.shape[2]
+        self.dirichlet_pol_params = dirichlet_pol_params
+        self.dirichlet_rew_params = dirichlet_rew_params
+        self.generative_model_context = generative_model_context
+        self.generative_model_rewards = generative_model_rewards
+
+        if hidden_state_mapping:
+            nh = generative_model_rewards.shape[0]
+            ns = prior_states.size
         else:
-            self.nc = 1
-            self.generative_model_rewards = self.generative_model_rewards[:,:,np.newaxis]
-        if dirichlet_pol_params is not None:
-            self.dirichlet_pol_params = dirichlet_pol_params.copy()
-        if dirichlet_rew_params is not None:
-            self.dirichlet_rew_params = dirichlet_rew_params.copy()
-        if generative_model_context is not None:
-            self.generative_model_context = generative_model_context.copy()
-
-
-            for c in range(self.nc):
-                for state in range(self.nh):
-                    self.generative_model_rewards[:,state,c] = self.dirichlet_rew_params[:,state,c] / self.dirichlet_rew_params[:,state,c].sum()
-                    # self.generative_model_rewards[:,state,c] =\
-                    # np.exp(scs.digamma(self.dirichlet_rew_params[:,state,c])\
-                    #        -scs.digamma(self.dirichlet_rew_params[:,state,c].sum()))
-                    # self.generative_model_rewards[:,state,c] /= self.generative_model_rewards[:,state,c].sum()
+            nh, ns = [prior_states.size]*2
 
 
     def reset(self, params, fixed):
@@ -278,10 +281,6 @@ class HierarchicalPerception(object):
 #                    self.fwd_messages[:,:,pi,c] = 1./self.nh #0
 
         return self.dirichlet_rew_params
-
-
-
-
 
 class TwoStepPerception(object):
     def __init__(self,

@@ -5,6 +5,18 @@ import scipy.special as scs
 import matplotlib.pylab as plt
 import seaborn as sns
 
+
+
+def normalize(matrix, dim=0):
+    
+    normalization_constant = matrix.sum(axis=dim)
+    matrix /= normalization_constant
+
+    assert np.all(np.isclose(matrix.sum(axis=dim), 1)), "Probability distribution is not normalized!"
+
+    return matrix
+
+
 def evolve_environment(env):
     trials = env.hidden_states.shape[0]
     T = env.hidden_states.shape[1]
