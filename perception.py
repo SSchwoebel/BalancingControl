@@ -16,39 +16,47 @@ class HierarchicalPerception(object):
                  dirichlet_pol_params = None,
                  dirichlet_rew_params = None,
                  generative_model_context = None,
-                 T=5, trials=10, 
+                 hidden_state_mapping = False,       
+                 learn_rew = True,
+                 learn_pol = True,
+                 infer_context = False,
+                 prior_context = np.array([1]),
+                 T=5,
+                 trials=10, 
+                 possible_rewards = None,
+                 possible_policies = None,
                  pol_lambda=0, 
                  r_lambda=0, 
                  non_decaying=0, 
                  dec_temp=1.,
-                 possible_rewards = None,
-                 infer_context = False,
-                 prior_context = np.array([1]),
-                 hidden_state_mapping = False,       
-                 nm = None                          # dimension of the mapping from hidden state, in the TGT, the true hidden state (nh) is the planet identity and npl is correspondingly the number of planets that can be visited. 
                 ):
 
         self.generative_model_observations = generative_model_observations
-
-
         self.generative_model_states = generative_model_states # ghost context dimension should be added in the run_agent function, same for generative_model_rewards 
-        
         self.generative_model_rewards = generative_model_rewards
         self.transition_matrix_context = transition_matrix_context
+       
         self.prior_rewards = prior_rewards
         self.prior_states = prior_states
         self.prior_policies = prior_policies
+        
         self.npi = prior_policies.shape[0]
-        self.T = T
         self.nh = prior_states.shape[0]
+        self.nr = generative_model_rewards.shape[0]
+        self.T = T
+        self.possible_rewards = possible_rewards,
+        self.nc = prior_context.size
+        
+        self.hidden_state_mapping = hidden_state_mapping
+        self.infer_context = infer_context
+        self.learn_rew = learn_rew
+        self.learn_pol = learn_pol
+        
+        
         self.pol_lambda = pol_lambda
         self.r_lambda = r_lambda
-        self.non_decaying = non_decaying
         self.dec_temp = dec_temp
-        self.possible_rewards = possible_rewards,
-        self.infer_context = infer_context
-        self.nc = prior_context.size
-        self.hidden_state_mapping = hidden_state_mapping
+        self.non_decaying = non_decaying
 
         self.dirichlet_pol_params = dirichlet_pol_params
         self.dirichlet_rew_params = dirichlet_rew_params
@@ -56,10 +64,10 @@ class HierarchicalPerception(object):
         self.generative_model_rewards = generative_model_rewards
 
         if hidden_state_mapping:
-            nh = generative_model_rewards.shape[0]
-            ns = prior_states.size
+            self.nh = generative_model_rewards.shape[1]
+            self.nm = prior_states.size
         else:
-            nh, ns = [prior_states.size]*2
+            self.nh, self.nm = [prior_states.size]*2
 
 
     def reset(self, params, fixed):
@@ -98,6 +106,7 @@ class HierarchicalPerception(object):
                         .dot(self.generative_model_states[:,:,u,c])
                     self.bwd_messages[:,tp, pi,c] /= self.bwd_messages[:,tp,pi,c].sum()
 
+
     def update_messages(self, t, pi, cs, c=0):
         if t > 0:
             for i, u in enumerate(np.flip(cs[:t], axis = 0)):
@@ -124,6 +133,7 @@ class HierarchicalPerception(object):
                if self.fwd_norms[t+1+i, pi,c] > 0: #???? Shouldn't this not happen?
                    self.fwd_messages[:,t+1+i, pi,c] /= self.fwd_norms[t+1+i,pi,c]
 
+
     def reset_preferences(self, t, new_preference, policies):
 
         self.prior_rewards = new_preference.copy()
@@ -139,6 +149,7 @@ class HierarchicalPerception(object):
                     self.bwd_messages[:,tp,pi,c] = self.bwd_messages[:,tp,pi,c]\
                         .dot(self.generative_model_states[:,:,u,c])
                     self.bwd_messages[:,tp, pi,c] /= self.bwd_messages[:,tp,pi,c].sum()
+
 
     def update_beliefs_states(self, tau, t, observation, reward, policies, possible_policies):
         #estimate expected state distribution
@@ -163,6 +174,7 @@ class HierarchicalPerception(object):
         non_zero = norm > 0
         posterior[:,non_zero] /= norm[non_zero]
         return np.nan_to_num(posterior)
+
 
     def update_beliefs_policies(self, tau, t):
 
@@ -258,6 +270,7 @@ class HierarchicalPerception(object):
 
         return self.dirichlet_pol_params, self.prior_policies
 
+
     def update_beliefs_dirichlet_rew_params(self, tau, t, reward, posterior_states, posterior_policies, posterior_context = [1]):
         states = (posterior_states[:,t,:,:] * posterior_policies[np.newaxis,:,:]).sum(axis=1)
         old = self.dirichlet_rew_params.copy()
@@ -280,7 +293,87 @@ class HierarchicalPerception(object):
 #                else:
 #                    self.fwd_messages[:,:,pi,c] = 1./self.nh #0
 
-        return self.dirichlet_rew_params
+        return self.dirichlet_rew_params    
+    
+    
+    def update_beliefs(self, tau, t, observation, reward, response, context=None):
+        self.observations[tau,t] = observation
+        self.rewards[tau,t] = reward
+        if context is not None:
+            self.context_obs[tau] = context
+
+        if t == 0:
+            self.possible_polcies = np.arange(0,self.npi,1).astype(np.int32)
+        else:
+            possible_policies = np.where(self.policies[:,t-1]==response)[0]
+            self.possible_polcies = np.intersect1d(self.possible_polcies, possible_policies)
+            self.log_probability += ln(self.posterior_actions[tau,t-1,response])
+
+        self.posterior_states[tau, t] = self.perception.update_beliefs_states(
+                                         tau, t,
+                                         observation,
+                                         reward,
+                                         self.policies,
+                                         self.possible_polcies)
+
+        #update beliefs about policies
+        self.posterior_policies[tau, t], self.likelihood[tau,t] = self.perception.update_beliefs_policies(tau, t)
+
+        if tau == 0:
+            prior_context = self.prior_context
+        else: #elif t == 0:
+            prior_context = np.dot(self.perception.transition_matrix_context, self.posterior_context[tau-1, -1]).reshape((self.nc))
+#            else:
+#                prior_context = np.dot(self.perception.transition_matrix_context, self.posterior_context[tau, t-1])
+
+        # check here what to do with the greater and equal sign
+        if self.nc>1 and t>=0:
+            
+            if hasattr(self, 'context_obs'):
+                c_obs = self.context_obs[tau]
+            else:
+                c_obs = None
+            self.posterior_context[tau, t] = \
+            self.perception.update_beliefs_context(tau, t, \
+                                                   reward, \
+                                                   self.posterior_states[tau, t], \
+                                                   self.posterior_policies[tau, t], \
+                                                   prior_context, \
+                                                   self.policies,\
+                                                   context=c_obs)
+        elif self.nc>1 and t==0:
+            self.posterior_context[tau, t] = prior_context
+        else:
+            self.posterior_context[tau,t] = 1
+
+        # print(tau,t)
+        # print("prior", prior_context)
+        # print("post", self.posterior_context[tau, t])
+
+        if t < self.T-1:
+            post_pol = np.dot(self.posterior_policies[tau, t], self.posterior_context[tau, t])
+            self.posterior_actions[tau, t] = self.estimate_action_probability(tau, t, post_pol)
+
+        if t == self.T-1 and self.learn_habit:
+            self.posterior_dirichlet_pol[tau], self.prior_policies[tau] = self.perception.update_beliefs_dirichlet_pol_params(tau, t, \
+                                                            self.posterior_policies[tau,t], \
+                                                            self.posterior_context[tau,t])
+
+        if False:
+            self.posterior_rewards[tau, t-1] = np.einsum('rsc,spc,pc,c->r',
+                                                  self.perception.generative_model_rewards,
+                                                  self.posterior_states[tau,t,:,t],
+                                                  self.posterior_policies[tau,t],
+                                                  self.posterior_context[tau,t])
+        #if reward > 0:
+        # check later if stuff still works!
+        if self.learn_rew:# and t>0:#==self.T-1:
+            self.posterior_dirichlet_rew[tau,t] = self.perception.update_beliefs_dirichlet_rew_params(tau, t, \
+                                                            reward, \
+                                                   self.posterior_states[tau, t], \
+                                                   self.posterior_policies[tau, t], \
+                                                   self.posterior_context[tau,t])
+
 
 class TwoStepPerception(object):
     def __init__(self,
