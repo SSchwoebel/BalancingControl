@@ -28,6 +28,7 @@ class World(object):
         #container for rewards
         self.rewards = np.zeros((self.trials, self.T), dtype = int)
 
+
     def simulate_experiment(self, curr_trials=None):
         """This methods evolves all the states of the world by iterating
         through all the trials and time steps of each trial.
@@ -36,6 +37,7 @@ class World(object):
             trials = curr_trials
         else:
             trials = range(self.trials)
+            
         for tau in trials:
             for t in range(self.T):
                 self.__update_world(tau, t)
@@ -52,6 +54,7 @@ class World(object):
                 val[i] = self.__get_log_jointprobability(par)
 
         return val
+
 
     def fit_model(self, bounds, n_pars, method='MLE'):
         """This method uses the existing observation and response data to
@@ -80,6 +83,7 @@ class World(object):
 
         return ln(self.agent.asl.control_probability[p1, p2, p3]).sum()
 
+
     def __get_log_jointprobability(self, params):
         self.agent.set_free_parameters(params)
         self.agent.reset_beliefs(self.actions)
@@ -92,6 +96,7 @@ class World(object):
         ll = ln(self.agent.asl.control_probability[p1, p2, p3]).sum()
 
         return  ll + self.agent.log_prior()
+
 
     #this is a private method do not call it outside of the class
     def __update_model(self):
@@ -122,24 +127,26 @@ class World(object):
 
         if t==0:
             self.environment.set_initial_states(tau)
-            response = None
-            if hasattr(self.environment, 'Chi'):
-                context = self.environment.generate_context_obs(tau)
-            else:
-                context = None
+            response = -1
         else:
             response = self.actions[tau, t-1]
             self.environment.update_hidden_states(tau, t, response)
-            context = None
+            
+        if self.agent.perception.infer_context:
+            context = self.environment.generate_context_obs(tau)
+        else:
+            context = -1
 
+        if self.agent.perception.hidden_state_mapping:
+            self.agent.perception.curr_states = self.environment.state_configuration[tau]
+        else:
+            self.agent.perception.curr_states = np.arange(self.agent.percepiton.nh)
         self.observations[tau, t] = \
             self.environment.generate_observations(tau, t)
 
-        if t>0:
-            self.rewards[tau, t] = self.environment.generate_rewards(tau, t)
+        self.rewards[tau, t] = self.environment.generate_rewards(tau, t)  # the nan reward at t==0 is propery of the environment?
 
         observation = self.observations[tau, t]
-
         reward = self.rewards[tau, t]
 
         self.agent.update_beliefs(tau, t, observation, reward, response, context)

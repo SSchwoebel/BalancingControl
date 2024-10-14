@@ -13,90 +13,18 @@ class BayesianPlanner(object):
                 self,
                 perception,
                 action_selection,
-                # policies,
-                # prior_states = None,
-                # prior_policies = None,
-                # prior_context = None,
-                # learn_habit = False,
-                # learn_rew = False,
-                # trials = 1,
-                # T = 10,
-                # number_of_states = 6,
-                # number_of_rewards = 2,
-                # number_of_policies = 10
                 ):
 
         #set the modules of the agent
         self.perception = perception
         self.action_selection = action_selection
 
-        #set parameters of the agent
-        # self.nh = number_of_states #number of states
-        # self.npi = number_of_policies #number of policies
-        # self.nr = number_of_rewards
-
-        # self.T = T
-
-        # if policies is not None:
-        #     self.policies = policies
-        # else:
-        #     #make action sequences for each policy
-        #     self.policies = np.eye(self.npi, dtype = int)
-
-        # self.possible_polcies = self.policies.copy()
-
-        # self.actions = np.unique(self.policies)
-        # self.na = len(self.actions)
-
-        # if prior_states is not None:
-        #     self.prior_states = prior_states
-        # else:
-        #     self.prior_states = np.ones(self.nh)
-        #     self.prior_states /= self.prior_states.sum()
-
-        # if prior_context is not None:
-        #     self.prior_context = prior_context
-        #     self.nc = prior_context.shape[0]
-        # else:
-        #     self.prior_context = np.ones(1)
-        #     self.nc = 1
-
-        # if prior_policies is not None:
-        #     self.prior_policies = np.tile(prior_policies, (1,self.nc)).T
-        # else:
-        #     self.prior_policies = np.ones((self.npi,self.nc))/self.npi
-
-        # self.learn_habit = learn_habit
-        # self.learn_rew = learn_rew
-
-        # #set various data structures
-        # self.actions = np.zeros((trials, T), dtype = int)
-        # self.posterior_states = np.zeros((trials, T, self.nh, T, self.npi, self.nc))
-        # self.posterior_policies = np.zeros((trials, T, self.npi, self.nc))
-        # self.posterior_dirichlet_pol = np.zeros((trials, self.npi, self.nc))
-        # self.posterior_dirichlet_rew = np.zeros((trials, T, self.nr, self.nh, self.nc))
-        # self.observations = np.zeros((trials, T), dtype = int)
-        # self.rewards = np.zeros((trials, T), dtype = int)
-        # self.posterior_context = np.ones((trials, T, self.nc))
-        # self.posterior_context[:,:,:] = self.prior_context[np.newaxis,np.newaxis,:]
-        # self.likelihood = np.zeros((trials, T, self.npi, self.nc))
-        # self.prior_policies = np.zeros((trials, self.npi, self.nc))
-        # self.prior_policies[:] = prior_policies[np.newaxis,:,:]
-        # self.posterior_actions = np.zeros((trials, T-1, self.na))
-        # self.posterior_rewards = np.zeros((trials, T, self.nr))
-        # self.log_probability = 0
-        # if hasattr(self.perception, 'generative_model_context'):
-        #     self.context_obs = np.zeros(trials, dtype=int)
-
+        self.na = self.perception.na
+        self.T = self.perception.T
+        self.trials = self.perception.T
     def update_beliefs(self, tau, t, observation, reward, prev_response, context):
-
-        if t==0:
-            self.possible_policies = np.ones((self.npi, self.nsubs), dtype=bool)
-        else:
-            curr_policies = (self.policies[:,t-1][:,None] == prev_response)#[0]
-            self.possible_policies = np.logical_and(self.possible_policies, curr_policies)
-
-        self.perception.update_beliefs(tau, t, observation, reward, prev_response, self.possible_policies)
+        
+        self.perception.update_beliefs(tau, t, observation, reward, prev_response, context)
 
     def reset(self, params, fixed):
         # self.perception.reset()

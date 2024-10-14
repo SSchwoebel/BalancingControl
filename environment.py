@@ -511,6 +511,9 @@ class TwoStep(object):
 
         return r
     
+
+class PlanetWorld(object):
+
     def __init__(
                  self,
                  generative_model_observations,
@@ -518,47 +521,60 @@ class TwoStep(object):
                  generative_model_rewards,
                  planet_configurations,
                  starts,
-                 contexts,
+                 context_cues,
+                 true_context,
                  trials = 10,
-                 T = 4,
+                 T = 4
                 ):
 
         self.A = generative_model_observations                            # prob dist for generating observations
         self.B = generative_model_states                                  # prob dist for state transitions
-        self.Rho = generative_model_rewards                               # prob dist for reward generation
         self.trials = trials                                              # mb corresponds to number of miniblocks
-        self.T = T                                                        # miniblock length of 3 actions + initial state = 4
+        self.true_context = np.array(true_context)                        # what is the true currently active context
         self.ns = generative_model_states.shape[0]                        # number of unique locations
-        self.nr = generative_model_rewards.shape[0]                       # number of rewards
-        self.npl = generative_model_rewards.shape[1]                      # number of unique planet types
-        self.context_cues = np.array(contexts,dtype=int)                  # background colors, look at run_agent_simulation, load vars for coding
-        self.planet_conf = planet_configurations                          # planet identities for each trial
+        self.Rho = np.array(generative_model_rewards)
+        r_ind = (self.true_context > 1).astype(int)
+        self.Rho = self.Rho[r_ind,:,:]
+
+        self.T = T                                                        # miniblock length of 3 actions + initial state = 4
+        self.nr = self.Rho[0].shape[0]                       # number of rewards
+        self.npl = self.Rho[0].shape[1]                      # number of unique planet types
+
+        self.context_cues = np.array(context_cues,dtype=int)              # background colors, look at run_agent_simulation, load vars for coding
+        self.state_configuration = planet_configurations                          # planet identities for each trial
         self.starting_position = starts                                   # initial rocket position for each trial
         # hidden states tracks location and not planet identity
+        
         self.hidden_states = np.zeros([trials, T],dtype=int)
         self.possible_states = np.arange(self.ns)
         self.possible_rewards = np.arange(self.nr)
 
+
+
     def set_initial_states(self, tau):
         self.hidden_states[tau, 0] = self.starting_position[tau]
+
 
     def generate_context_obs(self,tau):
         return self.context_cues[tau]
 
+
     def generate_observations(self,tau,t):
-        
         return np.random.choice(self.possible_states, p=self.A[:,self.hidden_states[tau,t]],size=1)
         
-    # this function is specifically tailored to deterministic location transitions
-    def update_hidden_states(self,tau, t, action):
 
+    def update_hidden_states(self,tau, t, action):
         curr_loc =  self.hidden_states[tau,t-1]
-        self.hidden_states[tau,t] = np.argmax(self.B[:,curr_loc,action,0])
+        self.hidden_states[tau,t] = np.random_choice(self.possible_states, p=self.B[:,curr_loc,action],size=1)
+
 
     def generate_rewards(self,tau,t):
         
-        curr_loc = self.hidden_states[tau,t]
-        rp = self.Rho[tau,:,curr_loc]                    # reward probability at current planet
-
-        reward = np.random.choice(self.possible_rewards, p=rp,size=1)
+        if t == 0:
+            reward = -1
+        else:
+            curr_loc = self.hidden_states[tau,t]
+            rp = self.Rho[tau,:,curr_loc]                    # reward probability at current planet
+            reward = np.random.choice(self.possible_rewards, p=rp,size=1)
+        
         return reward

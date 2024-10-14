@@ -5,6 +5,7 @@ from misc import D_KL_nd_dirichlet, D_KL_dirichlet_categorical
 
 
 class HierarchicalPerception(object):
+
     def __init__(self,
                  generative_model_observations,
                  generative_model_states,
@@ -23,12 +24,13 @@ class HierarchicalPerception(object):
                  prior_context = np.array([1]),
                  T=5,
                  trials=10, 
-                 possible_rewards = None,
-                 possible_policies = None,
+                 all_rewards = None,
+                 all_policies = None,
                  pol_lambda=0, 
                  r_lambda=0, 
                  non_decaying=0, 
                  dec_temp=1.,
+                 **pars
                 ):
 
         self.generative_model_observations = generative_model_observations
@@ -39,13 +41,16 @@ class HierarchicalPerception(object):
         self.prior_rewards = prior_rewards
         self.prior_states = prior_states
         self.prior_policies = prior_policies
+        self.prior_context = prior_context
         
         self.npi = prior_policies.shape[0]
         self.nh = prior_states.shape[0]
         self.nr = generative_model_rewards.shape[0]
-        self.T = T
-        self.possible_rewards = possible_rewards,
+        self.na = np.size(np.unique(all_policies))
         self.nc = prior_context.size
+        self.T = T
+        self.all_policies = all_policies
+        self.all_rewards = all_rewards
         
         self.hidden_state_mapping = hidden_state_mapping
         self.infer_context = infer_context
@@ -69,6 +74,23 @@ class HierarchicalPerception(object):
         else:
             self.nh, self.nm = [prior_states.size]*2
 
+        ### posteriors log
+        self.posterior_states = np.zeros((trials, T, self.nm, T, self.npi, self.nc))
+        self.posterior_policies = np.zeros((trials, T, self.npi, self.nc))
+        self.posterior_dirichlet_pol = np.zeros((trials, self.npi, self.nc))
+        self.posterior_context = np.ones((trials, T, self.nc)) 
+        self.posterior_context[0,:,:] = prior_context[None,:]
+        self.posterior_actions = np.zeros((trials, T, self.na))
+        self.posterior_actions[:,0,:] = np.nan
+        self.posterior_rewards = np.zeros((trials, T, self.nr))
+        self.posterior_dirichlet_rew = np.zeros((trials, T, self.nr, self.nh, self.nc))
+
+        ### observations, actions and rewards log
+        self.observations = np.zeros((trials, self.T), dtype = int)
+        self.actions = np.zeros((trials, self.T), dtype = int)
+        self.rewards = np.zeros((trials, self.T), dtype = int)
+        self.context_obs = np.zeros((trials, self.T), dtype=int)
+
 
     def reset(self, params, fixed):
 
@@ -79,24 +101,31 @@ class HierarchicalPerception(object):
         self.dirichlet_pol_params = alphas
 
 
-    def instantiate_messages(self, policies):
+    def initiate_planet_rewards(self,generative_model_rewards):#,tau):
+            
 
-        self.bwd_messages = np.zeros((self.nh, self.T, self.npi, self.nc))
-        self.bwd_messages[:,-1,:, :] = 1./self.nh
-        self.fwd_messages = np.zeros((self.nh, self.T, self.npi, self.nc))
-        self.fwd_messages[:, 0, :, :] = self.prior_states[:, np.newaxis, np.newaxis]
+        self.current_gen_model_rewards = np.zeros([self.nr, self.nm, self.nc])
+
+        for p in range(self.nh):
+            self.current_gen_model_rewards[:,p,:] = generative_model_rewards[:,self.planets[p],:]
+
+    def instantiate_messages(self):
+
+        self.bwd_messages = np.zeros((self.nm, self.T, self.npi, self.nc))
+        self.bwd_messages[:,-1,:, :] = 1./self.nm
+        self.fwd_messages = np.zeros((self.nm, self.T, self.npi, self.nc))
+        self.fwd_messages[:, 0, :, :] = self.prior_states[:, None, None]
         self.fwd_norms = np.zeros((self.T+1, self.npi, self.nc))
         self.fwd_norms[0,:,:] = 1.
 
-        self.obs_messages = np.zeros((self.nh, self.T, self.nc)) + 1/self.nh#self.prior_observations.dot(self.generative_model_observations)
-        #self.obs_messages = np.tile(self.obs_messages,(self.T,1)).T
-
-        self.rew_messages = np.zeros((self.nh, self.T, self.nc))
-        #self.rew_messages[:] = np.tile(self.prior_rewards.dot(self.generative_model_rewards),(self.T,1)).T
+        self.obs_messages = np.zeros((self.nm, self.T, self.nc)) + 1/self.nm
+        self.rew_messages = np.zeros((self.nm, self.T, self.nc))               #set t=0 to uniform?
 
         for c in range(self.nc):
-            self.rew_messages[:,:,c] = self.prior_rewards.dot(self.generative_model_rewards[:,:,c])[:,np.newaxis]
-            for pi, cstates in enumerate(policies):
+            rew_message = self.prior_rewards.dot(self.generative_model_rewards[:,:,c])[:,np.newaxis]
+            self.rew_messages[:,:,c] = rew_message[[self.curr_states]][:,None]
+
+            for pi, cstates in enumerate(self.all_policies):
                 for t, u in enumerate(np.flip(cstates, axis = 0)):
                     tp = self.T - 2 - t
                     self.bwd_messages[:,tp,pi,c] = self.bwd_messages[:,tp+1,pi,c]*\
@@ -151,18 +180,18 @@ class HierarchicalPerception(object):
                     self.bwd_messages[:,tp, pi,c] /= self.bwd_messages[:,tp,pi,c].sum()
 
 
-    def update_beliefs_states(self, tau, t, observation, reward, policies, possible_policies):
+    def update_beliefs_states(self, tau, t, observation, reward):
         #estimate expected state distribution
         if t == 0:
-            self.instantiate_messages(policies)
+            self.instantiate_messages()
 
         self.obs_messages[:,t,:] = self.generative_model_observations[observation][:,np.newaxis]
 
         self.rew_messages[:,t,:] = self.generative_model_rewards[reward]
 
         for c in range(self.nc):
-            for pi, cs in enumerate(policies):
-                if self.prior_policies[pi,c] > 1e-15 and pi in possible_policies:
+            for pi, cs in enumerate(self.all_policies):
+                if self.prior_policies[pi,c] > 1e-15 and pi in self.possible_policies:
                     self.update_messages(t, pi, cs, c)
                 else:
                     self.fwd_messages[:,:,pi,c] = 0#1./self.nh
@@ -296,35 +325,35 @@ class HierarchicalPerception(object):
         return self.dirichlet_rew_params    
     
     
-    def update_beliefs(self, tau, t, observation, reward, response, context=None):
+    def update_beliefs(self, tau, t, observation, reward, prev_response, context=None):
+        
         self.observations[tau,t] = observation
         self.rewards[tau,t] = reward
-        if context is not None:
-            self.context_obs[tau] = context
-
-        if t == 0:
-            self.possible_polcies = np.arange(0,self.npi,1).astype(np.int32)
-        else:
-            possible_policies = np.where(self.policies[:,t-1]==response)[0]
-            self.possible_polcies = np.intersect1d(self.possible_polcies, possible_policies)
-            self.log_probability += ln(self.posterior_actions[tau,t-1,response])
-
-        self.posterior_states[tau, t] = self.perception.update_beliefs_states(
-                                         tau, t,
-                                         observation,
-                                         reward,
-                                         self.policies,
-                                         self.possible_polcies)
-
-        #update beliefs about policies
-        self.posterior_policies[tau, t], self.likelihood[tau,t] = self.perception.update_beliefs_policies(tau, t)
+        self.actions[tau,t] = prev_response
+        self.context_obs[tau] = context
 
         if tau == 0:
             prior_context = self.prior_context
         else: #elif t == 0:
-            prior_context = np.dot(self.perception.transition_matrix_context, self.posterior_context[tau-1, -1]).reshape((self.nc))
+            prior_context = np.dot(self.transition_matrix_context, self.posterior_context[tau-1, -1]).reshape((self.nc))
 #            else:
-#                prior_context = np.dot(self.perception.transition_matrix_context, self.posterior_context[tau, t-1])
+#                prior_context = np.dot(self.transition_matrix_context, self.posterior_context[tau, t-1])
+
+        if t==0:
+            self.possible_policies = np.ones(self.npi, dtype=bool)
+        else:
+            curr_policies = (self.all_policies[:,t-1] == prev_response)
+            self.possible_policies = np.logical_and(self.possible_policies, curr_policies)
+
+
+        self.posterior_states[tau, t] = self.update_beliefs_states(
+                                         tau, t,
+                                         observation,
+                                         reward)
+
+        #update beliefs about policies
+        self.posterior_policies[tau, t], self.likelihood[tau,t] = self.update_beliefs_policies(tau, t)
+
 
         # check here what to do with the greater and equal sign
         if self.nc>1 and t>=0:
@@ -334,7 +363,7 @@ class HierarchicalPerception(object):
             else:
                 c_obs = None
             self.posterior_context[tau, t] = \
-            self.perception.update_beliefs_context(tau, t, \
+            self.update_beliefs_context(tau, t, \
                                                    reward, \
                                                    self.posterior_states[tau, t], \
                                                    self.posterior_policies[tau, t], \
@@ -355,20 +384,20 @@ class HierarchicalPerception(object):
             self.posterior_actions[tau, t] = self.estimate_action_probability(tau, t, post_pol)
 
         if t == self.T-1 and self.learn_habit:
-            self.posterior_dirichlet_pol[tau], self.prior_policies[tau] = self.perception.update_beliefs_dirichlet_pol_params(tau, t, \
+            self.posterior_dirichlet_pol[tau], self.prior_policies[tau] = self.update_beliefs_dirichlet_pol_params(tau, t, \
                                                             self.posterior_policies[tau,t], \
                                                             self.posterior_context[tau,t])
 
         if False:
             self.posterior_rewards[tau, t-1] = np.einsum('rsc,spc,pc,c->r',
-                                                  self.perception.generative_model_rewards,
+                                                  self.generative_model_rewards,
                                                   self.posterior_states[tau,t,:,t],
                                                   self.posterior_policies[tau,t],
                                                   self.posterior_context[tau,t])
         #if reward > 0:
         # check later if stuff still works!
         if self.learn_rew:# and t>0:#==self.T-1:
-            self.posterior_dirichlet_rew[tau,t] = self.perception.update_beliefs_dirichlet_rew_params(tau, t, \
+            self.posterior_dirichlet_rew[tau,t] = self.update_beliefs_dirichlet_rew_params(tau, t, \
                                                             reward, \
                                                    self.posterior_states[tau, t], \
                                                    self.posterior_policies[tau, t], \
