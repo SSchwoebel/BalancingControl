@@ -277,12 +277,13 @@ class DKLSelector(object):
 
 class AveragedSelector(object):
 
-    def __init__(self, trials = 1, T = 10, number_of_actions = 2):
+    def __init__(self, trials = 1, T = 10, number_of_actions = 2, policies = None):
+        
         self.n_pars = 0
-
         self.na = number_of_actions
+        self.policices = policies
         self.control_probability = np.zeros((trials, T, self.na))
-
+        
     def reset_beliefs(self):
         self.control_probability[:,:,:] = 0
 
@@ -292,25 +293,23 @@ class AveragedSelector(object):
     def log_prior(self):
         return 0
 
-    def select_desired_action(self, tau, t, posterior_policies, actions, *args):
+    def select_desired_action(self, tau, t, posterior_policies, posterior_contexts, *args):
 
         #estimate action probability
-        self.estimate_action_probability(tau, t, posterior_policies, actions)
+        self.estimate_action_probability(tau, t, posterior_policies, posterior_contexts)
 
         #generate the desired response from action probability
         u = np.random.choice(self.na, p = self.control_probability[tau, t])
 
         return u
 
-    def estimate_action_probability(self, tau, t, posterior_policies, actions, *args):
+    def estimate_action_probability(self, tau, t, posterior_policies, posterior_contexts, *args):
 
-        #estimate action probability
-        control_prob = np.zeros(self.na)
-        for a in range(self.na):
-            control_prob[a] = posterior_policies[actions == a].sum()
+        #calculate action probability and integrate context out
+        posterior_actions = np.array([posterior_policies[self.policies[:,t] == a].sum(axis=0) for a in range (self.na)])
+        posterior_actions = np.einsum('pc,c->p', posterior_actions, posterior_contexts)
 
-
-        self.control_probability[tau, t] = control_prob
+        self.control_probability[tau, t] = posterior_actions
 
 
 class MaxSelector(object):

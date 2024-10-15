@@ -127,7 +127,7 @@ class World(object):
 
         if t==0:
             self.environment.set_initial_states(tau)
-            response = -1
+            response = self.environment.nan_int
         else:
             response = self.actions[tau, t-1]
             self.environment.update_hidden_states(tau, t, response)
@@ -135,7 +135,7 @@ class World(object):
         if self.agent.perception.infer_context:
             context = self.environment.generate_context_obs(tau)
         else:
-            context = -1
+            context = self.environment.nan_int
 
         if self.agent.perception.hidden_state_mapping:
             self.agent.perception.curr_states = self.environment.state_configuration[tau]
@@ -155,7 +155,7 @@ class World(object):
         if t < self.T-1:
             self.actions[tau, t] = self.agent.generate_response(tau, t)
         else:
-            self.actions[tau, t] = -1
+            self.actions[tau, t] = self.environment.nan_int
             
 class World_old(object):
 

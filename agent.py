@@ -43,29 +43,35 @@ class BayesianPlanner(object):
         # self.log_probability = 0
         self.perception.reset(params, fixed)
 
-    def generate_response(self, tau, t):
 
-        #get response probability
-        posterior_states = self.posterior_states[tau, t]
-        posterior_policies = np.einsum('pc,c->p', self.posterior_policies[tau, t], self.posterior_context[tau, 0])
-        posterior_policies /= posterior_policies.sum()
-        avg_likelihood = np.einsum('pc,c->p', self.likelihood[tau,t], self.posterior_context[tau, 0])
-        avg_likelihood /= avg_likelihood.sum()
-        prior = np.einsum('pc,c->p', self.prior_policies[tau-1], self.posterior_context[tau, 0])
-        prior /= prior.sum()
-        #print(self.posterior_context[tau, t])
-        non_zero = posterior_policies > 0
-        controls = self.policies[:, t]#[non_zero]
-        actions = np.unique(controls)
+    def generate_response(self, tau, t, posterior_policies, posterior_contexts,policies):
+
+
+        self.action_selection.select_desired_action(tau,
+                                                    t,
+                                                    posterior_policies,
+                                                    posterior_contexts,
+                                                    policies                
+                                                    )
+        # posterior_actions[tau,t] =\
+        # np.array([posterior[self.all_policies[:,t] == a].sum(axis=0) for a in range (self.na)])
+        # #get response probability
+        # posterior_actions = self.perception.posterior_actions[tau,t]
+        # posterior_context = self.perception.posterior_contexts[tau,]
+        # posterior_actions = np.einsum('pc,c->p', posterior_actions,posterior_context)
+
+        # controls = self.policies[:, t]#[non_zero]
+        # actions = ar.unique(controls)
         # posterior_policies = posterior_policies[non_zero]
         # avg_likelihood = avg_likelihood[non_zero]
         # prior = prior[non_zero]
 
-        self.actions[tau, t] = self.action_selection.select_desired_action(tau,
-                                        t, posterior_policies, controls, avg_likelihood, prior)
+        response = self.action_selection.select_desired_action(tau,
+                                        t, posterior_actions[:,0,0], actions, None, None)
 
 
-        return self.actions[tau, t]
+        return response
+
 
 
     def estimate_action_probability(self, tau, t, posterior_policies):

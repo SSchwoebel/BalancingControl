@@ -524,7 +524,8 @@ class PlanetWorld(object):
                  context_cues,
                  true_context,
                  trials = 10,
-                 T = 4
+                 T = 4,
+                 nan_int = -1111  # coding for nan value in rewards array
                 ):
 
         self.A = generative_model_observations                            # prob dist for generating observations
@@ -548,7 +549,7 @@ class PlanetWorld(object):
         self.hidden_states = np.zeros([trials, T],dtype=int)
         self.possible_states = np.arange(self.ns)
         self.possible_rewards = np.arange(self.nr)
-
+        self.nan_int = nan_int
 
 
     def set_initial_states(self, tau):
@@ -571,7 +572,7 @@ class PlanetWorld(object):
     def generate_rewards(self,tau,t):
         
         if t == 0:
-            reward = -1
+            reward = self.nan_int
         else:
             curr_loc = self.hidden_states[tau,t]
             rp = self.Rho[tau,:,curr_loc]                    # reward probability at current planet
