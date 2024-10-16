@@ -296,12 +296,26 @@ class HierarchicalPerception(object):
 
 
     def update_beliefs_dirichlet_rew_params(self, tau, t, reward, posterior_states, posterior_policies, posterior_context = [1]):
-        states = (posterior_states[:,t,:,:] * posterior_policies[None,:,:]).sum(axis=1)
+
+
         old = self.dirichlet_rew_params.copy()
-        # c = np.argmax(posterior_context)
-        # self.dirichlet_rew_params[reward,:,c] += states[:,c]
+        states = np.einsum('spc,pc -> sc', posterior_states[:,t,:,t], posterior_policies)      # sum_{pi}q(s|pi,c)q(pi|c) = q(s|c)
+
+        states_old = (posterior_states[:,t,:,:] * posterior_policies[None,:,:]).sum(axis=1)
+        assert(np.all(states == states_old),"new states approximation does not work")
+
+        posterior_states_given_context = np.zeros(self.nh, self.nc)
+
+        for h in range(self.nh):
+            posterior_states_given_context[h,:] = states[self.curr_states == h]
+            
         self.dirichlet_rew_params[:,self.non_decaying:,:] = (1-self.r_lambda) * self.dirichlet_rew_params[:,self.non_decaying:,:] +1 - (1-self.r_lambda)
-        self.dirichlet_rew_params[reward,:,:] += states * posterior_context[None,:]
+        assert(np.all(self.dirichlet_rew_params[:,self.non_decaying:,:] == old), "dirichlet rew_params not the same with decaying key word")
+
+        self.dirichlet_rew_params[reward,:,:] += states * posterior_context[None,:]      #  phi_ijk' = phi_ijk + delta_{i,r} q(s=j)q(c=k)
+        
+
+
         for c in range(self.nc):
             for state in range(self.nh):
                 #self.generative_model_rewards[:,state,c] = self.dirichlet_rew_params[:,state,c] / self.dirichlet_rew_params[:,state,c].sum()
@@ -361,10 +375,10 @@ class HierarchicalPerception(object):
                                                    prior_context, \
                                                    self.all_policies,\
                                                    context=context_observation)
-        elif self.nc>1 and t==0:
-            self.posterior_context[tau, t] = prior_context
-        else:
-            self.posterior_context[tau,t] = 1
+        # elif self.nc>1 and t==0:
+        #     self.posterior_context[tau, t] = prior_context
+        # else:
+        #     self.posterior_context[tau,t] = 1
 
         # print(tau,t)
         # print("prior", prior_context)
