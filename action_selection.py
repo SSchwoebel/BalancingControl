@@ -281,7 +281,6 @@ class AveragedSelector(object):
         
         self.n_pars = 0
         self.na = number_of_actions
-        self.policices = policies
         self.control_probability = np.zeros((trials, T, self.na))
         
     def reset_beliefs(self):
@@ -293,23 +292,16 @@ class AveragedSelector(object):
     def log_prior(self):
         return 0
 
-    def select_desired_action(self, tau, t, posterior_policies, posterior_contexts, *args):
+    def select_desired_action(self, tau, t, posterior_policies, actions, *args):
 
-        #estimate action probability
-        self.estimate_action_probability(tau, t, posterior_policies, posterior_contexts)
+        #generate the desired response from policy probability
+        npi = posterior_policies.shape[0]
+        pi = np.random.choice(npi, p = posterior_policies)
 
-        #generate the desired response from action probability
-        u = np.random.choice(self.na, p = self.control_probability[tau, t])
+        u = actions[pi]
 
         return u
 
-    def estimate_action_probability(self, tau, t, posterior_policies, posterior_contexts, *args):
-
-        #calculate action probability and integrate context out
-        posterior_actions = np.array([posterior_policies[self.policies[:,t] == a].sum(axis=0) for a in range (self.na)])
-        posterior_actions = np.einsum('pc,c->p', posterior_actions, posterior_contexts)
-
-        self.control_probability[tau, t] = posterior_actions
 
 
 class MaxSelector(object):

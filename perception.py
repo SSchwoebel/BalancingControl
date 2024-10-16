@@ -39,7 +39,6 @@ class HierarchicalPerception(object):
        
         self.prior_rewards = prior_rewards
         self.prior_states = prior_states
-        self.prior_policies = prior_policies
         self.prior_context = prior_context
         
         self.npi = prior_policies.shape[0]
@@ -54,7 +53,7 @@ class HierarchicalPerception(object):
         self.hidden_state_mapping = hidden_state_mapping
         self.infer_context = infer_context
         self.learn_rew = learn_rew
-        self.learn_pol = learn_pol
+        self.learn_habit = learn_pol
         
         
         self.pol_lambda = pol_lambda
@@ -90,6 +89,8 @@ class HierarchicalPerception(object):
         self.rewards = np.zeros((trials, self.T), dtype = int)
         self.context_obs = np.zeros((trials, self.T), dtype=int)
 
+        self.prior_policies = np.zeros([trials, self.npi, self.nc]) 
+        self.prior_policies[:] = prior_policies[None,:,:]
 
     def reset(self, params, fixed):
 
@@ -112,11 +113,12 @@ class HierarchicalPerception(object):
 
         self.obs_messages = np.zeros((self.nm, self.T, self.nc)) + 1/self.nm
         self.rew_messages = np.zeros((self.nm, self.T, self.nc))               #set t=0 to uniform?
+
         
         for c in range(self.nc):
 
             rew_message = self.prior_rewards.dot(self.generative_model_rewards[:,:,c])[:,np.newaxis]
-            self.rew_messages[:,:,c] = rew_message[[self.curr_states]][:,None]
+            self.rew_messages[:,1:,c] = rew_message[[self.curr_states]][:,None]
 
             for pi, cstates in enumerate(self.all_policies):
                 for t, u in enumerate(np.flip(cstates, axis = 0)):
@@ -128,7 +130,10 @@ class HierarchicalPerception(object):
                         .dot(self.generative_model_states[:,:,u,c])
                     self.bwd_messages[:,tp, pi,c] /= self.bwd_messages[:,tp,pi,c].sum()
 
+        # tgt specific!
+        self.rew_messages[:,0,:] = 1./self.nm  
 
+        
     def update_messages(self, t, pi, cs, c=0):
         if t > 0:
             for i, u in enumerate(np.flip(cs[:t], axis = 0)):
@@ -177,22 +182,18 @@ class HierarchicalPerception(object):
         #estimate expected state distribution
         if t == 0:
             self.instantiate_messages()
+        else:
+            self.rew_messages[:,t,:] = self.generative_model_rewards[:,self.curr_states,:][reward]
+            self.rew_messages[:,t+1:,:] = np.einsum("r,rsc->sc",self.prior_rewards,self.generative_model_rewards)[self.curr_states,None,:]
 
         self.obs_messages[:,t,:] = self.generative_model_observations[observation][:,None]
 
-        # tgt specific!
-        if t == 0:
-            self.rew_messages[:,t,:] = 1./self.nm  
-        else:
-            self.rew_messages[:,t,:] = self.generative_model_rewards[:,[self.curr_states],:][reward]
-        
         for c in range(self.nc):
             for pi, cs in enumerate(self.all_policies):
                 if self.prior_policies[pi,c] > 1e-15 and self.possible_policies[pi]:
                     self.update_messages(t, pi, cs, c)
                 else:
                     self.fwd_messages[:,:,pi,c] = 0#1./self.nh
-
         #estimate posterior state distribution
         posterior = self.fwd_messages*self.bwd_messages*self.obs_messages[:,:,np.newaxis,:]*self.rew_messages[:,:,np.newaxis,:]
         norm = posterior.sum(axis = 0)
@@ -285,6 +286,7 @@ class HierarchicalPerception(object):
 
     def update_beliefs_dirichlet_pol_params(self, tau, t, posterior_policies, posterior_context = [1]):
         assert(t == self.T-1)
+        
         chosen_pol = np.argmax(posterior_policies, axis=0)
 #        self.dirichlet_pol_params[chosen_pol,:] += posterior_context.sum(axis=0)/posterior_context.sum()
         self.dirichlet_pol_params = (1-self.pol_lambda) * self.dirichlet_pol_params + 1 - (1-self.pol_lambda)
@@ -299,22 +301,14 @@ class HierarchicalPerception(object):
 
 
         old = self.dirichlet_rew_params.copy()
-        states = np.einsum('spc,pc -> sc', posterior_states[:,t,:,t], posterior_policies)      # sum_{pi}q(s|pi,c)q(pi|c) = q(s|c)
+        states = np.einsum('spc,pc -> sc', posterior_states[:,t,:,:], posterior_policies)      # sum_{pi}q(s|pi,c)q(pi|c) = q(s|c)
 
-        states_old = (posterior_states[:,t,:,:] * posterior_policies[None,:,:]).sum(axis=1)
-        assert(np.all(states == states_old),"new states approximation does not work")
-
-        posterior_states_given_context = np.zeros(self.nh, self.nc)
-
+        posterior_states_given_context = np.zeros([self.nh, self.nc])
         for h in range(self.nh):
-            posterior_states_given_context[h,:] = states[self.curr_states == h]
-            
+            posterior_states_given_context[h,:] = states[self.curr_states == h].sum(axis=0)
+
         self.dirichlet_rew_params[:,self.non_decaying:,:] = (1-self.r_lambda) * self.dirichlet_rew_params[:,self.non_decaying:,:] +1 - (1-self.r_lambda)
-        assert(np.all(self.dirichlet_rew_params[:,self.non_decaying:,:] == old), "dirichlet rew_params not the same with decaying key word")
-
-        self.dirichlet_rew_params[reward,:,:] += states * posterior_context[None,:]      #  phi_ijk' = phi_ijk + delta_{i,r} q(s=j)q(c=k)
-        
-
+        self.dirichlet_rew_params[reward,:,:] += posterior_states_given_context * posterior_context[None,:]      #  phi_ijk' = phi_ijk + delta_{i,r} q(s=j)q(c=k)
 
         for c in range(self.nc):
             for state in range(self.nh):
@@ -323,7 +317,7 @@ class HierarchicalPerception(object):
                 np.exp(scs.digamma(self.dirichlet_rew_params[:,state,c])\
                         -scs.digamma(self.dirichlet_rew_params[:,state,c].sum()))
                 self.generative_model_rewards[:,state,c] /= self.generative_model_rewards[:,state,c].sum()
-            self.rew_messages[:,t+1:,c] = self.prior_rewards.dot(self.generative_model_rewards[:,:,c])[:,None]
+            # self.rew_messages[:,t+1:,c] = self.prior_rewards.dot(self.generative_model_rewards[:,:,c])[:,None]
 #        for c in range(self.nc):
 #            for pi, cs in enumerate(policies):
 #                if self.prior_policies[pi,c] > 1e-15:
@@ -401,7 +395,7 @@ class HierarchicalPerception(object):
                                                   self.posterior_context[tau,t])
         #if reward > 0:
         # check later if stuff still works!
-        if self.learn_rew:# and t>0:#==self.T-1:
+        if self.learn_rew and t>0:#==self.T-1:
             self.posterior_dirichlet_rew[tau,t] = self.update_beliefs_dirichlet_rew_params(tau, t, \
                                                             reward, \
                                                    self.posterior_states[tau, t], \
@@ -653,4 +647,3 @@ class TwoStepPerception(object):
 #                    self.fwd_messages[:,:,pi,c] = 1./self.nh #0
 
         return self.dirichlet_rew_params
-

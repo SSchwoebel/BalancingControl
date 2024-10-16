@@ -529,7 +529,7 @@ class PlanetWorld(object):
                 ):
 
         self.A = generative_model_observations                            # prob dist for generating observations
-        self.B = generative_model_states                                  # prob dist for state transitions
+        self.B = generative_model_states[:,:,:,0]                                  # prob dist for state transitions
         self.trials = trials                                              # mb corresponds to number of miniblocks
         self.true_context = np.array(true_context)                        # what is the true currently active context
         self.ns = generative_model_states.shape[0]                        # number of unique locations
@@ -542,7 +542,7 @@ class PlanetWorld(object):
         self.npl = self.Rho[0].shape[1]                      # number of unique planet types
 
         self.context_cues = np.array(context_cues,dtype=int)              # background colors, look at run_agent_simulation, load vars for coding
-        self.state_configuration = planet_configurations                          # planet identities for each trial
+        self.state_mapping = planet_configurations                          # planet identities for each trial
         self.starting_position = starts                                   # initial rocket position for each trial
         # hidden states tracks location and not planet identity
         
@@ -566,7 +566,7 @@ class PlanetWorld(object):
 
     def update_hidden_states(self,tau, t, action):
         curr_loc =  self.hidden_states[tau,t-1]
-        self.hidden_states[tau,t] = np.random_choice(self.possible_states, p=self.B[:,curr_loc,action],size=1)
+        self.hidden_states[tau,t] = np.random.choice(self.possible_states, p=self.B[:,curr_loc,action],size=1)
 
 
     def generate_rewards(self,tau,t):
@@ -574,7 +574,7 @@ class PlanetWorld(object):
         if t == 0:
             reward = self.nan_int
         else:
-            curr_loc = self.hidden_states[tau,t]
+            curr_loc = self.state_mapping[tau,self.hidden_states[tau,t]]
             rp = self.Rho[tau,:,curr_loc]                    # reward probability at current planet
             reward = np.random.choice(self.possible_rewards, p=rp,size=1)
         

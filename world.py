@@ -138,7 +138,7 @@ class World(object):
             context = self.environment.nan_int
 
         if self.agent.perception.hidden_state_mapping:
-            self.agent.perception.curr_states = self.environment.state_configuration[tau]
+            self.agent.perception.curr_states = self.environment.state_mapping[tau]
         else:
             self.agent.perception.curr_states = np.arange(self.agent.percepiton.nh)
         self.observations[tau, t] = \
@@ -151,9 +151,8 @@ class World(object):
 
         self.agent.update_beliefs(tau, t, observation, reward, response, context)
 
-
         if t < self.T-1:
-            self.actions[tau, t] = self.agent.generate_response(tau, t)
+            self.actions[tau, t] = self.agent.generate_response(tau, t, )
         else:
             self.actions[tau, t] = self.environment.nan_int
             

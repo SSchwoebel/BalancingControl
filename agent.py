@@ -22,6 +22,8 @@ class BayesianPlanner(object):
         self.na = self.perception.na
         self.T = self.perception.T
         self.trials = self.perception.T
+
+
     def update_beliefs(self, tau, t, observation, reward, prev_response, context):
         
         self.perception.update_beliefs(tau, t, observation, reward, prev_response, context)
@@ -44,32 +46,18 @@ class BayesianPlanner(object):
         self.perception.reset(params, fixed)
 
 
-    def generate_response(self, tau, t, posterior_policies, posterior_contexts,policies):
+    def generate_response(self, tau, t):
 
+        posterior_policies_given_context = self.perception.posterior_policies[tau,t]
+        posterior_context = self.perception.posterior_context[tau,t]
+        policies = self.perception.all_policies
 
-        self.action_selection.select_desired_action(tau,
-                                                    t,
-                                                    posterior_policies,
-                                                    posterior_contexts,
-                                                    policies                
-                                                    )
-        # posterior_actions[tau,t] =\
-        # np.array([posterior[self.all_policies[:,t] == a].sum(axis=0) for a in range (self.na)])
-        # #get response probability
-        # posterior_actions = self.perception.posterior_actions[tau,t]
-        # posterior_context = self.perception.posterior_contexts[tau,]
-        # posterior_actions = np.einsum('pc,c->p', posterior_actions,posterior_context)
-
-        # controls = self.policies[:, t]#[non_zero]
-        # actions = ar.unique(controls)
-        # posterior_policies = posterior_policies[non_zero]
-        # avg_likelihood = avg_likelihood[non_zero]
-        # prior = prior[non_zero]
+        posterior_policies = np.einsum('pc,c -> p', posterior_policies_given_context, posterior_context)
 
         response = self.action_selection.select_desired_action(tau,
-                                        t, posterior_actions[:,0,0], actions, None, None)
-
-
+                                                    t,
+                                                    posterior_policies,
+                                                    policies[:,t])
         return response
 
 
