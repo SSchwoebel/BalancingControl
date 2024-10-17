@@ -4,17 +4,34 @@ import numpy as np
 import scipy.special as scs
 import matplotlib.pylab as plt
 import seaborn as sns
+import json
+import jsonpickle as pickle
+import jsonpickle.ext.numpy as jsonpickle_numpy
+
+def save_file(data,fname, mode="w"):
+
+    jsonpickle_numpy.register_handlers()
+    pickled = pickle.encode(data)
+    with open(fname, 'w') as outfile:
+        json.dump(pickled, outfile)
+
+def load_file(fname, mode="r"):
+    
+    jsonpickle_numpy.register_handlers()
+    with open(fname, 'r') as infile:
+        data = json.load(infile)
+    return pickle.decode(data)
 
 
 
 def normalize(matrix, dim=0):
     
     normalization_constant = matrix.sum(axis=dim)
-    matrix /= normalization_constant
+    normalized_matrix = matrix/normalization_constant
 
-    assert np.all(np.isclose(matrix.sum(axis=dim), 1)), "Probability distribution is not normalized!"
+    assert np.all(np.isclose(normalized_matrix.sum(axis=dim), 1)), "Probability distribution is not normalized!"
 
-    return matrix
+    return normalized_matrix
 
 
 def evolve_environment(env):

@@ -47,6 +47,7 @@ class HierarchicalPerception(object):
         self.na = np.size(np.unique(all_policies))
         self.nc = prior_context.size
         self.T = T
+        self.trials = trials
         self.all_policies = all_policies
         self.all_rewards = all_rewards
         
@@ -92,6 +93,7 @@ class HierarchicalPerception(object):
         self.prior_policies = np.zeros([trials, self.npi, self.nc]) 
         self.prior_policies[:] = prior_policies[None,:,:]
 
+        self.pars = pars
     def reset(self, params, fixed):
 
         alphas = np.zeros((self.npi, self.nc)) + params
@@ -190,7 +192,7 @@ class HierarchicalPerception(object):
 
         for c in range(self.nc):
             for pi, cs in enumerate(self.all_policies):
-                if self.prior_policies[pi,c] > 1e-15 and self.possible_policies[pi]:
+                if self.prior_policies[tau,pi,c] > 1e-15 and self.possible_policies[pi]:
                     self.update_messages(t, pi, cs, c)
                 else:
                     self.fwd_messages[:,:,pi,c] = 0#1./self.nh
@@ -207,7 +209,7 @@ class HierarchicalPerception(object):
 
         #print((prior_policies>1e-4).sum())
         likelihood = self.fwd_norms.prod(axis=0)
-        posterior = np.power(likelihood, self.dec_temp) * self.prior_policies
+        posterior = np.power(likelihood, self.dec_temp) * self.prior_policies[tau]
         likelihood /= likelihood.sum(axis=0)[None,:]
         posterior/= posterior.sum(axis=0)[None,:]
         posterior = np.nan_to_num(posterior)
@@ -291,10 +293,10 @@ class HierarchicalPerception(object):
 #        self.dirichlet_pol_params[chosen_pol,:] += posterior_context.sum(axis=0)/posterior_context.sum()
         self.dirichlet_pol_params = (1-self.pol_lambda) * self.dirichlet_pol_params + 1 - (1-self.pol_lambda)
         self.dirichlet_pol_params[chosen_pol,:] += posterior_context
-        self.prior_policies[:] = self.dirichlet_pol_params.copy() #np.exp(scs.digamma(self.dirichlet_pol_params) - scs.digamma(self.dirichlet_pol_params.sum(axis=0))[None,:])
-        self.prior_policies /= self.prior_policies.sum(axis=0)[None,:]
+        prior_policies = self.dirichlet_pol_params.copy() #np.exp(scs.digamma(self.dirichlet_pol_params) - scs.digamma(self.dirichlet_pol_params.sum(axis=0))[None,:])
+        prior_policies /= prior_policies.sum(axis=0)[None,:]
 
-        return self.dirichlet_pol_params, self.prior_policies
+        return self.dirichlet_pol_params, prior_policies
 
 
     def update_beliefs_dirichlet_rew_params(self, tau, t, reward, posterior_states, posterior_policies, posterior_context = [1]):

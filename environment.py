@@ -525,7 +525,7 @@ class PlanetWorld(object):
                  true_context,
                  trials = 10,
                  T = 4,
-                 nan_int = -1111  # coding for nan value in rewards array
+                 nan_int = -1111,                     # coding for nan value in rewards array,
                 ):
 
         self.A = generative_model_observations                            # prob dist for generating observations
