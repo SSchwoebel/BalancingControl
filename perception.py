@@ -94,6 +94,8 @@ class HierarchicalPerception(object):
         self.prior_policies[:] = prior_policies[None,:,:]
 
         self.pars = pars
+   
+   
     def reset(self, params, fixed):
 
         alphas = np.zeros((self.npi, self.nc)) + params
@@ -101,8 +103,7 @@ class HierarchicalPerception(object):
         self.dirichlet_rew_params[:] = fixed['beta_rew'].copy()
         self.prior_policies[:] = alphas / alphas.sum(axis=0)[None,:]
         self.dirichlet_pol_params = alphas
-
-
+        
 
     def instantiate_messages(self):
 
@@ -384,8 +385,8 @@ class HierarchicalPerception(object):
         #     post_pol = np.dot(self.posterior_policies[tau, t], self.posterior_context[tau, t])
         #     self.posterior_actions[tau, t] = self.estimate_action_probability(tau, t, post_pol)
 
-        if t == self.T-1 and self.learn_habit:
-            self.posterior_dirichlet_pol[tau], self.prior_policies[tau] = self.update_beliefs_dirichlet_pol_params(tau, t, \
+        if t == self.T-1 and self.learn_habit and tau < self.trials-1:
+            self.posterior_dirichlet_pol[tau], self.prior_policies[tau+1] = self.update_beliefs_dirichlet_pol_params(tau, t, \
                                                             self.posterior_policies[tau,t], \
                                                             self.posterior_context[tau,t])
 
