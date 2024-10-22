@@ -266,14 +266,14 @@ class HierarchicalPerception(object):
                 #policy_surprise = (post_policies[:,None] * scs.digamma(alpha_prime)).sum(axis=0) - scs.digamma(alpha_prime.sum(axis=0))
                 policy_surprise = (posterior_policies * scs.digamma(alpha_prime)).sum(axis=0) - scs.digamma(alpha_prime.sum(axis=0))
             else:
-                outcome_surprise = 0
-                entropy = 0
-                policy_surprise = 0
+                outcome_surprise = np.zeros(self.nc)
+                entropy = np.zeros(self.nc)
+                policy_surprise = np.zeros(self.nc)
                 
             if context is not None:
                 context_obs_suprise = ln(self.generative_model_context[context]+1e-10)
             else:
-                context_obs_suprise = 0
+                context_obs_suprise = np.zeros(self.nc)
             posterior = outcome_surprise + policy_surprise + entropy + context_obs_suprise
 
                         #+ np.nan_to_num((posterior_policies * ln(self.fwd_norms).sum(axis = 0))).sum(axis=0)#\
@@ -283,7 +283,40 @@ class HierarchicalPerception(object):
 #                print(tau, np.exp(outcome_surprise[1])/np.exp(outcome_surprise[0]), np.exp(policy_surprise[1])/np.exp(policy_surprise[0]))
 
             posterior = np.nan_to_num(softmax(posterior+ln(prior_context)))
-
+            
+            if np.argmax(posterior) != self.pars["context"][tau]:
+                
+                if context % 2 == 0:
+                    i1 = 2
+                    i0 = 0
+                else:
+                    i1 = 3
+                    i0 = 1
+                 
+                print(f"\n,{tau},{t},trial_type{self.pars['trial_type'][tau]}")
+                print(f"inferred: {np.argmax(posterior)}, true: {self.pars['context'][tau]}")
+                print("outcome_surprise")
+                print((outcome_surprise[i1] -outcome_surprise[i0]).round(3))
+                
+                print("policy_surprise")
+                print((policy_surprise[i1] -policy_surprise[i0]).round(3))
+                
+                print("entropy")
+                print((entropy[i1] -entropy[i0]).round(3))
+                
+                
+                print("context_obs_suprise")
+                print((context_obs_suprise[i1] -context_obs_suprise[i0]).round(3))
+                
+                print("prior_context")
+                print((ln(prior_context)[i1] -ln(prior_context)[i0]).round(3))
+                                
+                print("posterior")
+                print(posterior.round(3))
+                
+        if tau == 100:
+            57 == 0
+                
         return posterior
 
 
@@ -344,7 +377,15 @@ class HierarchicalPerception(object):
             prior_context = np.dot(self.transition_matrix_context, self.posterior_context[tau-1, -1])#.reshape((self.nc))
 #            else:
 #                prior_context = np.dot(self.transition_matrix_context, self.posterior_context[tau, t-1])
-
+            if self.pars["trial_type"][tau] == 0 and tau % 5 == 0:
+                # print("\n",tau,t)
+                # print(prior_context)
+                prior_context = (np.eye(4)[context_observation] + 0.05) / (np.eye(4)[context_observation] + 0.05).sum()
+                # print(prior_context)
+        
+        # if tau == 33:
+        #     a = 0
+                
         if t==0:
             self.possible_policies = np.ones(self.npi, dtype=bool)
         else:
@@ -361,6 +402,7 @@ class HierarchicalPerception(object):
         self.posterior_policies[tau, t],\
         self.likelihood_policies[tau,t] = self.update_beliefs_policies(tau, t)
 
+        
 
         # check here what to do with the greater and equal sign
         if self.nc>1:

@@ -400,7 +400,8 @@ def generate_experiment(na=2,
                         degradation_blocks=4,
                         extinction_blocks=4,
                         seed=3,
-                        path=None):
+                        path=None,
+                        fname=None):
 
     # calculate some important shared quantities
     nr = unique_rewards.size
@@ -462,12 +463,15 @@ def generate_experiment(na=2,
                     } 
 
     # create config fname
-    fname = (
-            f"exp_config_switch{int(switch_context_cues_during_degradation)}"
-            f"_context_blocked{int(grouped_context_presentation)}"
-            f"_same_habit{int(same_habit_during_training_and_degradation)}"
-            f"_{training_blocks}{degradation_blocks}{extinction_blocks}_{trials_per_block}_nr{nr}.json"
-    )
+    if fname is not None:
+        fname += '_experiment_config.json'
+    else:
+        fname = (
+                f"exp_config_switch{int(switch_context_cues_during_degradation)}"
+                f"_context_blocked{int(grouped_context_presentation)}"
+                f"_same_habit{int(same_habit_during_training_and_degradation)}"
+                f"_{training_blocks}{degradation_blocks}{extinction_blocks}_{trials_per_block}_nr{nr}.json"
+        )
     # save config file
     fname = os.path.join(path, fname)
     print('created: ', fname)
