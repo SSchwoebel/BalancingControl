@@ -103,6 +103,7 @@ def run_single_simulation(pars):
                                   pars["context"],
                                   trials = pars["trials"],
                                   T = pars["T"],
+                                  all_rewards = pars["all_rewards"]
                                   )
 
     world = World(environment, agent, trials = pars["trials"], T = pars["T"])

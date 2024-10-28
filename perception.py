@@ -79,6 +79,10 @@ class HierarchicalPerception(object):
         self.posterior_dirichlet_pol = np.zeros((trials, self.npi, self.nc))
         self.posterior_context = np.ones((trials, T, self.nc)) 
         self.posterior_context[0,:,:] = prior_context[None,:]
+        self.outcome_surprise_log = np.ones((trials, T, self.nc)) 
+        self.policy_entropy_log = np.ones((trials, T, self.nc)) 
+        self.policy_surprise_log = np.ones((trials, T, self.nc)) 
+        self.context_obs_surprise_log = np.ones((trials, T, self.nc))
         # self.posterior_actions = np.zeros((trials, T, self.na))
         # self.posterior_actions[:,0,:] = np.nan
         self.posterior_rewards = np.zeros((trials, T, self.nr))
@@ -186,7 +190,8 @@ class HierarchicalPerception(object):
         if t == 0:
             self.instantiate_messages()
         else:
-            self.rew_messages[:,t,:] = self.generative_model_rewards[:,self.curr_states,:][reward]
+            reward_ind = np.argmax(reward == self.all_rewards)
+            self.rew_messages[:,t,:] = self.generative_model_rewards[:,self.curr_states,:][reward_ind]
             self.rew_messages[:,t+1:,:] = np.einsum("r,rsc->sc",self.prior_rewards,self.generative_model_rewards)[self.curr_states,None,:]
 
         self.obs_messages[:,t,:] = self.generative_model_observations[observation][:,None]
@@ -275,10 +280,11 @@ class HierarchicalPerception(object):
             posterior = outcome_surprise + policy_surprise + entropy + context_obs_suprise +ln(prior_context)
 
             
-            if np.argmax(np.nan_to_num(softmax(posterior))) != self.pars["context"][tau]:
-                a=0
+            # if np.argmax(np.nan_to_num(softmax(posterior))) != self.pars["context"][tau]:
+            #     a=0
                 
-                # if tau%30 == 0:
+            if tau == 6 and t== 1:
+                a = 0
                 
             if self.pars["context"][tau] % 2 == 0:
                 i1 = 2
@@ -288,7 +294,8 @@ class HierarchicalPerception(object):
                 i0 = 1
             if t==0:
                 print(f"-----------------------------------------------------------")
-            print(f"\n{tau},{t}, {self.pars['trial_type'][tau]}")
+                
+            print(f"\n{self.pars['trial_type'][tau]}, {tau},{t}")
             print(f"inferred: {np.argmax(np.nan_to_num(softmax(posterior))) == self.pars['context'][tau]}")
             print(f"context : {context}")
             print(f"rewards : {self.rewards[tau,:t+1]}")
@@ -297,7 +304,8 @@ class HierarchicalPerception(object):
             print(f"inferred: {np.argmax(posterior)}")
             print(f"true    : {self.pars['context'][tau]}\n")
             
-            print(f"      F(pi,c): {(outcome_surprise[i0] - outcome_surprise[i1]).round(3)}")     
+            print(f"full  F(pi,c): {outcome_surprise}")    
+            print(f"      F(pi,c): {(outcome_surprise[i0] - outcome_surprise[i1]).round(3)}")    
             print(f"q(p) ln p'(p): {(policy_surprise[i0] -policy_surprise[i1]).round(3)}")
             print(f"q(p) ln q (p): {((entropy[i0] -entropy[i1]).round(3))}")
             print(f"    ln p(d|c): {(context_obs_suprise[i0] -context_obs_suprise[i1]).round(3)}")
@@ -305,9 +313,16 @@ class HierarchicalPerception(object):
             print(f"   summed log: {posterior.round(3)}")
             print(f"       summed: {np.nan_to_num(softmax(posterior)).round(3)}\n")
 
-            print(self.generative_model_rewards[:,:,i0].round(5))
-            print(self.generative_model_rewards[:,:,i1].round(5))
+            print(posterior_policies.round(3))
+            print(ln(self.fwd_norms.prod(axis=0)).round(3))
+            # print(self.generative_model_rewards[:,:,i0].round(5))
+            # print(self.generative_model_rewards[:,:,i1].round(5))
            
+            self.outcome_surprise_log[tau,t] = outcome_surprise
+            self.policy_entropy_log[tau,t] = entropy
+            self.policy_surprise_log[tau,t] = policy_surprise 
+            self.context_obs_surprise_log[tau,t] = context_obs_suprise
+            
             posterior = np.nan_to_num(softmax(posterior))
 
         return posterior
@@ -328,7 +343,7 @@ class HierarchicalPerception(object):
 
     def update_beliefs_dirichlet_rew_params(self, tau, t, reward, posterior_states, posterior_policies, posterior_context = [1]):
 
-
+        reward_ind = np.argmax(self.all_rewards == reward)
         old = self.dirichlet_rew_params.copy()
         states = np.einsum('spc,pc -> sc', posterior_states[:,t,:,:], posterior_policies)      # sum_{pi}q(s|pi,c)q(pi|c) = q(s|c)
 
@@ -337,7 +352,7 @@ class HierarchicalPerception(object):
             posterior_states_given_context[h,:] = states[self.curr_states == h].sum(axis=0)
 
         self.dirichlet_rew_params[:,self.non_decaying:,:] = (1-self.r_lambda) * self.dirichlet_rew_params[:,self.non_decaying:,:] +1 - (1-self.r_lambda)
-        self.dirichlet_rew_params[reward,:,:] += posterior_states_given_context * posterior_context[None,:]      #  phi_ijk' = phi_ijk + delta_{i,r} q(s=j)q(c=k)
+        self.dirichlet_rew_params[reward_ind,:,:] += posterior_states_given_context * posterior_context[None,:]      #  phi_ijk' = phi_ijk + delta_{i,r} q(s=j)q(c=k)
 
         for c in range(self.nc):
             for state in range(self.nh):
@@ -346,6 +361,7 @@ class HierarchicalPerception(object):
                 np.exp(scs.digamma(self.dirichlet_rew_params[:,state,c])\
                         -scs.digamma(self.dirichlet_rew_params[:,state,c].sum()))
                 self.generative_model_rewards[:,state,c] /= self.generative_model_rewards[:,state,c].sum()
+                
             # self.rew_messages[:,t+1:,c] = self.prior_rewards.dot(self.generative_model_rewards[:,:,c])[:,None]
 #        for c in range(self.nc):
 #            for pi, cs in enumerate(policies):
@@ -376,8 +392,7 @@ class HierarchicalPerception(object):
                 prior_context = (np.eye(4)[context_observation] + 0.05) / (np.eye(4)[context_observation] + 0.05).sum()
                 # print(prior_context)
         
-        # if tau == 33:
-        #     a = 0
+
                 
         if t==0:
             self.possible_policies = np.ones(self.npi, dtype=bool)
