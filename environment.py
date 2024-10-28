@@ -231,6 +231,7 @@ class TaskSwitching(object):
         c = np.random.choice(self.Chi.shape[0], p=self.Chi[self.contexts[tau]])
         return c
     
+    
 class TaskSwitchingOneConext(object):
 
     def __init__(self, Omega, Theta, Rho, Chi, start_states, contexts,
@@ -313,7 +314,7 @@ class TaskSwitchingOneConext(object):
         
         #c = np.random.choice(self.Chi.shape[0], p=self.Chi[self.contexts[tau]])
         return 0#c
-    
+
 
 class Flanker(object):
 
@@ -526,6 +527,7 @@ class PlanetWorld(object):
                  trials = 10,
                  T = 4,
                  nan_int = -1111,                     # coding for nan value in rewards array,
+                 all_rewards = np.array([-1,0,1])
                 ):
 
         self.A = generative_model_observations                            # prob dist for generating observations
@@ -548,7 +550,7 @@ class PlanetWorld(object):
         
         self.hidden_states = np.zeros([trials, T],dtype=int)
         self.possible_states = np.arange(self.ns)
-        self.possible_rewards = np.arange(self.nr)
+        self.possible_rewards = all_rewards
         self.nan_int = nan_int
 
 
