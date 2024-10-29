@@ -47,8 +47,9 @@ def run_single_simulation(pars):
     pars["transition_matrix_context"] = transition_matrix_context
 
     ### set context prior p(c_1)
-    prior_context = np.zeros((nc)) + 0.1/(nc-1)
-    prior_context[0] = 0.9
+    p=0.99
+    prior_context = np.zeros((nc)) + (1-p)/(nc-1)
+    prior_context[0] = p
     pars["prior_context"] = prior_context
 
     ### set policy prior p(pi|c)
@@ -63,8 +64,8 @@ def run_single_simulation(pars):
     
     ### set context cue likelihood p(d|c)
     C_counts = np.ones((2,nc))
-    C_counts = np.array([[0.01,0.01,0.01,0.01],
-                         [0.01,0.01,0.01,0.01]])
+    C_counts = np.array([[0.1,0.1,0.1,0.1],
+                         [0.1,0.1,0.1,0.1]])
     C = C_counts / C_counts.sum(axis=0)
     print(C)
     # C = np.array([[1,0,1,0],
