@@ -28,6 +28,8 @@ green_pal = sns.color_palette(["#095b3a", "#637f4f","#7cbc53","#d2e4d6"])
 # sys.path.append(os.path.join(os.getcwd(),'..','..','code','BalancingControl'))
 #If running file normally:
 # sys.path.append(os.path.join(os.getcwd(),'code','BalancingControl'))
+
+
 import action_selection as asl
 import agent as agt
 import perception as prc
@@ -35,6 +37,7 @@ import environment as env
 from world import World
 
 from misc import load_file, save_file, normalize
+
 
 def run_single_simulation(pars):
     
@@ -133,6 +136,7 @@ def run_single_simulation(pars):
     ### save data file
     return world
 
+
 def create_data_frame(exp_name, current_dir, data_folder="raw_data"):
     fnames = load_file(exp_name +  '_sim_file_names.json')
     dfs = []
@@ -206,6 +210,7 @@ def create_data_frame(exp_name, current_dir, data_folder="raw_data"):
     
     df.to_excel(exp_name + "_data_long_format.xlsx")
     return df
+
 
 def plot_choice_accuracy_alpha_rho(dataframe,simulation_params):
 
@@ -287,12 +292,15 @@ def plot_context_entropy_t_alpha_rho(dataframe, simulation_params):
 
 
 def plot_average_DKL(rho, dataframe, simulation_params):
+    
     df = dataframe.copy().query(f"t == 0")
-    fig,axes = plt.subplots(4,1,figsize=(16,15))
+    
+    fig,axes = plt.subplots(1,4,figsize=(13,3))
+    plt.tight_layout()
     for context,palette in zip([0,1,2,3],["Blues_r","Reds_r"]*2):
         sns.lineplot(ax=axes[context], data=df.query(f"context_trans_prob == {rho}"), x="trial",y=f"dkl_{context}",hue="alpha_0",errorbar="sd", palette=palette)
-        axes[context].set_xticks(np.arange(1,510,5))
-        axes[context].set_xticklabels(np.arange(1,510,5), rotation=90,fontsize=8)  # Rotate x-tick labels
+        # axes[context].set_xticks(np.arange(1,510,5))
+        # axes[context].set_xticklabels(np.arange(1,510,5), rotation=90,fontsize=8)  # Rotate x-tick labels
         axes[context].set_xlim([0, (simulation_params["training_blocks"] + simulation_params["degradation_blocks"])*simulation_params["trials_per_block"]])
         axes[context].set_title(fr"$\rho$ = {rho}")
 
@@ -304,7 +312,7 @@ def animate_histogram(data, interval=500):
     def update(frame):
         ax.clear()
         sns.heatmap(data[frame], annot=True, cmap="viridis", cbar=False, fmt='.2f',ax=ax)
-        ax.set_title(frame)
+        ax.set_title(frame+1)
 
     animation = FuncAnimation(fig, update, frames=data.shape[0], interval=interval)
 

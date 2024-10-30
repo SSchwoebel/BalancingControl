@@ -41,7 +41,6 @@ class HierarchicalPerception(object):
        
         self.prior_rewards = prior_rewards
         self.prior_states = prior_states
-        self.prior_context = prior_context
         
         self.npi = prior_policies.shape[0]
         self.nh = prior_states.shape[0]
@@ -104,7 +103,9 @@ class HierarchicalPerception(object):
 
         self.prior_policies = np.zeros([trials, self.npi, self.nc]) 
         self.prior_policies[:] = prior_policies[None,:,:]
-
+        self.prior_context = np.zeros((trials,T, self.nc))
+        self.prior_context[0,:,:] = prior_context[None,:]
+        
         self.pars = pars
    
    
@@ -287,10 +288,6 @@ class HierarchicalPerception(object):
                 
             posterior = outcome_surprise + policy_surprise + entropy + context_obs_suprise +ln(prior_context)
         
-        
-            # if tau > 150 and tau < 260:
-            #     a = 0
-
             # if self.pars["context"][tau] % 2 == 0:
             #     i1 = 2
             #     i0 = 0
@@ -309,24 +306,35 @@ class HierarchicalPerception(object):
             # print(f"inferred: {np.argmax(posterior)}")
             # print(f"true    : {self.pars['context'][tau]}\n")
             
-            # print(f"full  F(pi,c): {outcome_surprise}")    
-            # print(f"      F(pi,c): {(outcome_surprise[i0] - outcome_surprise[i1]).round(3)}")    
-            # print(f"q(p) ln p'(p): {(policy_surprise[i0] -policy_surprise[i1]).round(3)}")
-            # print(f"q(p) ln q (p): {((entropy[i0] -entropy[i1]).round(3))}")
-            # print(f"    ln p(d|c): {(context_obs_suprise[i0] -context_obs_suprise[i1]).round(3)}")
-            # print(f"    ln  p'(c): {(ln(prior_context)[i0] -ln(prior_context)[i1]).round(3)}")      
+
+            # print(f"      F(pi,c): {outcome_surprise.round(3)}")    
+            # print(f"q(p) ln p'(p): {policy_surprise.round(3)}")
+            # print(f"q(p) ln q (p): {(entropy.round(3))}")
+            # print(f"    ln p(d|c): {context_obs_suprise.round(3)}")
+            # print(f"    ln  p'(c): {ln(prior_context).round(3)}")      
             # print(f"   summed log: {posterior.round(3)}")
             # print(f"       summed: {np.nan_to_num(softmax(posterior)).round(3)}\n")
 
+            # # print(f"      F(pi,c): {(outcome_surprise[i0] - outcome_surprise[i1]).round(3)}")    
+            # # print(f"q(p) ln p'(p): {(policy_surprise[i0] -policy_surprise[i1]).round(3)}")
+            # # print(f"q(p) ln q (p): {((entropy[i0] -entropy[i1]).round(3))}")
+            # # print(f"    ln p(d|c): {(context_obs_suprise[i0] -context_obs_suprise[i1]).round(3)}")
+            # # print(f"    ln  p'(c): {(ln(prior_context)[i0] -ln(prior_context)[i1]).round(3)}")      
+            # # print(f"   summed log: {posterior.round(3)}")
+            # # print(f"       summed: {np.nan_to_num(softmax(posterior)).round(3)}\n")
+
             # # print(posterior_policies.round(3))
             # # print(ln(self.fwd_norms.prod(axis=0)).round(3))
-            # print(self.generative_model_rewards[:,:,0].round(5))
-            # print(self.generative_model_rewards[:,:,1].round(5))
-            # print(self.generative_model_rewards[:,:,2].round(5))
-            # print(self.generative_model_rewards[:,:,3].round(5))
+            # # print(self.generative_model_rewards[:,:,0].round(5))
+            # # print(self.generative_model_rewards[:,:,1].round(5))
+            # # print(self.generative_model_rewards[:,:,2].round(5))
+            # # print(self.generative_model_rewards[:,:,3].round(5))
             # print(self.generative_model_context.round(3))
-            # print(self.posterior_dirichlet_context_obs[tau].round(3))
-                
+            # try:
+            #     print(self.posterior_dirichlet_context_obs[tau-1].round(3))
+            # except:
+            #     pass
+            self.prior_context[tau,t] = prior_context
             self.outcome_surprise_log[tau,t] = outcome_surprise
             self.policy_entropy_log[tau,t] = entropy
             self.policy_surprise_log[tau,t] = policy_surprise 
@@ -408,7 +416,7 @@ class HierarchicalPerception(object):
         self.context_obs[tau] = context_observation
 
         if tau == 0:
-            prior_context = self.prior_context
+            prior_context = self.prior_context[tau,-1]
         else: #elif t == 0:
             prior_context = np.dot(self.transition_matrix_context, self.posterior_context[tau-1, -1])#.reshape((self.nc))
 
@@ -447,9 +455,11 @@ class HierarchicalPerception(object):
                                                    context=context_observation)
 
         if t == self.T-1 and tau < self.trials-1:
+            
             if self.learn_context_obs:
                 self.posterior_dirichlet_context_obs[tau] =\
                     self.update_beliefs_dirichlet_context_obs_params(tau,t,self.posterior_context[tau,t],context_observation)
+            
             if self.learn_habit:
                 self.posterior_dirichlet_pol[tau], self.prior_policies[tau+1] = self.update_beliefs_dirichlet_pol_params(tau, t, \
                                                                 self.posterior_policies[tau,t], \
