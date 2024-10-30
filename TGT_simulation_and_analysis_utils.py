@@ -1,15 +1,33 @@
 #%%
+###
 import sys
 import os
 import numpy as np
+
+###
 import pandas as pd
-from misc import normalize
+import matplotlib.pyplot as plt
+
+from matplotlib.animation import FuncAnimation
+plt.rcParams['animation.embed_limit'] = 400
+from IPython.display import HTML
+
+import seaborn as sns
+
+sns.set_style("darkgrid")
+plt.rcParams['figure.dpi'] = 100
+green ='#095b3a'
+brown = '#9c683a'
+task_pal= sns.set_palette(['#095b3a', '#9c683a'])
+brown_pal = sns.color_palette(["#402e32", "#9c683a","#f59432","#dfe0df"]) 
+green_pal = sns.color_palette(["#095b3a", "#637f4f","#7cbc53","#d2e4d6"])
+
+##
 
 # If running in IPYTHON or as separate cells use this path
 # sys.path.append(os.path.join(os.getcwd(),'..','..','code','BalancingControl'))
 #If running file normally:
 # sys.path.append(os.path.join(os.getcwd(),'code','BalancingControl'))
-
 import action_selection as asl
 import agent as agt
 import perception as prc
@@ -115,7 +133,6 @@ def run_single_simulation(pars):
     ### save data file
     return world
 
-
 def create_data_frame(exp_name, current_dir, data_folder="raw_data"):
     fnames = load_file(exp_name +  '_sim_file_names.json')
     dfs = []
@@ -189,3 +206,110 @@ def create_data_frame(exp_name, current_dir, data_folder="raw_data"):
     
     df.to_excel(exp_name + "_data_long_format.xlsx")
     return df
+
+def plot_choice_accuracy_alpha_rho(dataframe,simulation_params):
+
+    df = dataframe.copy().query(f"t == 0")
+    df = df.groupby(["alpha_0","context_trans_prob","agent","block","context_cue"])["chose_optimal"].mean().reset_index()
+    n_rho = int(df.context_trans_prob.unique().size)
+
+    plot_pars = {"x":"block","y":"chose_optimal","hue":"context_cue","marker":"o", "palette":task_pal, "errorbar":"sd"}
+
+    fig, axes = plt.subplots(2,n_rho,figsize=(3*n_rho,4),sharex=True,sharey=True)
+    plt.tight_layout()
+
+    if n_rho == 1:
+        axes = axes.reshape(2,n_rho) 
+    for ri, alpha in enumerate([1,1000]):
+        for ci, rho in enumerate(df.context_trans_prob.unique()):
+            g = sns.lineplot(ax=axes[ri,ci], data=df.query(f"alpha_0=={alpha} & context_trans_prob == {rho}"),legend= ((ri+1)*(ci+1) == len(axes.flatten())),**plot_pars)
+            g.vlines(ymin=0, ymax=1,x=simulation_params["training_blocks"]+0.5,ls='--',color='gray')
+            g.vlines(ymin=0, ymax=1, x=simulation_params["training_blocks"]+simulation_params["degradation_blocks"]+0.5, ls='--',color='gray')
+            axes[ri,ci].set_xticks(ticks=np.arange(1,df.block.unique().size+1))
+            axes[ri,ci].set_ylim([0,1])
+            axes[ri,ci].set_title(fr"$\rho$ = {rho}, $\alpha_0$ = {alpha}")
+
+    fig.suptitle(fr"Effect of self-transition bias $\rho$ on mean choice accuracy.",y=1.1);
+
+    return fig
+
+
+def plot_context_inference_t_alpha_rho(dataframe, simulation_params):
+    df = dataframe.copy()
+    context = df.groupby(["alpha_0","dec_temp","context_trans_prob","agent","trial_type","block","context_cue","t"])["inferred_correct_context"].mean().reset_index()
+    n_rho = int(df.context_trans_prob.unique().size)
+
+    for alpha in [1,1000]:
+    # for alpha,title in zip([100],[r'$\alpha_0=100$']):
+
+        fig, axes = plt.subplots(2,n_rho,figsize=(3*n_rho,4), sharex=True, sharey=True)
+        fig.tight_layout()
+
+        if n_rho == 1:
+            axes = axes.reshape(2,n_rho) 
+
+        for ci, rho in enumerate(dataframe["context_trans_prob"].unique()):
+            for ri, context, palette in zip([0,1],[0,1],[green_pal, brown_pal]):
+                g = sns.lineplot(ax=axes[ri,ci], data=df.query(f"alpha_0=={alpha} & context_cue=={context} & context_trans_prob == {rho}"),
+                                 x='block', y='inferred_correct_context', hue="t",palette=palette, style='t',marker="o", errorbar="sd", legend = (ci == len(axes[0])-1))
+                g.vlines(ymin=0, ymax=2,x=simulation_params["training_blocks"]+0.5,ls='--',color='gray')
+                g.vlines(ymin=0, ymax=2,x=simulation_params["training_blocks"]+simulation_params["degradation_blocks"]+0.5,ls='--',color='gray')
+                axes[ri,ci].set_xticks(ticks=np.arange(1,df.block.unique().size+1))
+                axes[ri,ci].set_ylim([0,1.2])
+                axes[ri,ci].set_title(fr"$\rho$ = {rho}")
+        plt.suptitle(fr"Mean context inference accuracy as a function $t$, for each trial type and different $\rho$;" + fr"$\alpha_0$ = {alpha}",y=1.1);
+
+
+def plot_context_entropy_t_alpha_rho(dataframe, simulation_params):
+    df = dataframe.copy()
+    context = df.groupby(["alpha_0","dec_temp","context_trans_prob", "agent","trial_type","block","context_cue","t"])["entropy_context"].mean().reset_index()
+    n_rho = int(df.context_trans_prob.unique().size)
+
+
+    for alpha,title in zip([1,1000],[r'$\alpha_0=1$', r'$\alpha_0=1000$']):
+    # for alpha,title in zip([100],[r'$\alpha_0=100$']):
+
+        fig, axes = plt.subplots(2,n_rho,figsize=(3*n_rho, 4), sharex=True, sharey=True)
+        if n_rho == 1:
+            axes = axes.reshape(2,n_rho)
+        fig.tight_layout()
+        for ci, rho in enumerate(dataframe["context_trans_prob"].unique()):
+            for ri, context, palette in zip([0,1], [0,1],[green_pal, brown_pal]):
+                g = sns.lineplot(ax=axes[ri,ci], data=df.query(f"alpha_0=={alpha} & context_cue=={context} & context_trans_prob=={rho} "),
+                                 x='block', y='entropy_context', hue="t",palette=palette, style='t',marker="o", errorbar="sd")
+                g.vlines(ymin=0, ymax=1,x=simulation_params["training_blocks"]+0.5,ls='--',color='gray')
+                g.vlines(ymin=0, ymax=1,x=simulation_params["training_blocks"]+simulation_params["degradation_blocks"]+0.5,ls='--',color='gray')
+                axes[ri, ci].set_xticks(ticks=np.arange(1,df.block.unique().size+1))
+                axes[ri, ci].set_ylim([0,1])
+                axes[ri,ci].set_title(fr"$\rho$ = {rho}")
+
+        plt.suptitle(fr"Mean context entropy as a function $t$, for each trial type and different $\rho$;" + title,y=1.1);
+
+
+def plot_average_DKL(rho, dataframe, simulation_params):
+    df = dataframe.copy().query(f"t == 0")
+    fig,axes = plt.subplots(4,1,figsize=(16,15))
+    for context,palette in zip([0,1,2,3],["Blues_r","Reds_r"]*2):
+        sns.lineplot(ax=axes[context], data=df.query(f"context_trans_prob == {rho}"), x="trial",y=f"dkl_{context}",hue="alpha_0",errorbar="sd", palette=palette)
+        axes[context].set_xticks(np.arange(1,510,5))
+        axes[context].set_xticklabels(np.arange(1,510,5), rotation=90,fontsize=8)  # Rotate x-tick labels
+        axes[context].set_xlim([0, (simulation_params["training_blocks"] + simulation_params["degradation_blocks"])*simulation_params["trials_per_block"]])
+        axes[context].set_title(fr"$\rho$ = {rho}")
+
+
+def animate_histogram(data, interval=500):
+        
+    fig, ax = plt.subplots(1,1,figsize=(5,5))
+
+    def update(frame):
+        ax.clear()
+        sns.heatmap(data[frame], annot=True, cmap="viridis", cbar=False, fmt='.2f',ax=ax)
+        ax.set_title(frame)
+
+    animation = FuncAnimation(fig, update, frames=data.shape[0], interval=interval)
+
+
+    # return HTML(animation.to_jshtml())
+    html = HTML(animation.to_jshtml())
+    display(html)
+    plt.close() # update

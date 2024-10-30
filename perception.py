@@ -412,12 +412,12 @@ class HierarchicalPerception(object):
         else: #elif t == 0:
             prior_context = np.dot(self.transition_matrix_context, self.posterior_context[tau-1, -1])#.reshape((self.nc))
 
-            if self.pars["trial_type"][tau] == 0 and tau % self.pars["miniblock_size"] == 0 and not tau == 0:
-                print("\n")
-                print(context_observation,tau,t)
-                print(prior_context)
-                prior_context = (np.eye(4)[context_observation] + 0.02) / (np.eye(4)[context_observation] + 0.02).sum()
-                print(prior_context)
+            # if self.pars["trial_type"][tau] == 0 and tau % self.pars["miniblock_size"] == 0 and not tau == 0:
+            #     print("\n")
+            #     print(context_observation,tau,t)
+            #     print(prior_context)
+            #     prior_context = (np.eye(4)[context_observation] + 0.02) / (np.eye(4)[context_observation] + 0.02).sum()
+            #     print(prior_context)
 
                 
         if t==0:
