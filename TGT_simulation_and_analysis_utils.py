@@ -34,17 +34,14 @@ def run_single_simulation(pars):
     pars["generative_model_states"] = np.repeat(pars["generative_model_states"][:,:,:,None], nc,axis=-1)      # add a trivial context dimension
 
     ### set reward likelihood p(r|s,phi)
-    C_betas = np.ones([nr, npl, nc])      
-    C_betas[:,:,:2] = (pars["true_reward_contingencies"][0]*pars["reward_count_bias"]+1)[:,:,None]            # Beta from q(phi|Beta)
+    C_betas = np.ones([nr, npl, nc])
+    bias = pars["reward_count_bias"][0]
+    ci = pars["reward_count_bias"][1]
+
+    C_betas[:,:,:ci] = (pars["true_reward_contingencies"][0]*bias+1)[:,:,None]            # Beta from q(phi|Beta)
     generative_model_rewards = normalize(C_betas)                  # q(r|s,phi)
     pars["generative_model_rewards"] = generative_model_rewards
     pars["dirichlet_rew_params"] = C_betas
-
-    ### set contex transition matrix p(c_t|c_t-1)
-    p = pars["context_trans_prob"]                                 
-    q = (1-p)/(nc-1)
-    transition_matrix_context = np.eye(nc)*p + (np.ones([nc,nc]) - np.eye(nc))*q  
-    pars["transition_matrix_context"] = transition_matrix_context
 
     ### set context prior p(c_1)
     p=0.99
@@ -71,7 +68,24 @@ def run_single_simulation(pars):
         action_selection = asl.MaxSelector(trials = pars["trials"],
                                  T = pars["T"],
                                  number_of_actions = na)
+    
+    # sanity check printing
+    vals = ['alpha_0', 'dec_temp', 'context_trans_prob', 'run', 'learn_pol', 'learn_rew', 'learn_context_obs', 'reward_count_bias',  'prior_rewards', 'all_rewards', 'hidden_state_mapping', 'nm', 'nh']
+    matrix_vals = ['generative_model_context', 'dirichlet_context_obs_params', 'transition_matrix_context']
 
+    for key in vals:
+        print(f"{key}: {pars[key]}")
+
+    for key in matrix_vals:
+        print(f"\n{key}: \n{pars[key]}")   
+    
+    print("\n", "true_reward_contingencies")
+    for cont in range(pars["n_reward_contingencies"]):
+        print(pars["true_reward_contingencies"][cont],"\n")
+
+    print("generative_model_rewards")
+    for cont in range(nc):
+        print(pars["generative_model_rewards"][:,:,cont].round(3),"\n")      
 
     ### initialize Agent, Environment and World classes
     agent_perception = prc.HierarchicalPerception(**pars)
