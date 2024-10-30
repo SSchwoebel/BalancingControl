@@ -62,28 +62,6 @@ def run_single_simulation(pars):
     state_prior = normalize(np.ones((ns)))
     pars["prior_states"] = state_prior
     
-    ### set context cue likelihood p(d|c)
-    C_counts = np.ones((2,nc))
-    C_counts = np.array([[0.1,0.1,0.1,0.1],
-                         [0.1,0.1,0.1,0.1]])
-    C = C_counts / C_counts.sum(axis=0)
-    print(C)
-    # C = np.array([[1,0,1,0],
-    #               [0,1,0,1]])
-    
-    # dp = 0.001
-    # p = 0.85                               # how strongly agent associates context observation with a particular context       
-    # p2 = 1 - p
-    # p -= dp/2
-    # p2 -= dp/2
-    # C = np.zeros((2,4))
-    # C[0,:] = [p,dp/2,p2,dp/2]
-    # C[1,:] = [dp/2, p, dp/2, p2]
-    # print(C)
-    pars["generative_model_context"] = C
-    pars["dirichlet_context_obs_params"] = C_counts
-
-
     ### set action selection method
     if pars["averaged_action_selection"]:
         action_selection = asl.AveragedSelector(trials = pars["trials"],
