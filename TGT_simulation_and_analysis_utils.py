@@ -2,6 +2,7 @@
 import sys
 import os
 import numpy as np
+import pandas as pd
 from misc import normalize
 
 # If running in IPYTHON or as separate cells use this path
@@ -15,6 +16,7 @@ import perception as prc
 import environment as env
 from world import World
 
+from misc import load_file, save_file, normalize
 
 def run_single_simulation(pars):
     
@@ -100,5 +102,76 @@ def run_single_simulation(pars):
     return world
 
 
-def create_data_frame(data_path):
-    pass
+def create_data_frame(exp_name, current_dir, data_folder="raw_data"):
+    fnames = load_file(exp_name +  '_sim_file_names.json')
+    dfs = []
+    for fi, file in enumerate(fnames):
+        world = load_file(os.path.join(current_dir, data_folder,file))
+        perc = world.agent.perception
+        env = world.environment
+        pars = perc.pars
+        T = pars["T"]
+        n_trials  = pars["trials"]
+        factor = T*n_trials
+        
+        block = pars["block"].repeat(T) + 1
+        trial_type = pars["trial_type"].repeat(T)
+        optimal_policy = pars["optimal_policy"].repeat(T)
+        alpha_0 = np.ones(factor)*pars["alpha_0"]
+        dec_temp = np.ones(factor)*pars["dec_temp"]
+        true_context =  pars["context"].repeat(T)
+        context_cue =  pars["context_observation"].repeat(T)
+        context_trans_prob =  np.array(pars["context_trans_prob"]).repeat(factor)
+        utility = [list(pars["prior_rewards"])]*factor
+        print(fi)
+        print(perc.posterior_dirichlet_context_obs[0].round(3))
+        # print(perc.learn_context_obs)
+        rewards = perc.rewards.flatten("C")
+        state = env.state_mapping[np.arange(n_trials)[:,None],perc.observations].flatten("C")
+        agent = np.ones(factor)*fi
+        t = np.tile(np.arange(T),n_trials)
+        trial = np.arange(n_trials).repeat(T) + 1
+        actions = perc.actions.flatten('C')
+        executed_policy = np.ravel_multi_index(perc.actions[:,1:].T, (2,2,2)).repeat(T)
+        inferred_context = np.argmax(perc.posterior_context,axis=-1).flatten('C')
+        entropy_context = -(perc.posterior_context*np.log(perc.posterior_context)).sum(axis=-1).flatten('C')
+        
+        Rho = env.Rho[:,:,:,None] + 1e-15
+        post = perc.posterior_dirichlet_rew[:,-1,:,:,:]
+        post = (post/post.sum(axis=1)[:,None,:,:]) + 1e-15
+        reward_dkl = ((post*np.log(post/Rho)).sum(axis=1)).sum(axis=1) / 3
+        
+        df = pd.DataFrame.from_dict({
+                                     "file":np.array([fi%10]).repeat(factor),
+                                     "agent":agent,
+                                     "trial_type":trial_type,
+                                     "block":block,
+                                     "context_cue":context_cue,
+                                     "trial":trial,
+                                     "t":t,
+                                     "step": np.arange(0,factor),
+                                     "actions":actions,
+                                     "executed_policy":executed_policy,  
+                                     "optimal_policy":optimal_policy,
+                                     "chose_optimal": executed_policy == optimal_policy,
+                                     "true_context":true_context,
+                                     "alpha_0": alpha_0,
+                                     "dec_temp":dec_temp,
+                                     "inferred_context": inferred_context,
+                                     "inferred_correct_context": true_context == inferred_context,
+                                     "entropy_context": entropy_context,
+                                     "context_trans_prob":context_trans_prob,
+                                     "dkl_0":reward_dkl[:,0].repeat(T),
+                                     "dkl_1":reward_dkl[:,1].repeat(T),
+                                     "dkl_2":reward_dkl[:,2].repeat(T),
+                                     "dkl_3":reward_dkl[:,3].repeat(T),
+                                     "utility": utility,
+                                     "reward":rewards
+                                    })
+        
+        dfs.append(df)
+        
+    df = pd.concat(dfs)
+    
+    df.to_excel(exp_name + "_data_long_format.xlsx")
+    return df
