@@ -380,10 +380,7 @@ def plot_heatmap(data,share_x=True, share_y=True):
 
 def plot_task_structure(experiment_config):
     
-    exp_params = copy.deepcopy(experiment_config["experiment_data"])
-    exp_params.pop("planets")
-    df = pd.DataFrame(exp_params).reset_index()
-
+    df = load_task_df(experiment_config)
 
     fig, axes = plt.subplots(1,2,figsize=(11,3))
     
@@ -401,6 +398,14 @@ def plot_task_structure(experiment_config):
         if bi == 0:
             ax.get_legend().remove()
 
+
+def load_task_df(experiment_config):
+    exp_params = copy.deepcopy(experiment_config["experiment_data"])
+    exp_params.pop("planets")
+    df = pd.DataFrame(exp_params).reset_index()
+    
+    return df
+
 def plot_reward_probs(contingency_1, contingency_2):
     fig,axes = plot_heatmap([contingency_1, contingency_2])
     fig.suptitle(r"Reward Contingencies during Training and Degradation $p(r|s)$",y=1.05)
@@ -416,3 +421,20 @@ def plot_state_transition_matrix(stm):
     for ax in axes:
         ax.set_xlabel(r"$s_{t-1}$")
         ax.set_ylabel(r"$s_{t}$")
+
+def plot_expected_reward_and_optimal_policy(experiment_config):
+
+    dataframe = load_task_df(experiment_config)
+    fig, ax = plt.subplots(1,1,figsize=(3,3))
+    df=dataframe.groupby(["block","context_observation"])["exp_reward"].mean().reset_index()
+    print(df.dtypes)
+    sns.lineplot(data=df, ax=ax, x="block",y="exp_reward",hue="context_observation",style="context_observation",marker="o")
+    
+    fig,ax = plt.subplots(1,2,figsize=(6,3))
+    df = dataframe.copy()
+    g = sns.countplot(data=df.query("trial_type==0 & block == 2"),x="optimal_policy",hue="context_observation",ax=ax[0])
+    g.yaxis.set_major_locator(ticker.MultipleLocator(3))
+    g = sns.countplot(data=df.query("trial_type==1 & block == 5"),x="optimal_policy",hue="context_observation",ax=ax[1])
+    g.yaxis.set_major_locator(ticker.MultipleLocator(3))
+
+

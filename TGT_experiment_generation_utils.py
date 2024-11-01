@@ -39,14 +39,14 @@ reward_contingencies   : p(reward|state) for the training and contingency degrad
 """
 
 #########  IMPORTS  ################
-
+#%%
 import numpy as np
 from itertools import product
 import json  as js
 import pandas as pd
 import os
 from misc import save_file, load_file
-
+from TGT_simulation_and_analysis_utils import *
 ############ FUNCTION DEFINITIONS ###############
 
 def create_state_transition_matrix(ns, na, targets):
@@ -237,6 +237,7 @@ def create_trials_planning(data,                                         # all p
                            habit_pol_1 = 3,
                            habit_pol_2 = 6): 
 
+    print(f"SEED:{seed}")
     np.random.seed(seed)
 
     assert trials_per_block % 2 == 0, 'Please set an even number of trials per block!'
@@ -260,10 +261,14 @@ def create_trials_planning(data,                                         # all p
     # this way the expected reward between habit and planning trials can be matched
 
     unique_exp_rew = np.unique(data[0][0][:,-1])                                        # all possible expected rewards for optimal policy that are shared by all policies
-    probs = (np.arange(unique_exp_rew.size)+1)/(np.arange(unique_exp_rew.size)+1).sum() # weight probablity of drawing trial by rewards it can give
+    probs = (np.arange(unique_exp_rew.size)+1)/(np.arange(unique_exp_rew.size)+1).sum() # weigh probablity of drawing trial by rewards it can give
     rewards = np.random.choice(np.arange(unique_exp_rew.size), p=probs, size=ntrials)   # draw expected reward for half of the trials, to ensure that the earned points between cotnexts are matched
-    planning_seqs = pol_ind[pol_ind != habit_pol]
-    planning_seqs = np.tile(planning_seqs, half_block // planning_seqs.size)
+    planning_seqs_1 = pol_ind[pol_ind != habit_pol_1]
+    planning_seqs_1 = np.tile(planning_seqs_1, half_block // planning_seqs_1.size)
+
+    planning_seqs_2 = pol_ind[pol_ind != habit_pol_2]
+    planning_seqs_2 = np.tile(planning_seqs_2, half_block // planning_seqs_2.size)
+
 
     split_data = [[None for contingency in range(2)] for policy in pol_ind]            # list holding data aranged in terms of optimal policy, contingency and exp_reward
 
@@ -286,10 +291,16 @@ def create_trials_planning(data,                                         # all p
         if i < training_blocks:
             tt = 0
             contingency = 0
+            habit_pol = habit_pol_1
+            planning_seqs = planning_seqs_1
         elif i >= training_blocks and i < training_blocks + degradation_blocks:
             tt = 1                                                         
-            contingency = 1                                  
+            contingency = 1
+            habit_pol = habit_pol_2
+            planning_seqs = planning_seqs_2                                
         else:
+            habit_pol = habit_pol_1
+            planning_seqs = planning_seqs_1
             contingency = 0
             tt = 2
             
@@ -347,7 +358,6 @@ def create_trials_planning(data,                                         # all p
                 tr = int(i*trials_per_block)
                 trials[tr+2*mb*block:tr+(2*mb+1)*block] = habit_trials[mb*block:(mb+1)*block,:]
                 trials[tr+(2*mb+1)*block:tr+(2*mb+2)*block] = planning_trials[mb*block:(mb+1)*block,:]
-            
 
         trial_type[i*trials_per_block:(i+1)*trials_per_block] = int(tt)
         blocks[i*trials_per_block:(i+1)*trials_per_block] = int(i)
@@ -480,7 +490,67 @@ def generate_experiment(na=2,
     return fname
 
     
+# ######
+# exp_name = 'test'
+# current_dir = os.getcwd()
+# ######
 
+# habit_1 = 3
+# habit_2 = 5
+
+# unique_rewards = np.array([-1,0,1])
+# stm = create_state_transition_matrix(6,2,np.array([[1,2,3,4,5,0],[2,3,4,5,0,1]]))
+
+# planet_reward_probs = np.array([[0.95, 0   , 0   ],
+#                                 [0.05, 0.95, 0.05],
+#                                 [0,    0.05, 0.95]])            # p(r|s) before contingency switch
+
+# planet_reward_probs_switched = np.array([[0   , 0    , 0.95],
+#                                          [0.05, 0.95 , 0.05],
+#                                          [0.95, 0.05 , 0.0]])   # p(r|s) after contingency switch
+
+# experimental_parameters = {
+#     "na":2,
+#     "T":4,
+#     "n_planet_positions":6,
+#     "unique_rewards": unique_rewards,
+#     "n_reward_contingencies":2,
+#     "state_transition_matrix":stm,
+#     "planet_reward_probs":planet_reward_probs,
+#     "planet_reward_probs_switched":planet_reward_probs_switched,
+#     "grouped_context_presentation": True,
+#     "group_size":3,
+#     "switch_context_cues_during_degradation":False,
+#     "same_habit_during_training_and_degradation":habit_1 == habit_2,  # if False specify habit sequence_2
+#     "habit_sequence_1":habit_1,
+#     "habit_sequence_2":habit_2,
+#     "trials_per_block":42,
+#     "training_blocks":4,
+#     "degradation_blocks":5,
+#     "extinction_blocks":1,
+#     "seed":2312,
+#     "path": current_dir,
+#     "fname":exp_name,
+# }
+
+# ##############################################
+# #####      PRINT AND PLOT RESULTS       ######
+# ##############################################
+
+# # display("You are creating a new config file with following parameters:")
+# # for key,value in experimental_parameters.items():
+# #     if (isinstance(value,np.ndarray) and len(value) == 1) or not isinstance(value,np.ndarray):
+# #         print(f"{key}: {value}") 
+
+# # print("experimental_parameters")
+
+# fname = generate_experiment(**experimental_parameters)
+# experiment_config = load_file(fname)
+
+# # plot_reward_probs(planet_reward_probs, planet_reward_probs_switched)
+# # plot_state_transition_matrix(stm)
+# # plot_task_structure(experiment_config)
+# # plot_expected_reward_per_block_and_context(experiment_config)
 
                 
         
