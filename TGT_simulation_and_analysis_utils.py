@@ -292,6 +292,7 @@ def plot_context_entropy_t_alpha_rho(dataframe, simulation_params):
 
         plt.suptitle(fr"Mean context entropy as a function $t$, for each trial type and different $\rho$;" + title,y=1.1);
 
+
 def plot_individual_agents(dataframe, alpha_0=1, dec_temp=3, context_trans_prob=0.6, t=3):
     
     df = dataframe.copy()
@@ -306,6 +307,7 @@ def plot_individual_agents(dataframe, alpha_0=1, dec_temp=3, context_trans_prob=
         g.set_xticks(np.arange(13));
         g.set_ylim([0,1.2])
         g.set_title(f"context_cue = {cue}")
+
 
 def plot_average_DKL(rho, dataframe, simulation_params):
     
@@ -327,7 +329,7 @@ def animate_histogram(data, interval=500):
 
     def update(frame):
         ax.clear()
-        sns.heatmap(data[frame], annot=True, cmap="viridis", cbar=False, fmt='.2f',ax=ax)
+        sns.heatmap(data[frame], annot=True, cmap="viridis", cbar=False, fmt='.2f',ax=ax,vmin=0, vmax=1)
         ax.set_title(frame+1)
 
     animation = FuncAnimation(fig, update, frames=data.shape[0], interval=interval)
@@ -352,7 +354,8 @@ def animate_multiple_histograms(matrices, bins=10, interval=200):
         for ax, matrix in zip(axes, matrices):
             ax.clear()
             # sns.histplot(matrix[frame].flatten(), bins=bins, kde=False, ax=ax, color="blue")
-            sns.heatmap(matrix[frame], annot=True, cmap="viridis", cbar=False, fmt='.2f',ax=ax)
+            sns.heatmap(matrix[frame], annot=True, cmap="viridis", cbar=False, fmt='.2f',ax=ax,vmin=-15,vmax=2)
+            
             ax.set_title(frame % 6 + 1)
     # Create animation
     anim = FuncAnimation(fig, update, frames=N, interval=interval, repeat=True)
@@ -406,6 +409,7 @@ def load_task_df(experiment_config):
     
     return df
 
+
 def plot_reward_probs(contingency_1, contingency_2):
     fig,axes = plot_heatmap([contingency_1, contingency_2])
     fig.suptitle(r"Reward Contingencies during Training and Degradation $p(r|s)$",y=1.05)
@@ -414,6 +418,7 @@ def plot_reward_probs(contingency_1, contingency_2):
         ax.set_xlabel("planets")
         ax.set_ylabel("rewards")
 
+
 def plot_state_transition_matrix(stm): 
     fig,axes = plot_heatmap([stm[:,:,0].T, stm[:,:,1].T])
     fig.suptitle(r"$p(s_t|s_{t-1},a)$",y=1.05)
@@ -421,6 +426,7 @@ def plot_state_transition_matrix(stm):
     for ax in axes:
         ax.set_xlabel(r"$s_{t-1}$")
         ax.set_ylabel(r"$s_{t}$")
+
 
 def plot_expected_reward_and_optimal_policy(experiment_config):
 
