@@ -233,7 +233,7 @@ def plot_choice_accuracy_alpha_rho(dataframe,simulation_params):
             g.vlines(ymin=0, ymax=1,x=simulation_params["training_blocks"]+0.5,ls='--',color='gray')
             g.vlines(ymin=0, ymax=1, x=simulation_params["training_blocks"]+simulation_params["degradation_blocks"]+0.5, ls='--',color='gray')
             axes[ri,ci].set_xticks(ticks=np.arange(1,df.block.unique().size+1))
-            axes[ri,ci].set_ylim([0,1])
+            axes[ri,ci].set_ylim([0,1.05])
             axes[ri,ci].set_title(fr"$\rho$ = {rho}, $\alpha_0$ = {alpha}")
 
     fig.suptitle(fr"Effect of self-transition bias $\rho$ on mean choice accuracy.",y=1.1);
@@ -312,7 +312,7 @@ def plot_individual_agents(dataframe, alpha_0=1, dec_temp=3, context_trans_prob=
 def plot_average_DKL(rho, dataframe, simulation_params):
     
     df = dataframe.copy().query(f"t == 0")
-    
+    df.head()
     fig,axes = plt.subplots(1,4,figsize=(13,3))
     plt.tight_layout()
     for context,palette in zip([0,1,2,3],["Blues_r","Reds_r"]*2):
@@ -323,14 +323,39 @@ def plot_average_DKL(rho, dataframe, simulation_params):
         axes[context].set_title(fr"$\rho$ = {rho}")
 
 
-def animate_histogram(data, interval=500):
+def plot_heatmap(data,title=None):
+    
+    if not type(data) is list:
+        data = [data]
+        title = [title]
+        
+    fig, axes = plt.subplots(1,len(data), figsize=(3.5*len(data), 4))
+    if not isinstance(axes, np.ndarray):
+        axes = np.array([axes])
+
+    
+
+    for ai, ax, im in zip(np.arange(len(data)), axes, data):
+        sns.heatmap(data=im, annot=True, cmap="viridis", cbar=False, fmt='.2f', ax=ax,vmin=0, vmax=1)
+        
+        if title is not None:
+            ax.set_title(title[ai])
+    
+    return fig, axes
+
+def animate_heatmap(data, interval=500,title=None,x_label=None,y_label=None):
         
     fig, ax = plt.subplots(1,1,figsize=(5,5))
 
+    if not title is None:
+        fig.suptitle(title)
+    
     def update(frame):
         ax.clear()
         sns.heatmap(data[frame], annot=True, cmap="viridis", cbar=False, fmt='.2f',ax=ax,vmin=0, vmax=1)
         ax.set_title(frame+1)
+        ax.set_xlabel(x_label,fontsize=12)
+        ax.set_ylabel(y_label,fontsize=12)
 
     animation = FuncAnimation(fig, update, frames=data.shape[0], interval=interval)
 
@@ -340,45 +365,35 @@ def animate_histogram(data, interval=500):
     display(html)
     plt.close() # update
     
+    return fig
+    
 
-def animate_multiple_histograms(matrices, bins=10, interval=200):
+def animate_multiple_heatmaps(matrices, bins=10, interval=200, titles=None,x_label=None, y_label=None):
 
     N = matrices[0].shape[0]
     n_matrices = len(matrices)
     
     # Create figure and axes for subplots
-    fig, axes = plt.subplots(1, n_matrices, figsize=(3.5*n_matrices, 5))
+    fig, axes = plt.subplots(1, n_matrices, figsize=(3.5*n_matrices, 5),sharey = True)
     
     def update(frame):
         # Clear each axis for the new frame
-        for ax, matrix in zip(axes, matrices):
+        for ai, ax, matrix in zip(np.arange(n_matrices), axes, matrices):
             ax.clear()
             # sns.histplot(matrix[frame].flatten(), bins=bins, kde=False, ax=ax, color="blue")
             sns.heatmap(matrix[frame], annot=True, cmap="viridis", cbar=False, fmt='.2f',ax=ax,vmin=-15,vmax=2)
             
-            ax.set_title(frame % 6 + 1)
+            fig.suptitle(f"frame: {frame+1}, context trial: {frame % 6 + 1}")
+            ax.set_xlabel(x_label)
+            ax.set_ylabel(y_label)
+            ax.set_title(titles[ai])
+            
     # Create animation
     anim = FuncAnimation(fig, update, frames=N, interval=interval, repeat=True)
 
     html = HTML(anim.to_jshtml())
     display(html)
-    plt.close() # u
-    
-    
-def plot_heatmap(data,share_x=True, share_y=True):
-    if not isinstance(data,list):
-        data = [data]
-    n_axes = len(data)
-    
-    fig, axes = plt.subplots(1,n_axes, figsize=(3*n_axes, 3),sharex=share_x, sharey= share_y)
-    plt.tight_layout()
-    if n_axes == 1:
-        axes = np.array([axes])
-
-    for ai in range(n_axes):
-        sns.heatmap(data[ai], annot=True, cmap="viridis", cbar=False, fmt='.2f',ax=axes[ai]);
-        
-    return fig,axes
+    plt.close()
 
 
 def plot_task_structure(experiment_config):
