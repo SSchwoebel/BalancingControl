@@ -298,11 +298,10 @@ def plot_individual_agents(dataframe, alpha_0=1, dec_temp=3, context_trans_prob=
     df = dataframe.copy()
     context = df.groupby(["alpha_0","dec_temp","context_trans_prob","agent","file","trial_type","block","context_cue","t"])[["inferred_correct_context"]].mean().reset_index()
 
-    fig, ax = plt.subplots(1,2,figsize=(7,3))
+    fig, ax = plt.subplots(1,2,figsize=(7,3));
     
     for cue in range(2):
         df = context.query(f"alpha_0 == {alpha_0} & dec_temp=={dec_temp} & context_trans_prob=={context_trans_prob} & context_cue=={cue} & t=={t}")
-        plt.figure()
         g = sns.lineplot(ax=ax[cue],data=df, x="block", y="inferred_correct_context",hue="file",palette="viridis")
         g.set_xticks(np.arange(13));
         g.set_ylim([0,1.2])
@@ -323,25 +322,26 @@ def plot_average_DKL(rho, dataframe, simulation_params):
         axes[context].set_title(fr"$\rho$ = {rho}")
 
 
-def plot_heatmap(data,title=None):
+def plot_heatmap(data,title=None,vmin=0,vmax=1):
     
     if not type(data) is list:
         data = [data]
         title = [title]
         
-    fig, axes = plt.subplots(1,len(data), figsize=(3.5*len(data), 4))
+    fig, axes = plt.subplots(1,len(data), figsize=(3*len(data), 3))
     if not isinstance(axes, np.ndarray):
         axes = np.array([axes])
 
     
 
     for ai, ax, im in zip(np.arange(len(data)), axes, data):
-        sns.heatmap(data=im, annot=True, cmap="viridis", cbar=False, fmt='.2f', ax=ax,vmin=0, vmax=1)
+        sns.heatmap(data=im, annot=True, cmap="viridis", cbar=False, fmt='.2f', ax=ax,vmin=vmin, vmax=vmax)
         
         if title is not None:
             ax.set_title(title[ai])
     
     return fig, axes
+
 
 def animate_heatmap(data, interval=500,title=None,x_label=None,y_label=None):
         
@@ -365,8 +365,8 @@ def animate_heatmap(data, interval=500,title=None,x_label=None,y_label=None):
     display(html)
     plt.close() # update
     
-    return fig
-    
+    return fig    
+
 
 def animate_multiple_heatmaps(matrices, bins=10, interval=200, titles=None,x_label=None, y_label=None):
 
@@ -407,14 +407,18 @@ def plot_task_structure(experiment_config):
         
         ax = axes[bi]
         ax.xaxis.set_major_locator(ticker.MultipleLocator(3))
-        sns.lineplot(ax=ax, data=df.query(f"block == {block}"), x="index", y=df["context"] % 2,color='k',marker="o",label="habit=0 or planing=1 context")
+        sns.lineplot(ax=ax, data=df.query(f"block == {block}"), x="index", y=df["context"] % 2,color='k',marker="o",label="True context: habit=0 or planing=1")
         pivoted = df.query(f"block == {block}").pivot(index="index", columns="context_observation", values="optimal_policy")
+        pivoted.columns = ["Optimal Policy when cue green","Optimal policy when cue brown"]
         pivoted.plot(ax=ax, marker="o",label="optimal_policy")# sns.lineplot(data=df.query("block == 0 "), x="index",y="context")
-        ax.set_title(f"block {block}")
         ax.legend(bbox_to_anchor=(1.1, 0.5))
-        
+        ax.set_ylabel("Optimal Policy")    
         if bi == 0:
             ax.get_legend().remove()
+
+    for title,ax in zip(["Training block","Degradation block"],axes):
+        ax.set_title(title)
+    
 
 
 def load_task_df(experiment_config):
@@ -439,8 +443,8 @@ def plot_state_transition_matrix(stm):
     fig.suptitle(r"$p(s_t|s_{t-1},a)$",y=1.05)
 
     for ax in axes:
-        ax.set_xlabel(r"$s_{t-1}$")
-        ax.set_ylabel(r"$s_{t}$")
+        ax.set_xlabel(r"$s_{t-1}$",fontsize=12)
+        ax.set_ylabel(r"$s_{t}$",fontsize=14)
 
 
 def plot_expected_reward_and_optimal_policy(experiment_config):
