@@ -420,7 +420,6 @@ def plot_task_structure(experiment_config):
         ax.set_title(title)
     
 
-
 def load_task_df(experiment_config):
     exp_params = copy.deepcopy(experiment_config["experiment_data"])
     exp_params.pop("planets")
@@ -457,9 +456,11 @@ def plot_expected_reward_and_optimal_policy(experiment_config):
     
     fig,ax = plt.subplots(1,2,figsize=(6,3))
     df = dataframe.copy()
-    g = sns.countplot(data=df.query("trial_type==0 & block == 2"),x="optimal_policy",hue="context_observation",ax=ax[0])
-    g.yaxis.set_major_locator(ticker.MultipleLocator(3))
-    g = sns.countplot(data=df.query("trial_type==1 & block == 5"),x="optimal_policy",hue="context_observation",ax=ax[1])
-    g.yaxis.set_major_locator(ticker.MultipleLocator(3))
 
+    train_blocks = experiment_config["meta_data"]["training_blocks"]
+    block = train_blocks
+    g = sns.countplot(data=df.query(f"trial_type==0 & block == {block-1}"),x="optimal_policy",hue="context_observation",ax=ax[0])
+    g.yaxis.set_major_locator(ticker.MultipleLocator(3))
+    g = sns.countplot(data=df.query(f"trial_type==1 & block == {block}"),x="optimal_policy",hue="context_observation",ax=ax[1])
+    g.yaxis.set_major_locator(ticker.MultipleLocator(3))
 
