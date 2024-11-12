@@ -361,7 +361,7 @@ def infer(inferrer, iter_steps, fname_str, npart, base_dir):
 
 def sample_posterior(inferrer, param_names, fname_str, base_dir, n_samples=500, true_vals=None):
 
-    sample_df = inferrer.sample_posterior(n_samples=n_samples) #inferrer.plot_posteriors(n_samples=1000)
+    sample_df, locs_sample_df = inferrer.sample_posterior(n_samples=n_samples) #inferrer.plot_posteriors(n_samples=1000)
     # inferrer.plot_posteriors(n_samples=n_samples)
     if true_vals is not None:
         append_trues = True
@@ -370,6 +370,9 @@ def sample_posterior(inferrer, param_names, fname_str, base_dir, n_samples=500, 
     
     sample_file = os.path.join(base_dir, fname_str+'_sample_df.csv')
     sample_df.to_csv(sample_file)
+
+    locs_file = os.path.join(base_dir, fname_str+'_locs_sample_df.csv')
+    locs_sample_df.to_csv(locs_file)
     
     mean_df = pd.DataFrame()
 
@@ -392,7 +395,7 @@ def sample_posterior(inferrer, param_names, fname_str, base_dir, n_samples=500, 
     smaller_file = os.path.join(base_dir, fname_str+'_mean_df.csv')
     mean_df.to_csv(smaller_file)
 
-    return mean_df, sample_df
+    return mean_df, sample_df, locs_sample_df
 
 
 def load_samples(base_dir, fname_str):
@@ -403,7 +406,10 @@ def load_samples(base_dir, fname_str):
     mean_file = os.path.join(base_dir, fname_str+'_mean_df.csv')
     mean_df = pd.read_csv(mean_file)
 
-    return mean_df, sample_df
+    locs_sample_file = os.path.join(base_dir, fname_str+'_sample_locs_df.csv')
+    locs_sample_df = pd.read_csv(locs_sample_file)
+
+    return mean_df, sample_df, locs_sample_df
 
 
 

@@ -452,21 +452,39 @@ class GeneralGroupInference(object):
         sample_dict = {param: [] for param in param_names}
         sample_dict["subject"] = []
 
+        locs_sample_dict = {"locs"+str(i): [] for i in range(self.npars)}
+        locs_sample_dict["subject"] = []
+
         for i in range(n_samples):
             sample = self.guide()
             for key in sample.keys():
                 sample.setdefault(key, ar.ones(1))
+            
+            for i in range(self.npars):
+                locs_sample_dict["locs"+str(i)].extend(list(sample["locs"][...,i].detach().numpy()))
 
             par_sample = self.agent.locs_to_pars(sample["locs"])
 
             for param in param_names:
                 sample_dict[param].extend(list(par_sample[param].detach().numpy()))
 
+            locs_sample_dict["subject"].extend(list(range(self.nsubs)))
+
             sample_dict["subject"].extend(list(range(self.nsubs)))
 
         sample_df = pd.DataFrame(sample_dict)
 
-        return sample_df
+        locs_sample_df = pd.DataFrame(locs_sample_dict)
+
+        # the following is to make sure that both dfs hold the same values in the same format
+        locs_reconstruct = ar.stack([ar.tensor(locs_sample_df["locs"+str(i)]) for i in range(self.npars)], dim=-1)
+
+        param_reconstruct = self.agent.locs_to_pars(locs_reconstruct)
+
+        for param in param_names:
+            ar.testing.assert_close(param_reconstruct[param], ar.tensor(sample_df[param]))
+
+        return sample_df, locs_sample_df
 
     def analytical_posteriors(self):
 
