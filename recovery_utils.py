@@ -406,7 +406,7 @@ def load_samples(base_dir, fname_str):
     mean_file = os.path.join(base_dir, fname_str+'_mean_df.csv')
     mean_df = pd.read_csv(mean_file)
 
-    locs_sample_file = os.path.join(base_dir, fname_str+'_sample_locs_df.csv')
+    locs_sample_file = os.path.join(base_dir, fname_str+'_locs_sample_df.csv')
     locs_sample_df = pd.read_csv(locs_sample_file)
 
     return mean_df, sample_df, locs_sample_df
