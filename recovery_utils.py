@@ -514,16 +514,17 @@ def annot_corrfunc(x, y, **kws):
                 xy=(.5, .9), xycoords=ax.transAxes)
     
     
-def plot_results(sample_df, param_names, fname_str, ELBO, mean_df, base_dir, max_dt):
+def plot_results(sample_df, param_names, fname_str, ELBO, mean_df, base_dir, max_dt, big_custom=True):
     
     plot_df = mean_df.drop('subject', axis=1)\
                         .reindex(["inferred "+name for name in param_names]\
                                  +["true "+name for name in param_names], axis=1)
         
-    big_custom_plot(plot_df, param_names, base_dir, fname_str, ELBO, max_dt, fit_reg=True, annot=True)
-    # big_custom_plot(plot_df, param_names, base_dir, fname_str, ELBO, max_dt, fit_reg=True, annot=False)
-    # big_custom_plot(plot_df, param_names, base_dir, fname_str, ELBO, max_dt, fit_reg=False, annot=True)
-    # big_custom_plot(plot_df, param_names, base_dir, fname_str, ELBO, max_dt, fit_reg=False, annot=False)
+    if big_custom:
+        big_custom_plot(plot_df, param_names, base_dir, fname_str, ELBO, max_dt, fit_reg=True, annot=True)
+        # big_custom_plot(plot_df, param_names, base_dir, fname_str, ELBO, max_dt, fit_reg=True, annot=False)
+        # big_custom_plot(plot_df, param_names, base_dir, fname_str, ELBO, max_dt, fit_reg=False, annot=True)
+        # big_custom_plot(plot_df, param_names, base_dir, fname_str, ELBO, max_dt, fit_reg=False, annot=False)
     
     # plt.figure()
     # sns.pairplot(sample_df, kind='reg')
