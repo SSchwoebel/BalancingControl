@@ -123,7 +123,7 @@ def set_up_Bayesian_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs
 
     # context transition matrix
 
-    transition_matrix_context = torch.ones(1)
+    transition_matrix_context = torch.tensor([[1.]])
 
     """
     set up agent
@@ -138,14 +138,14 @@ def set_up_Bayesian_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs
     prior_pi = alphas / alphas.sum(axis=0)
 
     # perception
-    bayes_prc = prc.Group2Perception(A, B, C_agent, transition_matrix_context,
-                                           state_prior, utility, prior_pi, pol,
+    bayes_prc = prc.Group2ContextPerception(A, B, C_agent, transition_matrix_context,
+                                           state_prior, utility, prior_pi, prior_context, pol,
                                            alpha_0, C_alphas,
                                            learn_habit = True, mask=valid,
                                            learn_rew = True, T=T, trials=trials,
                                            pol_lambda=pol_lambda, r_lambda=r_lambda,
                                            non_decaying=(ns-nb), dec_temp=dec_temp, 
-                                           nsubs=nsubs, infer_alpha_0=infer_h, use_h=use_h)
+                                           nsubs=nsubs, infer_alpha_0=infer_h, use_h=use_h, infer_context=True)
     
     bayes_prc.set_parameters(par_dict=perception_args)
     bayes_prc.reset()
@@ -1383,17 +1383,17 @@ if __name__=='__main__':
     #         rew_message_tau.append(rew_messages)
             
     #     obs_message_list.append(obs_message_tau)
-        
+    prior_context = torch.ones(1)
     
     # perception
-    bayes_prc = prc.Group2Perception(A, B, C_agent, transition_matrix_context,
-                                           state_prior, utility, prior_pi, pol,
+    bayes_prc = prc.Group2ContextPerception(A, B, C_agent, transition_matrix_context,
+                                           state_prior, utility, prior_pi, prior_context, pol,
                                            alpha_0, C_alphas,
                                            learn_habit = learn_habit, mask=valid[:,None],
                                            learn_rew = True, T=T, trials=trials,
                                            pol_lambda=pol_lambda, r_lambda=r_lambda,
                                            non_decaying=(ns-nb), dec_temp=dec_temp, 
-                                           nsubs=1, infer_alpha_0=infer_h, use_h=True)
+                                           nsubs=1, infer_alpha_0=infer_h, use_h=True, infer_context=True)
     
     agent = agt.FittingAgent(bayes_prc, [], pol,
                       trials = trials, T = T,
