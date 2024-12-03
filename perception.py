@@ -26,11 +26,9 @@ class Group2Perception(object):
     def __init__(self,
                  generative_model_observations,
                  generative_model_states,
-                 generative_model_rewards,
                  transition_matrix_context,
                  prior_states,
                  prior_rewards,
-                 prior_policies,
                  policies,
                  alpha_0 = ar.tensor([1]),
                  dirichlet_rew_params = None,
@@ -510,19 +508,18 @@ class Group2ContextPerception(object):
     def __init__(self,
                  generative_model_observations,
                  generative_model_states,
-                 generative_model_rewards,
                  transition_matrix_context,
                  prior_states,
                  prior_rewards,
-                 prior_policies,
                  prior_context,
                  policies,
                  alpha_0 = ar.tensor([1]),
                  dirichlet_rew_params = None,
-                 generative_model_context = None,
+                 dirichlet_context_obs_params = None,
                  learn_habit = False,
                  learn_rew = False,
                  infer_context = False,
+                 learn_context_gen = False,
                  mask=None,
                  T=5, trials=10, pol_lambda=0, r_lambda=0, non_decaying=0,
                  dec_temp=1., npart=1, nsubs=1, infer_alpha_0=False, use_h=True):
@@ -535,14 +532,15 @@ class Group2ContextPerception(object):
         self.nh = prior_states.shape[0]
         self.prior_context = prior_context
         self.nc = prior_context.shape[0]
+        self.noc = dirichlet_context_obs_params.shape[0]
         self.transition_matrix_context = transition_matrix_context
-        self.generative_model_context = generative_model_context
         self.T = T
         self.trials = trials
         self.learn_habit = learn_habit
         self.learn_rew = learn_rew
-        self.pol_lambda = pol_lambda
         self.infer_context = infer_context
+        self.learn_context_gen = learn_context_gen
+        self.pol_lambda = pol_lambda
         self.r_lambda = r_lambda
         self.non_decaying = non_decaying
         self.dec_temp = dec_temp
@@ -587,6 +585,13 @@ class Group2ContextPerception(object):
         
         self.miniblock_context_prior = [ar.stack([ar.stack([self.prior_context for k in range(self.npart)], dim=-1) for j in range(self.nsubs)], dim=-1)]
         self.posterior_context = []
+
+        # when not learning, the dir params can simply contain the real probabilities that one wants to use for the gen mod.
+        self.dirichlet_context_obs_params_init = dirichlet_context_obs_params
+        self.dirichlet_context_obs_params = [ar.stack([ar.stack([self.dirichlet_context_obs_params_init for k in range(self.npart)], dim=-1) for j in range(self.nsubs)], dim=-1)]
+
+        generative_model_context_obs_init = self.dirichlet_context_obs_params[0] / self.dirichlet_context_obs_params[0].sum(axis=0)[None,...]
+        self.generative_model_context_obs = [generative_model_context_obs_init]
 
         self.observations = []
         self.rewards = []
@@ -673,6 +678,11 @@ class Group2ContextPerception(object):
 
         self.miniblock_context_prior = [ar.stack([ar.stack([self.prior_context for k in range(self.npart)], dim=-1) for j in range(self.nsubs)], dim=-1)]
         self.posterior_context = [self.miniblock_context_prior[0]]
+
+        self.dirichlet_context_obs_params = [ar.stack([ar.stack([self.dirichlet_context_obs_params_init for k in range(self.npart)], dim=-1) for j in range(self.nsubs)], dim=-1)]
+
+        generative_model_context_obs_init = self.dirichlet_context_obs_params[0] / self.dirichlet_context_obs_params[0].sum(axis=0)[None,...]
+        self.generative_model_context_obs = [generative_model_context_obs_init]
 
         self.observations = []
         self.rewards = []
@@ -796,6 +806,9 @@ class Group2ContextPerception(object):
         if self.learn_rew:# and t==self.T-1:
             self.update_beliefs_dirichlet_rew_params(tau, t, reward)
 
+        if t == self.T-1 and self.learn_context_gen and self.infer_context:
+            self.update_beliefs_dirichlet_context_gen_params(tau, t, context_obs)
+
     def update_beliefs_states(self, tau, t, observation, reward, possible_policies):
 
         self.observations.append(observation)
@@ -834,19 +847,19 @@ class Group2ContextPerception(object):
             prior_context = self.miniblock_context_prior[-1]
             posterior_policies = self.posterior_policies[-1]
             
-            post_policies = ar.einsum('cnk,pcnk->pnk', prior_context, posterior_policies)
+            #post_policies = ar.einsum('cnk,pcnk->pnk', prior_context, posterior_policies)
 
             if t == self.T-1:
-                chosen_pol = ar.argmax(post_policies, dim=0)
+                chosen_pol = ar.argmax(posterior_policies, dim=0)
                 one_hot_pols = ar.nn.functional.one_hot(chosen_pol, num_classes=self.npi).permute(3,0,1,2).float()
-                inf_context = ar.argmax(prior_context)
-                alpha_prime = self.dirichlet_pol_params + (one_hot_pols*prior_context)[:,:,None,:]
+                #inf_context = ar.argmax(prior_context)
+                alpha_prime = self.dirichlet_pol_params[-1] + (one_hot_pols*prior_context[None,:,:])
             else:
-                alpha_prime = self.dirichlet_pol_params
+                alpha_prime = self.dirichlet_pol_params[-1]
 
             if t>0:
-                outcome_surprise = (posterior_policies * ar.log(self.fwd_norms.prod(dim=0))).sum(dim=0)
-                entropy = - (posterior_policies * ar.log(posterior_policies)).sum(dim=0)
+                outcome_surprise = (posterior_policies * ar.log(self.fwd_norms[-1].prod(dim=0)+1e-10)).sum(dim=0)
+                entropy = - (posterior_policies * ar.log(posterior_policies+1e-10)).sum(dim=0)
                 policy_surprise = (posterior_policies * ar.digamma(alpha_prime)).sum(dim=0) - ar.digamma(alpha_prime.sum(dim=0))
             else:
                 outcome_surprise = ar.zeros((self.nc, self.npart, self.nsubs))
@@ -855,11 +868,13 @@ class Group2ContextPerception(object):
                 
             if context_obs is not None:
                 self.context_obs.append(context_obs)
-                context_obs_suprise = ar.log(self.generative_model_context[context_obs]+1e-10)
+                one_hot_context_obs = ar.nn.functional.one_hot(context_obs, num_classes=self.noc).permute(1,0)
+                log_gen_mod = ar.log(self.generative_model_context_obs[-1]+1e-10)
+                context_obs_suprise = ar.einsum('ocnk,ok->cnk', log_gen_mod, one_hot_context_obs)
             else:
-                context_obs_suprise = ar.zeros(self.nc)
-                
-            log_posterior = outcome_surprise + policy_surprise + entropy + context_obs_suprise +ar.log(prior_context)
+                context_obs_suprise = ar.zeros(self.nc, self.npart, self.nsubs)
+
+            log_posterior = outcome_surprise + policy_surprise + entropy + context_obs_suprise +ar.log(prior_context+1e-10)
 
             # self.prior_context[tau,t] = prior_context
             # self.outcome_surprise_log[tau,t] = outcome_surprise
@@ -870,6 +885,23 @@ class Group2ContextPerception(object):
             posterior_context = ar.nn.functional.softmax(log_posterior, dim=0)
 
         self.posterior_context.append(posterior_context)
+
+    def update_beliefs_dirichlet_context_gen_params(self, tau, t, context_obs):
+
+        self.context_obs.append(context_obs)
+
+        one_hot_obs = ar.nn.functional.one_hot(context_obs, num_classes=self.noc).permute(1,0)
+
+        # use einsum instead of multiplication with lots of None
+        dirichlet_context_obs_params_update = ar.einsum('ok,cnk->ocnk', one_hot_obs, self.posterior_context[-1])
+
+        dirichlet_context_obs_params = self.dirichlet_context_obs_params[-1] + dirichlet_context_obs_params_update
+
+        self.dirichlet_context_obs_params.append(dirichlet_context_obs_params)
+
+        generative_model_context_obs = dirichlet_context_obs_params / dirichlet_context_obs_params.sum(dim=0)[None,...]
+
+        self.generative_model_context_obs.append(generative_model_context_obs)
 
 
     def update_beliefs_dirichlet_pol_params(self, tau, t):
@@ -916,12 +948,13 @@ class Group2ContextPerception(object):
 #                 self.generative_model_rewards[tau,t,:,state,c] /= self.generative_model_rewards[tau,t,:,state,c].sum()
 #             self.rew_messages[tau,t+1:,:,t+1:,c] = self.prior_rewards.matmul(self.generative_model_rewards[tau,t,:,:,c])[None,:,None]
 
-        dirichlet_rew_params = self.dirichlet_rew_params[0].clone().to(device)#.detach()
+        dirichlet_rew_params = self.dirichlet_rew_params[0].clone().to(device)#.detach()        
         # dirichlet_rew_params = ar.ones_like(self.dirichlet_rew_params_init)#self.dirichlet_rew_params_init.clone()
         # dirichlet_rew_params[:,:self.non_decaying] = self.dirichlet_rew_params[-1][:,:self.non_decaying]
         curr_forgetting_factor = (self.r_lambda*self.mask[tau])[None,None,None,:,:]*self.posterior_context[-1][None,None,:,:,:]
-        dirichlet_rew_params[:,self.non_decaying:,:,:] = (1-curr_forgetting_factor) * self.dirichlet_rew_params[-1][:,self.non_decaying:,:,:,:] \
-                                                            +1 - (1-curr_forgetting_factor)
+        
+        dirichlet_rew_params[:,self.non_decaying:,:,:] = ((1-curr_forgetting_factor) * self.dirichlet_rew_params[-1][:,self.non_decaying:,:,:,:]) \
+                                                            +(1 - (1-curr_forgetting_factor))
         #dirichlet_rew_params[reward[0],:,:,:] += states #* posterior_context[None,:]
 
         vec_rewards = ar.eye(self.nr)[:,reward]
