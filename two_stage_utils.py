@@ -77,8 +77,6 @@ def set_up_Bayesian_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs
     for i in range(1,nr):
         C_alphas[i,0] = 1
 
-    C_alphas = torch.stack([C_alphas]*2, dim=-1)
-
 
     """
     create policies
@@ -117,16 +115,6 @@ def set_up_Bayesian_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs
                                       number_of_actions = na)
 
 
-    prior_context = torch.tensor([0.99, 0.01])
-
-#    prior_context[0] = 1.
-
-    # context transition matrix
-
-    transition_matrix_context = torch.tensor([[0.99, 0.01], [0.01, 0.99]])
-
-    transition_obs_context = torch.tensor([[0.99, 0.01], [0.01, 0.99]])
-
     """
     set up agent
     """
@@ -138,17 +126,14 @@ def set_up_Bayesian_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs
     
     alphas = torch.zeros((npi)) + alpha_0
 
-    # perception
-    bayes_prc = prc.Group2ContextPerception(A, B, transition_matrix_context,
-                                           state_prior, utility, prior_context, pol,
-                                           alpha_0=alpha_0, dirichlet_rew_params=C_alphas, 
-                                           dirichlet_context_obs_params=transition_obs_context,
-                                           learn_habit = True, mask=valid,
-                                           learn_rew = True, T=T, trials=trials,
-                                           pol_lambda=pol_lambda, r_lambda=r_lambda,
-                                           non_decaying=(ns-nb), dec_temp=dec_temp, 
-                                           nsubs=nsubs, infer_alpha_0=infer_h, use_h=use_h, 
-                                           infer_context=True, learn_context_gen=False)
+    bayes_prc = prc.Group2Perception(A, B, 
+                                    state_prior, utility, pol,
+                                    alpha_0=alpha_0, dirichlet_rew_params=C_alphas, 
+                                    learn_habit = True, mask=valid,
+                                    learn_rew = True, T=T, trials=trials,
+                                    pol_lambda=pol_lambda, r_lambda=r_lambda,
+                                    non_decaying=(ns-nb), dec_temp=dec_temp, 
+                                    nsubs=nsubs, infer_alpha_0=infer_h, use_h=use_h)
     
     bayes_prc.set_parameters(par_dict=perception_args)
     bayes_prc.reset()
