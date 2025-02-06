@@ -214,7 +214,10 @@ class HierarchicalPerception(object):
         #estimate posterior state distribution
         posterior = self.fwd_messages*self.bwd_messages*self.obs_messages[:,:,np.newaxis,:]*self.rew_messages[:,:,np.newaxis,:]
         norm = posterior.sum(axis = 0)
-        self.fwd_norms[-1] = norm[-1]
+        self.fwd_norms[1:] = norm[:]
+        # print("\nhere")
+        # print(tau, t)
+        # print(self.fwd_norms[:,:,0].T)
         non_zero = norm > 0
         posterior[:,non_zero] /= norm[non_zero]
         return np.nan_to_num(posterior)

@@ -13,6 +13,7 @@ import matplotlib.ticker as ticker
 
 
 from matplotlib.animation import FuncAnimation
+plt.rcParams.update(plt.rcParamsDefault)
 plt.rcParams['animation.embed_limit'] = 400
 from IPython.display import HTML
 
