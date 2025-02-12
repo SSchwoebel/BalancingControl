@@ -517,17 +517,20 @@ class Group2ContextPerception(object):
                  learn_habit = False,
                  learn_rew = False,
                  infer_context = False,
-                 learn_context_gen = False,
+                 learn_context_obs = False,
                  mask=None,
+                 hidden_state_mapping = False,
+                 state_mapping = None,
                  T=5, trials=10, pol_lambda=0, r_lambda=0, non_decaying=0,
                  dec_temp=1., npart=1, nsubs=1, infer_alpha_0=False, use_h=True):
+        
+        ### if another generative model is supposed to be given, i.e. generative model rewards, simply give it as dirichlet params
 
         self.generative_model_observations = generative_model_observations
         self.generative_model_states = generative_model_states
         self.prior_rewards = prior_rewards
         self.nr = prior_rewards.shape[0]
         self.prior_states = prior_states
-        self.nh = prior_states.shape[0]
         self.prior_context = prior_context
         self.nc = prior_context.shape[0]
         self.noc = dirichlet_context_obs_params.shape[0]
@@ -537,7 +540,7 @@ class Group2ContextPerception(object):
         self.learn_habit = learn_habit
         self.learn_rew = learn_rew
         self.infer_context = infer_context
-        self.learn_context_gen = learn_context_gen
+        self.learn_context_gen = learn_context_obs
         self.pol_lambda = pol_lambda
         self.r_lambda = r_lambda
         self.non_decaying = non_decaying
@@ -553,9 +556,18 @@ class Group2ContextPerception(object):
         # use_h says whether to use h or alpha_0 for inference
         self.use_h = use_h
         self.alpha_0 = alpha_0
+        self.hidden_state_mapping = hidden_state_mapping
+
+        if hidden_state_mapping:
+            self.nm = dirichlet_rew_params.shape[1]
+            self.nh = prior_states.shape[0]
+            self.state_mapping = state_mapping
+            self.state_mapping_one_hot = ar.nn.functional.one_hot(self.state_mapping, num_classes=self.nm).float()
+        else:
+            self.nh, self.nm = [prior_states.shape[0]]*2
         
         if mask is None:
-            self.mask = ar.ones(trials, nsubs).bool()
+            self.mask = ar.ones(trials, nsubs).bool()[:,None,:]
         else:
             self.mask = mask.long()[:,None,:]
 
@@ -582,7 +594,7 @@ class Group2ContextPerception(object):
         self.generative_model_rewards = [generative_model_rewards_init]
         
         self.miniblock_context_prior = [ar.stack([ar.stack([self.prior_context for k in range(self.npart)], dim=-1) for j in range(self.nsubs)], dim=-1)]
-        self.posterior_context = []
+        self.posterior_context = [self.miniblock_context_prior[0]]
 
         # when not learning, the dir params can simply contain the real probabilities that one wants to use for the gen mod.
         self.dirichlet_context_obs_params_init = dirichlet_context_obs_params
@@ -718,6 +730,9 @@ class Group2ContextPerception(object):
         # note to self: make sure permute is in the right order now with contexts
         rew_messages = ar.cat((prev_rew, exp_rews[:self.T-t-1]), dim=0).permute((1,0,2,3,4))
 
+        if self.hidden_state_mapping:
+            rew_messages = ar.einsum('hm,mtcnk->htcnk', self.state_mapping_one_hot[tau], rew_messages)
+
         self.obs_messages.append(obs_messages)
         self.rew_messages.append(rew_messages)
 
@@ -804,7 +819,7 @@ class Group2ContextPerception(object):
         if self.learn_rew:# and t==self.T-1:
             self.update_beliefs_dirichlet_rew_params(tau, t, reward)
 
-        if t == self.T-1 and self.learn_context_gen and self.infer_context:
+        if context_obs is not None and t==self.T-1 and self.learn_context_gen and self.infer_context:
             self.update_beliefs_dirichlet_context_gen_params(tau, t, context_obs)
 
     def update_beliefs_states(self, tau, t, observation, reward, possible_policies):
@@ -866,7 +881,7 @@ class Group2ContextPerception(object):
                 
             if context_obs is not None:
                 self.context_obs.append(context_obs)
-                one_hot_context_obs = ar.nn.functional.one_hot(context_obs, num_classes=self.noc).permute(1,0)
+                one_hot_context_obs = ar.nn.functional.one_hot(context_obs.long(), num_classes=self.noc).permute(1,0).float()
                 log_gen_mod = ar.log(self.generative_model_context_obs[-1]+1e-10)
                 context_obs_suprise = ar.einsum('ocnk,ok->cnk', log_gen_mod, one_hot_context_obs)
             else:
@@ -886,9 +901,7 @@ class Group2ContextPerception(object):
 
     def update_beliefs_dirichlet_context_gen_params(self, tau, t, context_obs):
 
-        self.context_obs.append(context_obs)
-
-        one_hot_obs = ar.nn.functional.one_hot(context_obs, num_classes=self.noc).permute(1,0)
+        one_hot_obs = ar.nn.functional.one_hot(context_obs.long(), num_classes=self.noc).permute(1,0).float()
 
         # use einsum instead of multiplication with lots of None
         dirichlet_context_obs_params_update = ar.einsum('ok,cnk->ocnk', one_hot_obs, self.posterior_context[-1])
@@ -949,6 +962,7 @@ class Group2ContextPerception(object):
         dirichlet_rew_params = self.dirichlet_rew_params[0].clone().to(device)#.detach()        
         # dirichlet_rew_params = ar.ones_like(self.dirichlet_rew_params_init)#self.dirichlet_rew_params_init.clone()
         # dirichlet_rew_params[:,:self.non_decaying] = self.dirichlet_rew_params[-1][:,:self.non_decaying]
+
         curr_forgetting_factor = (self.r_lambda*self.mask[tau])[None,None,None,:,:]*self.posterior_context[-1][None,None,:,:,:]
         
         dirichlet_rew_params[:,self.non_decaying:,:,:] = ((1-curr_forgetting_factor) * self.dirichlet_rew_params[-1][:,self.non_decaying:,:,:,:]) \
@@ -958,7 +972,8 @@ class Group2ContextPerception(object):
         vec_rewards = ar.eye(self.nr)[:,reward]
         vec_subjects = ar.eye(self.nsubs)
         matrix_index = ar.einsum('rn,nm->rm', vec_rewards, vec_subjects)
-        addition = states[None,...]*matrix_index[:,None,None,None,:]*self.mask[None,None,None,tau,...]
+        mapped_states = ar.einsum('hm,hcnk->mcnk', self.state_mapping_one_hot[tau], states)
+        addition = mapped_states[None,...]*matrix_index[:,None,None,None,:]*self.mask[None,None,None,tau,...]
         new_rew_params = dirichlet_rew_params + addition
 
         generative_model_rewards = new_rew_params / new_rew_params.sum(dim=0)[None,...]

@@ -431,3 +431,76 @@ class TwoStep(object):
             self.Rho[tau+1,:,3:][self.Rho[tau+1,:,3:] < 0.] = 0.
 
         return r
+    
+
+class PlanetSystem(object):
+
+    def __init__(
+                 self,
+                 generative_model_observations,
+                 generative_model_states,
+                 generative_model_rewards,
+                 planet_configurations,
+                 starts,
+                 context_cues,
+                 true_context,
+                 trials = 10,
+                 T = 4,
+                 nan_int = -1111,                     # coding for nan value in rewards array,
+                 all_rewards = array([-1,0,1])
+                ):
+
+        self.A = generative_model_observations                            # prob dist for generating observations
+        self.B = generative_model_states[:,:,:,0]                                  # prob dist for state transitions
+        self.trials = trials                                              # mb corresponds to number of miniblocks
+        self.true_context = true_context                        # what is the true currently active context
+        self.ns = generative_model_states.shape[0]                        # number of unique locations
+        self.Rho = generative_model_rewards
+        r_ind = (self.true_context > 1).int()
+        self.Rho = self.Rho[r_ind,:,:]
+
+        self.T = T                                                        # miniblock length of 3 actions + initial state = 4
+        self.nr = self.Rho[0].shape[0]                       # number of rewards
+        self.npl = self.Rho[0].shape[1]                      # number of unique planet types
+
+        self.context_cues = context_cues            # background colors, look at run_agent_simulation, load vars for coding
+        self.state_mapping = planet_configurations                          # planet identities for each trial
+        self.starting_position = starts                                   # initial rocket position for each trial
+        # hidden states tracks location and not planet identity
+        
+        self.hidden_states = ar.zeros([trials, T]).int()
+        self.possible_states = ar.arange(self.ns)
+        self.possible_rewards = all_rewards
+        self.nan_int = nan_int
+
+        # dummy variable to communicate to world that a context obs should be made
+        self.Chi = None
+
+
+    def set_initial_states(self, tau):
+        self.hidden_states[tau, 0] = self.starting_position[tau]
+
+
+    def generate_context_obs(self,tau):
+        return self.context_cues[tau]
+
+
+    def generate_observations(self,tau,t):
+        return ar.multinomial(self.A[:,self.hidden_states[tau,t]], 1)
+        
+
+    def update_hidden_states(self,tau, t, action):
+        curr_loc =  self.hidden_states[tau,t-1]
+        self.hidden_states[tau,t] = ar.multinomial(self.B[:,curr_loc,int(action)], 1)
+
+
+    def generate_rewards(self,tau,t):
+        
+        if t == 0:
+            reward = self.nan_int
+        else:
+            curr_loc = self.state_mapping[tau,self.hidden_states[tau,t]]
+            rp = self.Rho[tau,:,curr_loc]                    # reward probability at current planet
+            reward = ar.multinomial(rp, 1)
+        
+        return reward

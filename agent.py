@@ -9,7 +9,7 @@ else:
     import torch as ar
     array = ar.tensor
 from perception import HierarchicalPerception
-from misc import ln, softmax, own_logical_and
+from misc import ln, softmax
 import scipy.special as scs
 
 #device = ar.device("cuda") if ar.cuda.is_available() else ar.device("cpu")
@@ -68,7 +68,7 @@ class FittingAgent(object):
             curr_policies = (self.policies[:,t-1][:,None] == prev_response)#[0]
             self.possible_policies = ar.logical_and(self.possible_policies, curr_policies)
 
-        self.perception.update_beliefs(tau, t, observation, reward, prev_response, self.possible_policies)
+        self.perception.update_beliefs(tau, t, observation, reward, prev_response, self.possible_policies, context)
 
     def generate_response(self, tau, t):
 
@@ -214,7 +214,7 @@ class BayesianPlanner(object):
             prev_pols = ar.zeros(self.npi, dtype=bool)
             prev_pols[:] = False
             prev_pols[self.possible_polcies] = True
-            new_pols = own_logical_and(possible_policies, prev_pols)
+            new_pols = ar.logical_and(possible_policies, prev_pols)
             self.possible_polcies = ar.where(new_pols==True)[0]
 
             # TODO once 1D intersect exists

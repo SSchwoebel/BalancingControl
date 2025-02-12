@@ -1,15 +1,38 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-arr_type = "torch"
-if arr_type == "numpy":
-    import numpy as ar
-    array = ar.array
-else:
-    import torch as ar
-    array = ar.tensor
+import numpy as np
 import scipy.special as scs
 import matplotlib.pylab as plt
 import seaborn as sns
+import json
+import jsonpickle as pickle
+import jsonpickle.ext.numpy as jsonpickle_numpy
+
+def save_file(data,fname, mode="w"):
+
+    jsonpickle_numpy.register_handlers()
+    pickled = pickle.encode(data)
+    with open(fname, 'w') as outfile:
+        json.dump(pickled, outfile)
+
+def load_file(fname, mode="r"):
+    
+    jsonpickle_numpy.register_handlers()
+    with open(fname, 'r') as infile:
+        data = json.load(infile)
+    return pickle.decode(data)
+
+
+
+def normalize(matrix, dim=0):
+    
+    normalization_constant = matrix.sum(axis=dim)
+    normalized_matrix = matrix/normalization_constant
+
+    assert np.all(np.isclose(normalized_matrix.sum(axis=dim), 1)), "Probability distribution is not normalized!"
+
+    return normalized_matrix
+
 
 def evolve_environment(env):
     trials = env.hidden_states.shape[0]
@@ -29,45 +52,36 @@ def evolve_environment(env):
 def compute_performance(rewards):
     return rewards.mean(), rewards.var()
 
-def own_logical_and(x,y):
-    z = x*y
-    return z>0
-
-def own_logical_or(x,y):
-    z = x+y
-    return z>0
-
 
 def ln(x):
-    # TODO
-    #with ar.errstate(divide='ignore'):
-    return ar.log(x+1e-20)#ar.nan_to_num(ar.log(x))
+    with np.errstate(divide='ignore'):
+        return np.nan_to_num(np.log(x))
 
 def logit(x):
-    with ar.errstate(divide = 'ignore'):
-        return ar.nan_to_num(ar.log(x/(1-x)))
+    with np.errstate(divide = 'ignore'):
+        return np.nan_to_num(np.log(x/(1-x)))
 
 def logistic(x):
-    return 1/(1+ar.exp(-x))
+    return 1/(1+np.exp(-x))
 
 def softmax(x):
     """Compute softmax values for each sets of scores in x."""
-    e_x = ar.exp(x - ar.max(x, axis = 0))
+    e_x = np.exp(x - np.max(x, axis = 0))
     return e_x / e_x.sum(axis = 0)
 
 def sigmoid(x, a=1., b=1., c=0., d=0.):
-    f = a/(1. + ar.exp(-b*(x-c))) + d
+    f = a/(1. + np.exp(-b*(x-c))) + d
     return f
 
 def exponential(x, b=1., c=0., d=0.):
-    f = ar.exp(b*(x-c)) + d
+    f = np.exp(b*(x-c)) + d
     return f
 
 def lognormal(x, mu, sigma):
-    return -.5*(x-mu)*(x-mu)/(2*sigma) - .5*ln(2*ar.pi*sigma)
+    return -.5*(x-mu)*(x-mu)/(2*sigma) - .5*ln(2*np.pi*sigma)
 
 def lognormal3(x, mu, sigma, c):
-    return 1./((x-a)*sigma*ar.sqrt(2*ar.pi)) * exp(-(ln(x-a)-mu)**2/(2*sigma**2))
+    return 1./((x-a)*sigma*np.sqrt(2*np.pi)) * exp(-(ln(x-a)-mu)**2/(2*sigma**2))
 
 def Beta_function(a):
     return scs.gamma(a).prod()/scs.gamma(a.sum())
@@ -76,14 +90,14 @@ def logBeta(a):
     return scs.loggamma(a).sum() - scs.loggamma(a.sum())
 
 def generate_bandit_timeseries_stable(Rho_0, nb, trials, changes):
-    Rho = ar.zeros((trials, Rho_0.shape[0], Rho_0.shape[1]))
+    Rho = np.zeros((trials, Rho_0.shape[0], Rho_0.shape[1]))
     Rho[0] = Rho_0.copy()
 
     #set dummy state
     Rho[:,0,0] = 1
 
     for tau in range(1,trials):
-        change = ar.random.choice(changes, size=nb)
+        change = np.random.choice(changes, size=nb)
         Rho[tau,0,1:] = Rho[tau-1,0,1:] + change
         Rho[tau,1,1:] = Rho[tau-1,1,1:] - change
         Rho[tau][Rho[tau] > 1.] = 1.
@@ -93,13 +107,13 @@ def generate_bandit_timeseries_stable(Rho_0, nb, trials, changes):
 
 
 def generate_bandit_timeseries_change(Rho_0, nb, trials, changes):
-    Rho = ar.zeros((trials, Rho_0.shape[0], Rho_0.shape[1]))
+    Rho = np.zeros((trials, Rho_0.shape[0], Rho_0.shape[1]))
     Rho[0] = Rho_0.copy()
 
     #set dummy state
     Rho[:,0,0] = 1
 
-    means = ar.zeros((trials,2, nb+1))
+    means = np.zeros((trials,2, nb+1))
     means[:,1,1:] = 0.05
     means[0,1,1] = 0.95
     means[:,0,1:] = 0.95
@@ -114,7 +128,7 @@ def generate_bandit_timeseries_change(Rho_0, nb, trials, changes):
             means[tau*(trials//nb)+i,0,tau+2] =  1 - means[tau*(trials//nb)+i,1,tau+2]
 
 #    for tau in range(1,trials):
-#        change = ar.random.choice(changes, size=nb)
+#        change = np.random.choice(changes, size=nb)
 #        Rho[tau,0,1:] = Rho[tau-1,0,1:] + change
 #        Rho[tau,1,1:] = Rho[tau-1,1,1:] - change
 #        Rho[tau][Rho[tau] > 1.] = 1.
@@ -130,13 +144,13 @@ def generate_randomwalk(trials, nr, ns, nb, sigma, start_vals=None):
     if start_vals is not None:
         init = start_vals
     else:
-        init = ar.array([0.5]*nb)
+        init = np.array([0.5]*nb)
 
-    sqr_sigma = ar.sqrt(sigma)
+    sqr_sigma = np.sqrt(sigma)
 
     nnr = ns-nb
 
-    Rho = ar.zeros((trials, nr, ns))
+    Rho = np.zeros((trials, nr, ns))
 
     Rho[:,1,:nnr] = 0.
     Rho[:,0,:nnr] = 1.
@@ -146,7 +160,7 @@ def generate_randomwalk(trials, nr, ns, nb, sigma, start_vals=None):
 
     for t in range(1,trials):
         p = scs.logit(Rho[t-1,1,nnr:])
-        p = p + sqr_sigma * ar.random.default_rng().normal(size=nb)
+        p = p + sqr_sigma * np.random.default_rng().normal(size=nb)
         p = scs.expit(p)
 
         Rho[t,1,nnr:] = p
@@ -155,7 +169,7 @@ def generate_randomwalk(trials, nr, ns, nb, sigma, start_vals=None):
     return Rho
 
 def generate_bandit_timeseries_slowchange(trials, nr, ns, nb):
-    Rho = ar.zeros((trials, nr, ns))
+    Rho = np.zeros((trials, nr, ns))
     Rho[:,0,0] = 1.
     Rho[:,0,1:] = 0.9
     for j in range(1,nb+1):
@@ -175,7 +189,7 @@ def generate_bandit_timeseries_slowchange(trials, nr, ns, nb):
 
 
 def generate_bandit_timeseries_training(trials, nr, ns, nb, n_training, p=0.9, offset = 0):
-    Rho = ar.zeros((trials, nr, ns))
+    Rho = np.zeros((trials, nr, ns))
     Rho[:,0,0] = 1.
     Rho[:,0,1:] = p
     for j in range(1,nb+1):
@@ -198,7 +212,7 @@ def generate_bandit_timeseries_training(trials, nr, ns, nb, n_training, p=0.9, o
 
 
 def generate_bandit_timeseries_habit(trials_train, nr, ns, n_test=100, p=0.9, offset = 0):
-    Rho = ar.zeros((trials_train+n_test, nr, ns))
+    Rho = np.zeros((trials_train+n_test, nr, ns))
     Rho[:,0,0] = 1.
     Rho[:,0,1:] = p
     for j in range(1,nr):
@@ -214,7 +228,7 @@ def generate_bandit_timeseries_habit(trials_train, nr, ns, n_test=100, p=0.9, of
 
 
 def generate_bandit_timeseries_asymmetric(trials_train, nr, ns, n_test=100, p=0.9, q=0.1):
-    Rho = ar.zeros((trials_train+n_test, nr, ns))
+    Rho = np.zeros((trials_train+n_test, nr, ns))
     Rho[:,0,0] = 1.
     Rho[:,0,1:] = 1.-q
     for j in range(1,nr):
@@ -235,7 +249,7 @@ def D_KL_nd_dirichlet(alpha, beta):
     for j in range(alpha.shape[1]):
         D_KL += -scs.gammaln(alpha[:,j]).sum(axis=0) + scs.gammaln(alpha[:,j].sum(axis=0)) \
          +scs.gammaln(beta[:,j]).sum(axis=0) - scs.gammaln(beta[:,j].sum(axis=0)) \
-         + ((alpha[:,j]-beta[:,j]) * (scs.digamma(alpha[:,j]) - scs.digamma(alpha[:,j].sum(axis=0))[ar.newaxis,:])).sum(axis=0)
+         + ((alpha[:,j]-beta[:,j]) * (scs.digamma(alpha[:,j]) - scs.digamma(alpha[:,j].sum(axis=0))[np.newaxis,:])).sum(axis=0)
 
     return D_KL
 
@@ -245,19 +259,19 @@ def D_KL_dirichlet_categorical(alpha, beta):
      +scs.gammaln(beta).sum(axis=0) - scs.gammaln(beta.sum(axis=0)) \
 
     for k in range(alpha.shape[1]):
-        helper = ar.zeros(alpha.shape[1])
+        helper = np.zeros(alpha.shape[1])
         helper[k] = 1
         D_KL += alpha[k]/alpha.sum(axis=0)*((alpha-beta) * (scs.digamma(alpha) -\
-                     scs.digamma((alpha+helper).sum(axis=0))[ar.newaxis,:])).sum(axis=0)
+                     scs.digamma((alpha+helper).sum(axis=0))[np.newaxis,:])).sum(axis=0)
 
     return D_KL
 
 def switching_timeseries(trials, states=None, state_trans=None, pattern=None, ns=6, na=4, nr=2, nc=2, stable_length=2):
 
     if pattern is None:
-        pattern = ar.tile([0]*stable_length+[1]*stable_length, trials//(2*stable_length))
+        pattern = np.tile([0]*stable_length+[1]*stable_length, trials//(2*stable_length))
 
-    num_in_run = ar.zeros(trials)
+    num_in_run = np.zeros(trials)
     old = -1
     count = 0
     for t,p in enumerate(pattern):
@@ -269,10 +283,10 @@ def switching_timeseries(trials, states=None, state_trans=None, pattern=None, ns
         old = p
 
     if states is None:
-        states = ar.random.choice(4,size=trials)
+        states = np.random.choice(4,size=trials)
 
     if state_trans is None:
-        state_trans = ar.zeros((ns,ns,na,nc))
+        state_trans = np.zeros((ns,ns,na,nc))
         state_trans[:,:,0,0] = [[0, 0, 0, 0, 0, 0],
                                 [0, 0, 0, 0, 0, 0],
                                 [0, 0, 0, 0, 0, 0],
@@ -298,10 +312,10 @@ def switching_timeseries(trials, states=None, state_trans=None, pattern=None, ns
                                 [0, 0, 1, 1, 0, 0],
                                 [1, 1, 0, 0, 1, 1],]
 
-    Rho = ar.zeros((trials,nr,ns))
-    Rho[:,:,0:4] = ar.array([1,0])[None,:,None]
-    correct_choice = ar.zeros(trials, dtype=int)
-    congruent = ar.zeros(trials, dtype=int)
+    Rho = np.zeros((trials,nr,ns))
+    Rho[:,:,0:4] = np.array([1,0])[None,:,None]
+    correct_choice = np.zeros(trials, dtype=int)
+    congruent = np.zeros(trials, dtype=int)
     for t,task in enumerate(pattern):
         s = states[t]
         if task == 0:
@@ -318,16 +332,81 @@ def switching_timeseries(trials, states=None, state_trans=None, pattern=None, ns
     return Rho, pattern, states, state_trans, correct_choice, congruent, num_in_run
 
 
+def switching_timeseries_onecontext(trials, states=None, state_trans=None, pattern=None, ns=6, na=4, nr=2, stable_length=2):
+
+    nc = 1
+    
+    if pattern is None:
+        pattern = np.tile([0]*stable_length+[1]*stable_length, trials//(2*stable_length))
+
+    num_in_run = np.zeros(trials)
+    old = -1
+    count = 0
+    for t,p in enumerate(pattern):
+        if p == old:
+            count+=1
+        else:
+            count=1
+        num_in_run[t] = count
+        old = p
+
+    if states is None:
+        states = np.random.choice(4,size=trials)
+        
+    if state_trans is None:
+        state_trans = np.zeros((ns,ns,na,1))
+        state_trans[:,:,0,0] = [[0, 0, 0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0, 0, 0],
+                                [1, 0, 0, 0, 1, 0, 0, 0],
+                                [0, 1, 0, 0, 0, 1, 0, 0],
+                                [0, 0, 1, 0, 0, 0, 1, 0],
+                                [0, 0, 0, 1, 0, 0, 0, 1],]
+        state_trans[:,:,1,0] = [[0, 0, 0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 0, 0, 0, 0, 0],
+                                [0, 0, 0, 1, 1, 0, 0, 0],
+                                [0, 0, 1, 0, 0, 1, 0, 0],
+                                [0, 1, 0, 0, 0, 0, 1, 0],
+                                [1, 0, 0, 0, 0, 0, 0, 1],]
+
+    Rho = np.zeros((nr,ns,2))
+    Rho[:,0:4,:] = np.array([1,0])[:,None,None]
+    Rho[:,4,0] = [0, 1]
+    Rho[:,5,0] = [1, 0]
+    Rho[:,6,0] = [0, 1]
+    Rho[:,7,0] = [1, 0]
+    Rho[:,4,1] = [0, 1]
+    Rho[:,5,1] = [0, 1]
+    Rho[:,6,1] = [1, 0]
+    Rho[:,7,1] = [1, 0]
+    
+    correct_choice = np.zeros(trials, dtype=int)
+    congruent = np.zeros(trials, dtype=int)
+    for t,task in enumerate(pattern):
+        s = states[t]
+        if task == 0:
+            corr_a = s%2
+        if task == 1:
+            corr_a = s//2
+        correct_choice[t] = corr_a
+        congruent[t] = int((s%2) == (s//2))
+
+    return Rho, pattern, states, state_trans, correct_choice, congruent, num_in_run
+
+
 def single_task_timeseries(trials, states=None, state_trans=None, pattern=None, ns=6, na=4, nr=2, nc=1):
 
     if pattern is None:
-        pattern = ar.zeros(trials)
+        pattern = np.zeros(trials)
 
     if states is None:
-        states = ar.random.choice(4,size=trials)
+        states = np.random.choice(4,size=trials)
 
     if state_trans is None:
-        state_trans = ar.zeros((ns,ns,na,nc))
+        state_trans = np.zeros((ns,ns,na,nc))
         state_trans[:,:,0,0] = [[0, 0, 0, 0, 0, 0],
                                 [0, 0, 0, 0, 0, 0],
                                 [0, 0, 0, 0, 0, 0],
@@ -341,10 +420,10 @@ def single_task_timeseries(trials, states=None, state_trans=None, pattern=None, 
                                 [0, 1, 0, 1, 1, 1],
                                 [1, 0, 1, 0, 0, 0],]
 
-    Rho = ar.zeros((trials,nr,ns))
-    Rho[:,:,0:4] = ar.array([1,0])[None,:,None]
-    correct_choice = ar.zeros(trials, dtype=int)
-    congruent = ar.zeros(trials, dtype=int)
+    Rho = np.zeros((trials,nr,ns))
+    Rho[:,:,0:4] = np.array([1,0])[None,:,None]
+    correct_choice = np.zeros(trials, dtype=int)
+    congruent = np.zeros(trials, dtype=int)
     for t,task in enumerate(pattern):
         s = states[t]
         if task == 0:
@@ -358,7 +437,7 @@ def single_task_timeseries(trials, states=None, state_trans=None, pattern=None, 
         correct_choice[t] = corr_a
         congruent[t] = int((s%2) == (s//2))
 
-    num_in_run = ar.ones(trials)
+    num_in_run = np.ones(trials)
 
     return Rho, pattern, states, state_trans, correct_choice, congruent, num_in_run
 
@@ -366,31 +445,31 @@ def single_task_timeseries(trials, states=None, state_trans=None, pattern=None, 
 def flanker_timeseries(trials, states=None, flankers=None, contexts=None, state_trans=None, ns=6, na=4, nr=2, nc=2):
 
     if states is None:
-        states = ar.random.choice(4,size=trials)
+        states = np.random.choice(4,size=trials)
     if flankers is None:
-        flankers = ar.random.choice(4,size=trials)
+        flankers = np.random.choice(4,size=trials)
     if contexts is None:
         contexts = flankers // 2
 
     if state_trans is None:
-        state_trans = ar.zeros((ns,ns,na,nc))
-        state_trans[:,:,0,:] = ar.array([[0, 0, 0, 0, 0, 0],
+        state_trans = np.zeros((ns,ns,na,nc))
+        state_trans[:,:,0,:] = np.array([[0, 0, 0, 0, 0, 0],
                                 [0, 0, 0, 0, 0, 0],
                                 [0, 0, 0, 0, 0, 0],
                                 [0, 0, 0, 0, 0, 0],
                                 [0, 0, 1, 1, 1, 1],
                                 [1, 1, 0, 0, 0, 0],])[:,:,None]
-        state_trans[:,:,1,:] = ar.array([[0, 0, 0, 0, 0, 0],
+        state_trans[:,:,1,:] = np.array([[0, 0, 0, 0, 0, 0],
                                 [0, 0, 0, 0, 0, 0],
                                 [0, 0, 0, 0, 0, 0],
                                 [0, 0, 0, 0, 0, 0],
                                 [1, 1, 0, 0, 1, 1],
                                 [0, 0, 1, 1, 0, 0],])[:,:,None]
 
-    Rho = ar.zeros((trials,nr,ns))
-    Rho[:,:,0:4] = ar.array([1,0])[None,:,None]
-    correct_choice = ar.zeros(trials, dtype=int)
-    congruent = ar.zeros(trials, dtype=int)
+    Rho = np.zeros((trials,nr,ns))
+    Rho[:,:,0:4] = np.array([1,0])[None,:,None]
+    correct_choice = np.zeros(trials, dtype=int)
+    congruent = np.zeros(trials, dtype=int)
     for t,s in enumerate(states):
         corr_a = s//2
         Rho[t,:,4] = [1, 0]
@@ -403,31 +482,31 @@ def flanker_timeseries(trials, states=None, flankers=None, contexts=None, state_
 def flanker_timeseries2(trials, states=None, flankers=None, contexts=None, state_trans=None, ns=4, na=4, nr=2, nc=2):
 
     if states is None:
-        states = ar.random.choice(4,size=trials)
+        states = np.random.choice(4,size=trials)
     if flankers is None:
-        flankers = ar.random.choice(4,size=trials)
+        flankers = np.random.choice(4,size=trials)
     if contexts is None:
         contexts = flankers // 2
 
     if state_trans is None:
-        state_trans = ar.zeros((ns,ns,na,nc))
-        state_trans[:,:,0,:] = ar.array([[0, 0, 0, 0, 0, 0],
+        state_trans = np.zeros((ns,ns,na,nc))
+        state_trans[:,:,0,:] = np.array([[0, 0, 0, 0, 0, 0],
                                 [0, 0, 0, 0, 0, 0],
                                 [0, 0, 0, 0, 0, 0],
                                 [0, 0, 0, 0, 0, 0],
                                 [0, 0, 0, 0, 0, 0],
                                 [1, 1, 1, 1, 1, 1],])[:,:,None]
-        state_trans[:,:,1,:] = ar.array([[0, 0, 0, 0, 0, 0],
+        state_trans[:,:,1,:] = np.array([[0, 0, 0, 0, 0, 0],
                                 [0, 0, 0, 0, 0, 0],
                                 [0, 0, 0, 0, 0, 0],
                                 [0, 0, 0, 0, 0, 0],
                                 [1, 1, 1, 1, 1, 1],
                                 [0, 0, 0, 0, 0, 0],])[:,:,None]
 
-    Rho = ar.zeros((trials,nr,ns))
-    Rho[:,:,0:4] = ar.array([1,0])[None,:,None]
-    correct_choice = ar.zeros(trials, dtype=int)
-    congruent = ar.zeros(trials, dtype=int)
+    Rho = np.zeros((trials,nr,ns))
+    Rho[:,:,0:4] = np.array([1,0])[None,:,None]
+    correct_choice = np.zeros(trials, dtype=int)
+    congruent = np.zeros(trials, dtype=int)
     for t,s in enumerate(states):
         corr_a = s//2
         Rho[t,:,4] = [1-corr_a, corr_a]
