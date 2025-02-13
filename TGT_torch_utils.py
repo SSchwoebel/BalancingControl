@@ -191,18 +191,20 @@ def create_data_frame(exp_name, current_dir, data_folder="raw_data"):
         context_trans_prob =  np.array(pars["context_trans_prob"]).repeat(factor)
         utility = [list(pars["prior_rewards"])]*factor
 
-        rewards = perc.rewards.flatten("C")
-        state = env.state_mapping[np.arange(n_trials)[:,None],perc.observations].flatten("C")
+        rewards = torch.cat(perc.rewards).numpy()
+        #state = env.state_mapping[np.arange(n_trials)[:,None],perc.observations].flatten("C")
         agent = np.ones(factor)*fi
         t = np.tile(np.arange(T),n_trials)
         trial = np.arange(n_trials).repeat(T) + 1
-        actions = perc.actions.flatten('C')
-        executed_policy = np.ravel_multi_index(perc.actions[:,1:].T, (2,2,2)).repeat(T)
-        inferred_context = np.argmax(perc.posterior_context,axis=-1).flatten('C')
-        entropy_context = -(perc.posterior_context*np.log(perc.posterior_context)).sum(axis=-1).flatten('C')
+        actions = torch.cat(perc.actions).numpy()
+        executed_policy = np.ravel_multi_index(perc.actions_structured.numpy()[:,1:].T, (2,2,2)).repeat(T)
+        posterior_context = torch.stack(perc.posterior_context).numpy()[1:,...,0,0]
+        inferred_context = np.argmax(posterior_context,axis=-1).flatten('C')
+        entropy_context = -(posterior_context*np.log(posterior_context)).sum(axis=-1)
         
-        Rho = env.Rho[:,:,:,None] + 1e-15
-        post = perc.posterior_dirichlet_rew[:,-1,:,:,:]
+        Rho = env.Rho[:,:,:,None].numpy() + 1e-15
+        posterior_dirichlet_rew = torch.stack(perc.generative_model_rewards_mb).numpy()[...,0,0]
+        post = posterior_dirichlet_rew#perc.posterior_dirichlet_rew[:,-1,:,:,:]
         post = (post/post.sum(axis=1)[:,None,:,:]) + 1e-15
         reward_dkl = ((post*np.log(post/Rho)).sum(axis=1)).sum(axis=1) / 3
         

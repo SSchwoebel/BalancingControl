@@ -547,8 +547,7 @@ class Group2ContextPerception(object):
         self.dec_temp = dec_temp
         self.policies = policies
         self.npi = policies.shape[0]
-        self.actions = ar.unique(policies)
-        self.na = len(self.actions)
+        self.na = len(ar.unique(policies))
         self.npart = npart
         self.nsubs = nsubs
         # infer_alpha_0 says whether to infer alpha_0 at all
@@ -606,6 +605,7 @@ class Group2ContextPerception(object):
         self.observations = []
         self.rewards = []
         self.context_obs = []
+        self.actions = []
 
         #self.instantiate_messages()
         self.bwd_messages = []
@@ -622,6 +622,13 @@ class Group2ContextPerception(object):
         #print(self.big_trans_matrix.shape)
 
         # self.reset()
+
+        if True:
+            self.rewards_structured = ar.zeros((trials, T)).int()
+            self.actions_structured = ar.zeros((trials, T)).int() - 1
+            self.generative_model_rewards_mb = []
+            self.prior_policies_mb = []
+            self.posterior_context_mb = []
 
     def locs_to_pars(self, locs):
 
@@ -697,6 +704,7 @@ class Group2ContextPerception(object):
         self.observations = []
         self.rewards = []
         self.context_obs = []
+        self.actions = []
 
         #self.instantiate_messages()
         self.bwd_messages = []
@@ -708,6 +716,13 @@ class Group2ContextPerception(object):
         self.posterior_states = []
         self.posterior_policies = []
         self.posterior_actions = []
+
+        if True:
+            self.rewards_structured = ar.zeros((self.trials, self.T)).int()
+            self.actions_structured = ar.zeros((self.trials, self.T)).int() - 1
+            self.generative_model_rewards_mb = []
+            self.prior_policies_mb = []
+            self.posterior_context_mb = []
 
 
     def make_current_messages(self, tau, t):
@@ -785,6 +800,13 @@ class Group2ContextPerception(object):
         return posterior
 
     def update_beliefs(self, tau, t, observation, reward, prev_response, possible_policies, context_obs=None):
+
+        if prev_response is not None:
+            self.actions.append(prev_response)
+            if True:
+                self.actions_structured[tau,t] = prev_response
+        else:
+            self.actions.append(ar.tensor([-1]))
 
         self.update_beliefs_states(tau, t, observation, reward, possible_policies)
 
@@ -899,6 +921,14 @@ class Group2ContextPerception(object):
 
         self.posterior_context.append(posterior_context)
 
+        if True:
+            if t==0:
+                self.posterior_context_mb.append([posterior_context])
+            else:
+                self.posterior_context_mb[-1].append(posterior_context)
+            if t==self.T-1:
+                self.posterior_context_mb[-1] = ar.stack(self.posterior_context_mb[-1])
+
     def update_beliefs_dirichlet_context_gen_params(self, tau, t, context_obs):
 
         one_hot_obs = ar.nn.functional.one_hot(context_obs.long(), num_classes=self.noc).permute(1,0).float()
@@ -938,6 +968,10 @@ class Group2ContextPerception(object):
 
         self.dirichlet_pol_params.append(dirichlet_pol_params.to(device))
         self.prior_policies.append(prior_policies.to(device))
+
+        if True:
+            if t==self.T-1:
+                self.prior_policies_mb.append(prior_policies)
 
         #return dirichlet_pol_params, prior_policies
 
@@ -979,6 +1013,10 @@ class Group2ContextPerception(object):
         generative_model_rewards = new_rew_params / new_rew_params.sum(dim=0)[None,...]
         self.dirichlet_rew_params.append(new_rew_params.to(device))
         self.generative_model_rewards.append(generative_model_rewards.to(device))
+
+        if True:
+            if t==self.T-1:
+                self.generative_model_rewards_mb.append(generative_model_rewards)
 
         #return dirichlet_rew_params
 

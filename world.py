@@ -279,10 +279,6 @@ class GroupWorld(object):
         if t==0:
             self.environment.set_initial_states(tau)
             response = None
-            if hasattr(self.environment, 'Chi'):
-                context = self.environment.generate_context_obs(tau)
-            else:
-                context = None
         else:
             response = ar.tensor([self.actions[tau, t-1]])
             self.environment.update_hidden_states(tau, t, response)
@@ -298,7 +294,12 @@ class GroupWorld(object):
 
         reward = self.rewards[tau, t]
 
-        self.agent.update_beliefs(tau, t, ar.tensor([observation]), ar.tensor([reward]), response, context)
+        if hasattr(self.environment, 'Chi'):
+            context = self.environment.generate_context_obs(tau)
+        else:
+            context = None
+
+        self.agent.update_beliefs(tau, t, ar.tensor([observation]), ar.tensor([reward]), response, ar.tensor([context]))
 
 
         if t < self.T-1:
