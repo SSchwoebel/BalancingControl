@@ -522,7 +522,7 @@ class Group2ContextPerception(object):
                  hidden_state_mapping = False,
                  state_mapping = None,
                  T=5, trials=10, pol_lambda=0, r_lambda=0, non_decaying=0,
-                 dec_temp=1., npart=1, nsubs=1, infer_alpha_0=False, use_h=True):
+                 dec_temp=1., npart=1, nsubs=1, infer_alpha_0=False, use_h=False):
         
         ### if another generative model is supposed to be given, i.e. generative model rewards, simply give it as dirichlet params
 
@@ -629,6 +629,11 @@ class Group2ContextPerception(object):
             self.generative_model_rewards_mb = []
             self.prior_policies_mb = []
             self.posterior_context_mb = []
+
+            self.outcome_surprise_log = ar.zeros((trials, T, self.nc))
+            self.policy_entropy_log = ar.zeros((trials, T, self.nc))
+            self.policy_surprise_log = ar.zeros((trials, T, self.nc))
+            self.context_obs_surprise_log = ar.zeros((trials, T, self.nc))
 
     def locs_to_pars(self, locs):
 
@@ -909,13 +914,8 @@ class Group2ContextPerception(object):
             else:
                 context_obs_suprise = ar.zeros(self.nc, self.npart, self.nsubs)
 
-            log_posterior = outcome_surprise + policy_surprise + entropy + context_obs_suprise +ar.log(prior_context+1e-10)
-
-            # self.prior_context[tau,t] = prior_context
-            # self.outcome_surprise_log[tau,t] = outcome_surprise
-            # self.policy_entropy_log[tau,t] = entropy
-            # self.policy_surprise_log[tau,t] = policy_surprise 
-            # self.context_obs_surprise_log[tau,t] = context_obs_suprise
+            # note: check sing on policy entropy!
+            log_posterior = outcome_surprise + policy_surprise + context_obs_suprise +ar.log(prior_context+1e-10)# + entropy
             
             posterior_context = ar.nn.functional.softmax(log_posterior, dim=0)
 
@@ -928,6 +928,12 @@ class Group2ContextPerception(object):
                 self.posterior_context_mb[-1].append(posterior_context)
             if t==self.T-1:
                 self.posterior_context_mb[-1] = ar.stack(self.posterior_context_mb[-1])
+
+            # self.prior_context[tau,t] = prior_context
+            self.outcome_surprise_log[tau,t] = outcome_surprise[...,0,0]
+            self.policy_entropy_log[tau,t] = entropy[...,0,0]
+            self.policy_surprise_log[tau,t] = policy_surprise [...,0,0]
+            self.context_obs_surprise_log[tau,t] = context_obs_suprise[...,0,0]
 
     def update_beliefs_dirichlet_context_gen_params(self, tau, t, context_obs):
 
@@ -1007,7 +1013,7 @@ class Group2ContextPerception(object):
         vec_subjects = ar.eye(self.nsubs)
         matrix_index = ar.einsum('rn,nm->rm', vec_rewards, vec_subjects)
         mapped_states = ar.einsum('hm,hcnk->mcnk', self.state_mapping_one_hot[tau], states)
-        addition = mapped_states[None,...]*matrix_index[:,None,None,None,:]*self.mask[None,None,None,tau,...]
+        addition = mapped_states[None,...]*matrix_index[:,None,None,None,:]*self.mask[None,None,None,tau,...]*self.posterior_context[-1][None,None,:,:,:]
         new_rew_params = dirichlet_rew_params + addition
 
         generative_model_rewards = new_rew_params / new_rew_params.sum(dim=0)[None,...]

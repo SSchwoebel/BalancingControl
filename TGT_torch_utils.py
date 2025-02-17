@@ -5,6 +5,10 @@ import os
 import numpy as np
 import copy 
 import torch
+import glob
+import pickle
+import json
+import gc
 
 
 ###
@@ -99,7 +103,8 @@ def run_single_simulation(pars):
                                  number_of_actions = na)
     
     ### print simulation values for the log
-    vals = ['alpha_0', 'dec_temp', 'context_trans_prob', 'run', 'learn_habit', 'learn_rew', 'learn_context_obs', 'reward_count_bias',  'prior_rewards', 'all_rewards', 'hidden_state_mapping', 'nm', 'nh']
+    vals = ['alpha_0', 'dec_temp', 'context_trans_prob', 'run', 'learn_habit', 'learn_rew', 'learn_context_obs', 'reward_count_bias',  'prior_rewards', 'all_rewards', 'hidden_state_mapping', 'nm', 'nh', 
+            'forgetting_rate_pol', 'forgetting_rate_rew']
     matrix_vals = ['generative_model_context', 'dirichlet_context_obs_params', 'transition_matrix_context']
 
     for key in vals:
@@ -125,7 +130,7 @@ def run_single_simulation(pars):
         torch.from_numpy(pars["prior_rewards"]).float(),
         torch.from_numpy(pars["prior_context"]).float(),
         torch.from_numpy(pars["all_policies"]),
-        alpha_0=torch.tensor([pars["alpha_0"]]),
+        alpha_0=torch.tensor([pars["alpha_0"]]).float(),
         dirichlet_rew_params=torch.from_numpy(pars["dirichlet_rew_params"]).float(),
         dirichlet_context_obs_params=torch.from_numpy(pars["dirichlet_context_obs_params"]).float(),
         learn_habit=pars["learn_habit"],
@@ -133,13 +138,16 @@ def run_single_simulation(pars):
         infer_context=pars["infer_context"],
         learn_context_obs=pars["learn_context_obs"],
         #to do: make simulation mask!
-        mask=None,
+        mask=pars["mask"],
         hidden_state_mapping=pars["hidden_state_mapping"],
         state_mapping=torch.from_numpy(pars["planets"]).long(),
         T=pars["T"],
         trials=pars["trials"],
-        dec_temp=torch.tensor([pars["dec_temp"]])
+        use_h=pars["use_h"],
+        dec_temp=torch.tensor([pars["dec_temp"]]).float(),
         #now would follow parameters like forgetting rate etc
+        pol_lambda=torch.tensor([pars["forgetting_rate_pol"]]).float(),
+        r_lambda=torch.tensor([pars["forgetting_rate_rew"]]).float(),
     )
     agent_perception.pars = pars
     agent = agt.FittingAgent(agent_perception,action_selection,torch.from_numpy(pars["all_policies"]),
@@ -167,6 +175,28 @@ def run_single_simulation(pars):
 
     ### save data file
     return world
+
+
+def restructure_behavioral_data(data, true_vals):
+    data_obs = torch.stack([d["observations"] for d in data], dim=-1)
+    data_rew = torch.stack([d["rewards"] for d in data], dim=-1)
+    data_act = torch.stack([d["actions"] for d in data], dim=-1)
+    data_val = torch.cat([torch.tensor(d["valid"]) for d in data], dim=-1)
+    data_ind = torch.stack([torch.tensor([d["subject"]]) for d in data], dim=-1)
+
+    structured_data = {"subject": data_ind, "observations": data_obs, "rewards": data_rew, "actions": data_act, "valid": data_val}
+    
+    # structure true vals
+    
+    true_pol_rate = torch.stack([torch.tensor([t["policy rate"]]) for t in true_vals], dim=-1)
+    true_rew_rate = torch.stack([torch.tensor([t["reward rate"]]) for t in true_vals], dim=-1)
+    true_dec_temp = torch.stack([torch.tensor([t["dec temp"]]) for t in true_vals], dim=-1)
+    true_hab_tend = torch.stack([torch.tensor([t["habitual tendency"]]) for t in true_vals], dim=-1)
+    true_ind = torch.stack([torch.tensor([t["subject"]]) for t in true_vals], dim=-1)
+    
+    structured_true_vals = {"subject": true_ind, "policy rate": true_pol_rate, "reward rate": true_rew_rate, "dec temp": true_dec_temp, "habitual tendency": true_hab_tend}
+    
+    return structured_true_vals, structured_data
 
 
 def create_data_frame(exp_name, current_dir, data_folder="raw_data"):
