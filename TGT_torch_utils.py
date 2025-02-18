@@ -103,23 +103,24 @@ def run_single_simulation(pars):
                                  number_of_actions = na)
     
     ### print simulation values for the log
-    vals = ['alpha_0', 'dec_temp', 'context_trans_prob', 'run', 'learn_habit', 'learn_rew', 'learn_context_obs', 'reward_count_bias',  'prior_rewards', 'all_rewards', 'hidden_state_mapping', 'nm', 'nh', 
-            'forgetting_rate_pol', 'forgetting_rate_rew']
-    matrix_vals = ['generative_model_context', 'dirichlet_context_obs_params', 'transition_matrix_context']
+    if False:
+        vals = ['alpha_0', 'dec_temp', 'context_trans_prob', 'run', 'learn_habit', 'learn_rew', 'learn_context_obs', 'reward_count_bias',  'prior_rewards', 'all_rewards', 'hidden_state_mapping', 'nm', 'nh', 
+                'forgetting_rate_pol', 'forgetting_rate_rew']
+        matrix_vals = ['generative_model_context', 'dirichlet_context_obs_params', 'transition_matrix_context']
 
-    for key in vals:
-        print(f"{key}: {pars[key]}")
+        for key in vals:
+            print(f"{key}: {pars[key]}")
 
-    for key in matrix_vals:
-        print(f"\n{key}: \n{pars[key]}")   
-    
-    print("\n", "true_reward_contingencies")
-    for cont in range(pars["n_reward_contingencies"]):
-        print(pars["true_reward_contingencies"][cont],"\n")
+        for key in matrix_vals:
+            print(f"\n{key}: \n{pars[key]}")   
+        
+        print("\n", "true_reward_contingencies")
+        for cont in range(pars["n_reward_contingencies"]):
+            print(pars["true_reward_contingencies"][cont],"\n")
 
-    print("generative_model_rewards")
-    for cont in range(nc):
-        print(pars["generative_model_rewards"][:,:,cont].round(3),"\n")      
+        print("generative_model_rewards")
+        for cont in range(nc):
+            print(pars["generative_model_rewards"][:,:,cont].round(3),"\n")      
 
     ### initialize Agent, Environment and World classes
     agent_perception = prc.Group2ContextPerception(
@@ -199,11 +200,11 @@ def restructure_behavioral_data(data, true_vals):
     return structured_true_vals, structured_data
 
 
-def create_data_frame(exp_name, current_dir, data_folder="raw_data"):
+def create_data_frame(exp_name, data_folder="raw_data"):
     fnames = load_file(exp_name +  '_sim_file_names.json')
     dfs = []
     for fi, file in enumerate(fnames):
-        world = load_file(os.path.join(current_dir, data_folder,file))
+        world = load_file(os.path.join(data_folder,file))
         perc = world.agent.perception
         env = world.environment
         pars = perc.pars
@@ -274,6 +275,21 @@ def create_data_frame(exp_name, current_dir, data_folder="raw_data"):
     return df
 
 
+def plot_choice_accuracy_mean(dataframe,simulation_params):
+
+    df = dataframe.copy().query(f"t == 0")
+    df = df.groupby(["alpha_0","context_trans_prob","agent","block","context_cue"])["chose_optimal"].mean().reset_index()
+
+    plot_pars = {"x":"block","y":"chose_optimal","hue":"context_cue","marker":"o", "palette":task_pal, "errorbar":"sd"}
+
+    fig = plt.plot()
+    g = sns.lineplot(data=df, **plot_pars)
+    g.vlines(ymin=0, ymax=1,x=simulation_params["training_blocks"]+0.5,ls='--',color='gray')
+    g.vlines(ymin=0, ymax=1, x=simulation_params["training_blocks"]+simulation_params["degradation_blocks"]+0.5, ls='--',color='gray')
+    g.set_xticks(ticks=np.arange(1,df.block.unique().size+1))
+    g.set_ylim([0,1.05])
+
+
 def plot_choice_accuracy_alpha_rho(dataframe,simulation_params):
 
     df = dataframe.copy().query(f"t == 0")
@@ -300,6 +316,17 @@ def plot_choice_accuracy_alpha_rho(dataframe,simulation_params):
 
     return fig
 
+def plot_context_inference_mean(dataframe, simulation_params):
+    df = dataframe.copy()
+    context = df.groupby(["alpha_0","dec_temp","context_trans_prob","agent","trial_type","block","context_cue","t"])["inferred_correct_context"].mean().reset_index()
+    plot_pars = {"x":"block","y":"chose_optimal","hue":"context_cue","marker":"o", "palette":task_pal, "errorbar":"sd"}
+    
+    fig = plt.plot()
+    g = sns.lineplot(data=df, **plot_pars)
+    g.vlines(ymin=0, ymax=1,x=simulation_params["training_blocks"]+0.5,ls='--',color='gray')
+    g.vlines(ymin=0, ymax=1, x=simulation_params["training_blocks"]+simulation_params["degradation_blocks"]+0.5, ls='--',color='gray')
+    g.set_xticks(ticks=np.arange(1,df.block.unique().size+1))
+    g.set_ylim([0,1.05])
 
 def plot_context_inference_t_alpha_rho(dataframe, simulation_params):
     df = dataframe.copy()
@@ -524,3 +551,5 @@ def plot_expected_reward_and_optimal_policy(experiment_config):
     g = sns.countplot(data=df.query(f"trial_type==1 & block == {block}"),x="optimal_policy",hue="context_observation",ax=ax[1])
     g.yaxis.set_major_locator(ticker.MultipleLocator(3))
 
+
+# %%
