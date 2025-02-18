@@ -7,6 +7,7 @@ import seaborn as sns
 import json
 import jsonpickle as pickle
 import jsonpickle.ext.numpy as jsonpickle_numpy
+from scipy.stats import pearsonr
 
 def save_file(data,fname, mode="w"):
 
@@ -22,6 +23,13 @@ def load_file(fname, mode="r"):
         data = json.load(infile)
     return pickle.decode(data)
 
+def annot_corrfunc(x, y, **kws):
+    (r, p) = pearsonr(x, y)
+    ax = plt.gca()
+    ax.annotate("r = {:.2f} ".format(r),
+                xy=(.1, .9), xycoords=ax.transAxes)
+    ax.annotate("p = {:.3f}".format(p),
+                xy=(.5, .9), xycoords=ax.transAxes)
 
 
 def normalize(matrix, dim=0):

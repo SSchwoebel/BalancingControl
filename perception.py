@@ -521,8 +521,12 @@ class Group2ContextPerception(object):
                  mask=None,
                  hidden_state_mapping = False,
                  state_mapping = None,
+                 infer_policy_rate = False,
+                 infer_reward_rate = False,
+                 infer_decision_temp = True,
                  T=5, trials=10, pol_lambda=0, r_lambda=0, non_decaying=0,
-                 dec_temp=1., npart=1, nsubs=1, infer_alpha_0=False, use_h=False):
+                 dec_temp=1., npart=1, nsubs=1, infer_alpha_0=False, use_h=False,
+                 store_internal_variables=False):
         
         ### if another generative model is supposed to be given, i.e. generative model rewards, simply give it as dirichlet params
 
@@ -554,8 +558,12 @@ class Group2ContextPerception(object):
         self.infer_alpha_0 = infer_alpha_0
         # use_h says whether to use h or alpha_0 for inference
         self.use_h = use_h
+        self.infer_policy_rate = infer_policy_rate
+        self.infer_reward_rate = infer_reward_rate
+        self.infer_decision_temp = infer_decision_temp
         self.alpha_0 = alpha_0
         self.hidden_state_mapping = hidden_state_mapping
+        self.store_internal_variables = store_internal_variables
 
         if hidden_state_mapping:
             self.nm = dirichlet_rew_params.shape[1]
@@ -623,7 +631,7 @@ class Group2ContextPerception(object):
 
         # self.reset()
 
-        if True:
+        if self.store_internal_variables:
             self.rewards_structured = ar.zeros((trials, T)).int()
             self.actions_structured = ar.zeros((trials, T)).int() - 1
             self.generative_model_rewards_mb = []
@@ -637,21 +645,39 @@ class Group2ContextPerception(object):
 
     def locs_to_pars(self, locs):
 
+        count = 0
+        par_dict = {}
+
+        if self.infer_policy_rate:
+            par_dict["policy rate"] = ar.sigmoid(locs[...,count])
+            count += 1
+        if self.infer_reward_rate:
+            par_dict["reward rate"] = ar.sigmoid(locs[...,count])
+            count += 1
+        if self.infer_decision_temp:
+            par_dict["dec temp"] = 10*ar.sigmoid(locs[...,count])
+            count += 1
         if self.infer_alpha_0:
             if self.use_h:
-                par_dict = {"policy rate": ar.sigmoid(locs[...,0]),
-                            "reward rate": ar.sigmoid(locs[...,1]),
-                            "dec temp": 10*ar.sigmoid(locs[...,2]),
-                            "habitual tendency": ar.sigmoid(locs[...,3])}
+                par_dict["habitual tendency"] = ar.sigmoid(locs[...,count])
             else:
-                par_dict = {"policy rate": ar.sigmoid(locs[...,0]),
-                            "reward rate": ar.sigmoid(locs[...,1]),
-                            "dec temp": 10*ar.sigmoid(locs[...,2]),
-                            "habitual tendency": ar.exp(locs[...,3])}
-        else:
-            par_dict = {"policy rate": ar.sigmoid(locs[...,0]),
-                        "reward rate": ar.sigmoid(locs[...,1]),
-                        "dec temp": 10*ar.sigmoid(locs[...,2])}
+                par_dict["habitual tendency"] = ar.exp(locs[...,count])
+
+        # if self.infer_alpha_0:
+        #     if self.use_h:
+        #         par_dict = {"policy rate": ar.sigmoid(locs[...,0]),
+        #                     "reward rate": ar.sigmoid(locs[...,1]),
+        #                     "dec temp": 10*ar.sigmoid(locs[...,2]),
+        #                     "habitual tendency": ar.sigmoid(locs[...,3])}
+        #     else:
+        #         par_dict = {"policy rate": ar.sigmoid(locs[...,0]),
+        #                     "reward rate": ar.sigmoid(locs[...,1]),
+        #                     "dec temp": 10*ar.sigmoid(locs[...,2]),
+        #                     "habitual tendency": ar.exp(locs[...,3])}
+        # else:
+        #     par_dict = {"policy rate": ar.sigmoid(locs[...,0]),
+        #                 "reward rate": ar.sigmoid(locs[...,1]),
+        #                 "dec temp": 10*ar.sigmoid(locs[...,2])}
 
         return par_dict
 
@@ -722,7 +748,7 @@ class Group2ContextPerception(object):
         self.posterior_policies = []
         self.posterior_actions = []
 
-        if True:
+        if self.store_internal_variables:
             self.rewards_structured = ar.zeros((self.trials, self.T)).int()
             self.actions_structured = ar.zeros((self.trials, self.T)).int() - 1
             self.generative_model_rewards_mb = []
@@ -808,7 +834,7 @@ class Group2ContextPerception(object):
 
         if prev_response is not None:
             self.actions.append(prev_response)
-            if True:
+            if self.store_internal_variables:
                 self.actions_structured[tau,t] = prev_response
         else:
             self.actions.append(ar.tensor([-1]))
@@ -921,7 +947,7 @@ class Group2ContextPerception(object):
 
         self.posterior_context.append(posterior_context)
 
-        if True:
+        if self.store_internal_variables:
             if t==0:
                 self.posterior_context_mb.append([posterior_context])
             else:
@@ -975,7 +1001,7 @@ class Group2ContextPerception(object):
         self.dirichlet_pol_params.append(dirichlet_pol_params.to(device))
         self.prior_policies.append(prior_policies.to(device))
 
-        if True:
+        if self.store_internal_variables:
             if t==self.T-1:
                 self.prior_policies_mb.append(prior_policies)
 
@@ -1020,7 +1046,7 @@ class Group2ContextPerception(object):
         self.dirichlet_rew_params.append(new_rew_params.to(device))
         self.generative_model_rewards.append(generative_model_rewards.to(device))
 
-        if True:
+        if self.store_internal_variables:
             if t==self.T-1:
                 self.generative_model_rewards_mb.append(generative_model_rewards)
 

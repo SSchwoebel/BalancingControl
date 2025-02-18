@@ -48,9 +48,7 @@ from world import GroupWorld
 
 from misc import load_file, save_file, normalize
 
-
-def run_single_simulation(pars):
-    
+def set_up_Bayesian_agent(pars, n_agents=1):
     ns = pars["nm"]
     npl = pars["nh"]
     nr = pars["nr"]
@@ -149,12 +147,57 @@ def run_single_simulation(pars):
         #now would follow parameters like forgetting rate etc
         pol_lambda=torch.tensor([pars["forgetting_rate_pol"]]).float(),
         r_lambda=torch.tensor([pars["forgetting_rate_rew"]]).float(),
+        nsubs=n_agents,
+        store_internal_variables = pars["store_internal_variables"]
     )
     agent_perception.pars = pars
+
+    key_agent_pars = {"dec temp": torch.tensor([pars["dec_temp"]]).float(), "habitual tendency": torch.tensor([pars["alpha_0"]]).float(), 
+                      "policy rate": torch.tensor([pars["forgetting_rate_pol"]]).float(), "reward rate": torch.tensor([pars["forgetting_rate_rew"]]).float()}
+
+    agent_perception.set_parameters(par_dict=key_agent_pars)
+    agent_perception.reset()
+
     agent = agt.FittingAgent(agent_perception,action_selection,torch.from_numpy(pars["all_policies"]),
                              trials = pars["trials"], T = pars["T"], number_of_states = pars["nh"],
                              number_of_rewards = pars["nr"],
-                             number_of_policies = pars["npi"], nsubs = 1)
+                             number_of_policies = pars["npi"], nsubs = n_agents)
+    
+    return agent, agent_perception
+
+
+def set_up_Bayesian_inference_agent(n_agents, pars, base_dir, remove_old=False):
+
+    if remove_old:
+        svgs = glob.glob(os.path.join(base_dir,"*.svg"))
+        for file in svgs:
+            os.remove(file)
+
+        csvs = glob.glob(os.path.join(base_dir,"*.csv"))
+        for file in csvs:
+            os.remove(file)
+
+        saves = glob.glob(os.path.join(base_dir,"*.save"))
+        for file in saves:
+            os.remove(file)
+
+        agents = glob.glob(os.path.join(base_dir,"twostage_agent*"))
+        for file in agents:
+            os.remove(file)
+
+        outputs = glob.glob(os.path.join(base_dir,"*.json"))
+        for file in outputs:
+            os.remove(file)
+        
+    agent, agent_perception = set_up_Bayesian_agent(pars, n_agents=n_agents)
+
+    return agent
+    
+
+
+def run_single_simulation(pars):
+    
+    agent, agent_perception = set_up_Bayesian_agent(pars)
     
     environment = env.PlanetSystem(
                                   torch.from_numpy(pars["generative_model_observations"]).float(),
@@ -196,6 +239,24 @@ def restructure_behavioral_data(data, true_vals):
     true_ind = torch.stack([torch.tensor([t["subject"]]) for t in true_vals], dim=-1)
     
     structured_true_vals = {"subject": true_ind, "policy rate": true_pol_rate, "reward rate": true_rew_rate, "dec temp": true_dec_temp, "habitual tendency": true_hab_tend}
+    
+    return structured_true_vals, structured_data
+
+def load_simulation_outputs(base_dir, exp_name, agent_type):
+        
+    # data 
+    fname_data = os.path.join(base_dir, f"{exp_name}_agent_{agent_type}_data.json")
+    structured_data = load_file(fname_data)
+    # with open(fname_data, 'r') as infile:
+    #     loaded_data = json.load(infile)
+    # structured_data = pickle.decode(loaded_data)
+        
+    # true values 
+    fname_true_vals = os.path.join(base_dir, f"{exp_name}_agent_"+agent_type+"_true_vals.json")
+    structured_true_vals = load_file(fname_true_vals)
+    # with open(fname_true_vals, 'r') as infile:
+    #     loaded_true_vals = json.load(infile)
+    # structured_true_vals = pickle.decode(loaded_true_vals)
     
     return structured_true_vals, structured_data
 
@@ -274,6 +335,43 @@ def create_data_frame(exp_name, data_folder="raw_data"):
     df.to_excel(exp_name + "_data_long_format.xlsx")
     return df
 
+def sample_posterior(inferrer, param_names, fname_str, base_dir, n_samples=500, true_vals=None):
+
+    sample_df, locs_sample_df = inferrer.sample_posterior(n_samples=n_samples) #inferrer.plot_posteriors(n_samples=1000)
+    # inferrer.plot_posteriors(n_samples=n_samples)
+    if true_vals is not None:
+        append_trues = True
+    else:
+        append_trues = False
+    
+    sample_file = os.path.join(base_dir, fname_str+'_sample_df.csv')
+    sample_df.to_csv(sample_file)
+
+    locs_file = os.path.join(base_dir, fname_str+'_locs_sample_df.csv')
+    locs_sample_df.to_csv(locs_file)
+    
+    mean_df = pd.DataFrame()
+
+    for name in param_names:
+        means = []
+        if append_trues:
+            trues = []
+        subs = []
+        for i in range(inferrer.nsubs):
+            means.append(sample_df[sample_df['subject']==i][name].mean())
+            if append_trues:
+                trues.append(true_vals[name][true_vals['subject']==i])
+            subs.append(i)
+
+        mean_df["inferred "+name] = torch.tensor(means)
+        if append_trues:
+            mean_df["true "+name] = torch.tensor(trues)
+        mean_df["subject"] = torch.tensor(subs)
+        
+    smaller_file = os.path.join(base_dir, fname_str+'_mean_df.csv')
+    mean_df.to_csv(smaller_file)
+
+    return mean_df, sample_df, locs_sample_df
 
 def plot_choice_accuracy_mean(dataframe,simulation_params):
 
@@ -318,11 +416,10 @@ def plot_choice_accuracy_alpha_rho(dataframe,simulation_params):
 
 def plot_context_inference_mean(dataframe, simulation_params):
     df = dataframe.copy()
-    context = df.groupby(["alpha_0","dec_temp","context_trans_prob","agent","trial_type","block","context_cue","t"])["inferred_correct_context"].mean().reset_index()
-    plot_pars = {"x":"block","y":"chose_optimal","hue":"context_cue","marker":"o", "palette":task_pal, "errorbar":"sd"}
+    context_df = df.groupby(["alpha_0","dec_temp","context_trans_prob","agent","trial_type","block","context_cue","t"])["inferred_correct_context"].mean().reset_index()
     
     fig = plt.plot()
-    g = sns.lineplot(data=df, **plot_pars)
+    g = sns.lineplot(data=context_df, x='block', y='inferred_correct_context', hue="t",palette=task_pal, style='t',marker="o", errorbar="sd")
     g.vlines(ymin=0, ymax=1,x=simulation_params["training_blocks"]+0.5,ls='--',color='gray')
     g.vlines(ymin=0, ymax=1, x=simulation_params["training_blocks"]+simulation_params["degradation_blocks"]+0.5, ls='--',color='gray')
     g.set_xticks(ticks=np.arange(1,df.block.unique().size+1))
