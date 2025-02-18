@@ -521,11 +521,12 @@ class Group2ContextPerception(object):
                  mask=None,
                  hidden_state_mapping = False,
                  state_mapping = None,
-                 infer_policy_rate = False,
-                 infer_reward_rate = False,
+                 infer_policy_rate = True,
+                 infer_reward_rate = True,
                  infer_decision_temp = True,
+                 infer_alpha_0=True,
                  T=5, trials=10, pol_lambda=0, r_lambda=0, non_decaying=0,
-                 dec_temp=1., npart=1, nsubs=1, infer_alpha_0=False, use_h=False,
+                 dec_temp=1., npart=1, nsubs=1, use_h=False,
                  store_internal_variables=False):
         
         ### if another generative model is supposed to be given, i.e. generative model rewards, simply give it as dirichlet params
@@ -578,10 +579,9 @@ class Group2ContextPerception(object):
         else:
             self.mask = mask.long()[:,None,:]
 
-        if self.infer_alpha_0:
-            self.npars = 4
-        else:
-            self.npars = 3
+        self.npars = self.infer_alpha_0+self.infer_decision_temp+self.infer_policy_rate+self.infer_reward_rate
+        print(self.npars)
+
         self.param_names = list(self.locs_to_pars(ar.zeros(self.npars)).keys())
 
         if len(dirichlet_rew_params.shape) > 2:
@@ -663,6 +663,9 @@ class Group2ContextPerception(object):
             else:
                 par_dict["habitual tendency"] = ar.exp(locs[...,count])
 
+        # print("locs to pars")
+        # print(par_dict)
+
         # if self.infer_alpha_0:
         #     if self.use_h:
         #         par_dict = {"policy rate": ar.sigmoid(locs[...,0]),
@@ -686,6 +689,15 @@ class Group2ContextPerception(object):
         if locs is not None:
             par_dict = self.locs_to_pars(locs)
 
+            if len(locs[...,0].shape) > 1:
+                self.npart = locs[...,0].shape[0]
+                self.nsubs = locs[...,0].shape[1]
+            else:
+                self.nsubs = locs[...,0].shape[0]
+                self.npart = 1
+                for key in par_dict.keys():
+                    par_dict[key] = par_dict[key][None,...]
+                
         if 'policy rate' in par_dict.keys():
             self.pol_lambda = par_dict['policy rate']
         if 'reward rate' in par_dict.keys():
@@ -699,16 +711,16 @@ class Group2ContextPerception(object):
                 self.alpha_0 = par_dict['habitual tendency']
 
     def reset(self):
-        if len(self.dec_temp.shape) > 1:
-            self.npart = self.dec_temp.shape[0]
-            self.nsubs = self.dec_temp.shape[1]
-        else:
-            self.nsubs = self.dec_temp.shape[0]
-            self.npart = 1
-            #self.alpha_0 = self.alpha_0[None,:]
-            self.pol_lambda = self.pol_lambda[None,:]
-            self.r_lambda = self.r_lambda[None,:]
-            self.dec_temp = self.dec_temp[None,:]
+        # if len(self.dec_temp.shape) > 1:
+        #     self.npart = self.dec_temp.shape[0]
+        #     self.nsubs = self.dec_temp.shape[1]
+        # else:
+        #     self.nsubs = self.dec_temp.shape[0]
+        #     self.npart = 1
+        #     #self.alpha_0 = self.alpha_0[None,:]
+        #     self.pol_lambda = self.pol_lambda[None,:]
+        #     self.r_lambda = self.r_lambda[None,:]
+        #     self.dec_temp = self.dec_temp[None,:]
 
         # print(self.alpha_0.shape)
         # print(self.npart, self.nsubs)
@@ -731,6 +743,11 @@ class Group2ContextPerception(object):
 
         generative_model_context_obs_init = self.dirichlet_context_obs_params[0] / self.dirichlet_context_obs_params[0].sum(axis=0)[None,...]
         self.generative_model_context_obs = [generative_model_context_obs_init]
+
+        if not self.infer_policy_rate:
+            self.pol_lambda = ar.zeros((self.npart, self.nsubs))
+        if not self.infer_reward_rate:
+            self.rew_lambda = ar.zeros((self.npart, self.nsubs))
 
         self.observations = []
         self.rewards = []

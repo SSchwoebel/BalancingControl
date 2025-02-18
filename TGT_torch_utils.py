@@ -148,14 +148,18 @@ def set_up_Bayesian_agent(pars, n_agents=1):
         pol_lambda=torch.tensor([pars["forgetting_rate_pol"]]).float(),
         r_lambda=torch.tensor([pars["forgetting_rate_rew"]]).float(),
         nsubs=n_agents,
-        store_internal_variables = pars["store_internal_variables"]
+        store_internal_variables = pars["store_internal_variables"],
+        infer_alpha_0=pars["infer_alpha_0"],
+        infer_decision_temp=pars["infer_decision_temp"],
+        infer_policy_rate=pars["infer_policy_rate"],
+        infer_reward_rate=pars["infer_reward_rate"]
     )
     agent_perception.pars = pars
 
-    key_agent_pars = {"dec temp": torch.tensor([pars["dec_temp"]]).float(), "habitual tendency": torch.tensor([pars["alpha_0"]]).float(), 
-                      "policy rate": torch.tensor([pars["forgetting_rate_pol"]]).float(), "reward rate": torch.tensor([pars["forgetting_rate_rew"]]).float()}
+    # key_agent_pars = {"dec temp": torch.tensor([pars["dec_temp"]]).float(), "habitual tendency": torch.tensor([pars["alpha_0"]]).float(), 
+    #                   "policy rate": torch.tensor([pars["forgetting_rate_pol"]]).float(), "reward rate": torch.tensor([pars["forgetting_rate_rew"]]).float()}
 
-    agent_perception.set_parameters(par_dict=key_agent_pars)
+    # agent_perception.set_parameters(par_dict=key_agent_pars)
     agent_perception.reset()
 
     agent = agt.FittingAgent(agent_perception,action_selection,torch.from_numpy(pars["all_policies"]),
