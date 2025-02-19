@@ -33,6 +33,7 @@ import sys
 from numpy import eye
 from statsmodels.stats.multitest import multipletests
 from scipy.io import loadmat
+from misc import annot_corrfunc
 
 ###################################
 """inference convenience functions"""
@@ -107,3 +108,123 @@ def load_samples(base_dir, fname_str):
     locs_sample_df = pd.read_csv(locs_sample_file)
 
     return mean_df, sample_df, locs_sample_df
+
+
+def plot_results(sample_df, param_names, fname_str, ELBO, mean_df, base_dir, max_dt, big_custom=True):
+    
+    plot_df = mean_df.drop('subject', axis=1)\
+                        .reindex(["inferred "+name for name in param_names]\
+                                 +["true "+name for name in param_names], axis=1)
+        
+    if big_custom:
+        big_custom_plot(plot_df, param_names, base_dir, fname_str, ELBO, max_dt, fit_reg=True, annot=True)
+        # big_custom_plot(plot_df, param_names, base_dir, fname_str, ELBO, max_dt, fit_reg=True, annot=False)
+        # big_custom_plot(plot_df, param_names, base_dir, fname_str, ELBO, max_dt, fit_reg=False, annot=True)
+        # big_custom_plot(plot_df, param_names, base_dir, fname_str, ELBO, max_dt, fit_reg=False, annot=False)
+    
+    # plt.figure()
+    # sns.pairplot(sample_df, kind='reg')
+    # plt.savefig(os.path.join(base_dir, fname_str+"_pairplot_sample.svg"))
+    # plt.show()
+    
+    plt.figure()
+    f = sns.pairplot(data=plot_df, kind='reg', 
+                     diag_kind="kde", corner=True,
+                     plot_kws={'line_kws': {'color': 'green', 'alpha': 0.6}})
+    f.map(annot_corrfunc)
+    plt.savefig(os.path.join(base_dir, fname_str+"_pairplot_means_all.svg"))
+    plt.show()
+    
+    plt.figure()
+    xvars_of_interest = ["true "+name for name in param_names]
+    yvars_of_interest = ["inferred "+name for name in param_names]
+    f = sns.pairplot(data=plot_df, kind='reg', diag_kind="kde", corner=True,
+                     plot_kws={'line_kws': {'color': 'green', 'alpha': 0.6}},
+                     x_vars=xvars_of_interest, y_vars=yvars_of_interest)
+    f.map(annot_corrfunc)
+    plt.savefig(os.path.join(base_dir, fname_str+"_pairplot_means.svg"))
+    plt.show()
+    
+    plt.figure()
+    vars_of_interest = ["inferred "+name for name in param_names]
+    f = sns.pairplot(data=plot_df, kind='reg', diag_kind="kde", corner=True,
+                     plot_kws={'line_kws': {'color': 'green', 'alpha': 0.6}},
+                     x_vars=vars_of_interest, y_vars=vars_of_interest)
+    f.map(annot_corrfunc)
+    plt.savefig(os.path.join(base_dir, fname_str+"_pairplot_means_inferred_corr.svg"))
+    plt.show()
+    
+    # p_opacity = pval_corrected*0.5 +0.5
+    
+    # plt.figure()
+    # sns.heatmap(plot_df.corr(), annot=True, fmt='.2f', alpha=p_opacity, 
+    #             cmap='vlag', vmin=-1, vmax=1)
+    # plt.show()
+
+def big_custom_plot(plot_df, param_names, base_dir, fname_str, ELBO, param_ranges, fit_reg=False, annot=False):
+    
+    axes_names = param_names
+    ranges = param_ranges
+    positions = [[0,0], [0,1], [1,0], [1,1], [0,2]]
+
+    fig = plt.figure(layout='constrained', figsize=(14,12))
+    axes = fig.subplots(3, 3)
+    
+    for i, name in enumerate(param_names):
+    
+        ax = axes[positions[i][0], positions[i][1]]
+        ax.plot(ranges[i],ranges[i], linestyle='-', color="grey", alpha=0.6)
+        # sns.scatterplot(data=plot_df, x="true "+name, y="inferred "+name, ax=ax)
+        sns.regplot(data=plot_df, x="true "+name, y="inferred "+name, ax=ax,
+                   line_kws = {'color': 'green', 'alpha': 0.3}, fit_reg=fit_reg)
+        ax.set_xlim(ranges[i])
+        ax.set_ylim(ranges[i])
+        ax.set_xlabel("true "+axes_names[i])
+        ax.set_ylabel("inferred "+axes_names[i])
+        ax.annotate(axes_names[i], (0.+0.1*ranges[i][1], ranges[i][1]-0.1*ranges[i][1]), fontsize=16)
+        
+        if annot:
+            (r, p) = pearsonr(plot_df["true "+name], plot_df["inferred "+name])
+            ax.annotate("r = {:.2f} ".format(r)+"p = {:.3f}".format(p), 
+                        (0.4*ranges[i][1], 0.05*ranges[i][1]), fontsize=16)
+            # ax.annotate("p = {:.3f}".format(p),
+            #             (0.7*ranges[i][1], 0.05*ranges[i][1]))
+        
+    ax = axes[2,0]
+    # plt.title("ELBO")
+    ax.plot(ELBO)
+    ax.set_ylabel("ELBO", fontsize=16)
+    ax.set_xlabel("iteration", fontsize=16)
+
+    rho = plot_df.corr()
+    pval = plot_df.corr(method=lambda x, y: pearsonr(x, y)[1]) - eye(*rho.shape)
+    reject, pval_corrected, alphaS, alphaB = multipletests(pval, method='bonferroni')
+    
+    gs = axes[2, 1].get_gridspec()
+    # remove the underlying axes
+    for ax in axes[2, 1:]:
+        ax.remove()
+    axbig = fig.add_subplot(gs[2, 2])
+    ax = axbig
+    
+    p_opacity = pval_corrected*0.5 +0.5
+
+    sns.heatmap(plot_df.corr(), annot=True, fmt='.2f', alpha=p_opacity, 
+                cmap='vlag', vmin=-1, vmax=1, ax=ax)
+    
+    # sns.heatmap(mean_df.corr(), annot=True, fmt='.2f', ax=ax)#[pval_corrected<alphaB]
+        
+    try:
+        plt.tight_layout()
+    except:
+        pass
+    
+    if fit_reg:
+        name_str = "_regression"
+    else:
+        name_str = ""
+    if annot:
+        name_str += "_annot"
+    
+    plt.savefig(os.path.join(base_dir, fname_str+"_big_plot"+name_str+".svg"))
+    plt.show()
