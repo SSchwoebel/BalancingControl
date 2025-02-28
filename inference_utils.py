@@ -109,58 +109,6 @@ def load_samples(base_dir, fname_str):
 
     return mean_df, sample_df, locs_sample_df
 
-
-def plot_results(sample_df, param_names, fname_str, ELBO, mean_df, base_dir, max_dt, big_custom=True):
-    
-    plot_df = mean_df.drop('subject', axis=1)\
-                        .reindex(["inferred "+name for name in param_names]\
-                                 +["true "+name for name in param_names], axis=1)
-        
-    if big_custom:
-        big_custom_plot(plot_df, param_names, base_dir, fname_str, ELBO, max_dt, fit_reg=True, annot=True)
-        # big_custom_plot(plot_df, param_names, base_dir, fname_str, ELBO, max_dt, fit_reg=True, annot=False)
-        # big_custom_plot(plot_df, param_names, base_dir, fname_str, ELBO, max_dt, fit_reg=False, annot=True)
-        # big_custom_plot(plot_df, param_names, base_dir, fname_str, ELBO, max_dt, fit_reg=False, annot=False)
-    
-    # plt.figure()
-    # sns.pairplot(sample_df, kind='reg')
-    # plt.savefig(os.path.join(base_dir, fname_str+"_pairplot_sample.svg"))
-    # plt.show()
-    
-    plt.figure()
-    f = sns.pairplot(data=plot_df, kind='reg', 
-                     diag_kind="kde", corner=True,
-                     plot_kws={'line_kws': {'color': 'green', 'alpha': 0.6}})
-    f.map(annot_corrfunc)
-    plt.savefig(os.path.join(base_dir, fname_str+"_pairplot_means_all.svg"))
-    plt.show()
-    
-    plt.figure()
-    xvars_of_interest = ["true "+name for name in param_names]
-    yvars_of_interest = ["inferred "+name for name in param_names]
-    f = sns.pairplot(data=plot_df, kind='reg', diag_kind="kde", corner=True,
-                     plot_kws={'line_kws': {'color': 'green', 'alpha': 0.6}},
-                     x_vars=xvars_of_interest, y_vars=yvars_of_interest)
-    f.map(annot_corrfunc)
-    plt.savefig(os.path.join(base_dir, fname_str+"_pairplot_means.svg"))
-    plt.show()
-    
-    plt.figure()
-    vars_of_interest = ["inferred "+name for name in param_names]
-    f = sns.pairplot(data=plot_df, kind='reg', diag_kind="kde", corner=True,
-                     plot_kws={'line_kws': {'color': 'green', 'alpha': 0.6}},
-                     x_vars=vars_of_interest, y_vars=vars_of_interest)
-    f.map(annot_corrfunc)
-    plt.savefig(os.path.join(base_dir, fname_str+"_pairplot_means_inferred_corr.svg"))
-    plt.show()
-    
-    # p_opacity = pval_corrected*0.5 +0.5
-    
-    # plt.figure()
-    # sns.heatmap(plot_df.corr(), annot=True, fmt='.2f', alpha=p_opacity, 
-    #             cmap='vlag', vmin=-1, vmax=1)
-    # plt.show()
-
 def big_custom_plot(plot_df, param_names, base_dir, fname_str, ELBO, param_ranges, fit_reg=False, annot=False):
     
     axes_names = param_names
@@ -228,3 +176,57 @@ def big_custom_plot(plot_df, param_names, base_dir, fname_str, ELBO, param_range
     
     plt.savefig(os.path.join(base_dir, fname_str+"_big_plot"+name_str+".svg"))
     plt.show()
+
+
+
+def plot_results(sample_df, param_names, fname_str, ELBO, mean_df, base_dir, max_dt, big_custom=True):
+    
+    plot_df = mean_df.drop('subject', axis=1)\
+                        .reindex(["inferred "+name for name in param_names]\
+                                 +["true "+name for name in param_names], axis=1)
+        
+    if big_custom:
+        big_custom_plot(plot_df, param_names, base_dir, fname_str, ELBO, max_dt, fit_reg=True, annot=True)
+        # big_custom_plot(plot_df, param_names, base_dir, fname_str, ELBO, max_dt, fit_reg=True, annot=False)
+        # big_custom_plot(plot_df, param_names, base_dir, fname_str, ELBO, max_dt, fit_reg=False, annot=True)
+        # big_custom_plot(plot_df, param_names, base_dir, fname_str, ELBO, max_dt, fit_reg=False, annot=False)
+    
+    # plt.figure()
+    # sns.pairplot(sample_df, kind='reg')
+    # plt.savefig(os.path.join(base_dir, fname_str+"_pairplot_sample.svg"))
+    # plt.show()
+    
+    plt.figure()
+    f = sns.pairplot(data=plot_df, kind='reg', 
+                     diag_kind="kde", corner=True,
+                     plot_kws={'line_kws': {'color': 'green', 'alpha': 0.6}})
+    f.map(annot_corrfunc)
+    plt.savefig(os.path.join(base_dir, fname_str+"_pairplot_means_all.svg"))
+    plt.show()
+    
+    plt.figure()
+    xvars_of_interest = ["true "+name for name in param_names]
+    yvars_of_interest = ["inferred "+name for name in param_names]
+    f = sns.pairplot(data=plot_df, kind='reg', diag_kind="kde", corner=True,
+                     plot_kws={'line_kws': {'color': 'green', 'alpha': 0.6}},
+                     x_vars=xvars_of_interest, y_vars=yvars_of_interest)
+    f.map(annot_corrfunc)
+    plt.savefig(os.path.join(base_dir, fname_str+"_pairplot_means.svg"))
+    plt.show()
+    
+    plt.figure()
+    vars_of_interest = ["inferred "+name for name in param_names]
+    f = sns.pairplot(data=plot_df, kind='reg', diag_kind="kde", corner=True,
+                     plot_kws={'line_kws': {'color': 'green', 'alpha': 0.6}},
+                     x_vars=vars_of_interest, y_vars=vars_of_interest)
+    f.map(annot_corrfunc)
+    plt.savefig(os.path.join(base_dir, fname_str+"_pairplot_means_inferred_corr.svg"))
+    plt.show()
+    
+    # p_opacity = pval_corrected*0.5 +0.5
+    
+    # plt.figure()
+    # sns.heatmap(plot_df.corr(), annot=True, fmt='.2f', alpha=p_opacity, 
+    #             cmap='vlag', vmin=-1, vmax=1)
+    # plt.show()
+

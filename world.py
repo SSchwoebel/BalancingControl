@@ -297,7 +297,7 @@ class GroupWorld(object):
         if hasattr(self.environment, 'Chi'):
             context = self.environment.generate_context_obs(tau)
         else:
-            context = None
+            context = ar.tensor([0])
 
         self.agent.update_beliefs(tau, t, ar.tensor([observation]), ar.tensor([reward]), response, ar.tensor([context]))
 

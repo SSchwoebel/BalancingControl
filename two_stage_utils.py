@@ -122,18 +122,42 @@ def set_up_Bayesian_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs
     pol_lambda = perception_args["policy rate"]
     r_lambda = perception_args["reward rate"]
     dec_temp = perception_args["dec temp"]    
-    alpha_0 = 1./perception_args["habitual tendency"]
-    
+    if use_h:
+        alpha_0 = 1./perception_args["habitual tendency"]
+    else:
+        alpha_0 = perception_args["habitual tendency"]
     alphas = torch.zeros((npi)) + alpha_0
 
-    bayes_prc = prc.Group2Perception(A, B, 
-                                    state_prior, utility, pol,
+    print(use_h)
+    print(alpha_0)
+
+    # bayes_prc = prc.Group2ContextPerception(A, B, torch.tensor([[1]]),
+    #                                 state_prior, utility, torch.tensor([1]), pol,
+    #                                 alpha_0=alpha_0, dirichlet_rew_params=C_alphas, 
+    #                                 learn_habit = True, mask=valid,
+    #                                 learn_rew = True, T=T, trials=trials,
+    #                                 pol_lambda=pol_lambda, r_lambda=r_lambda,
+    #                                 non_decaying=(ns-nb), dec_temp=dec_temp, 
+    #                                 nsubs=nsubs, infer_alpha_0=infer_h, use_h=use_h,
+    #                                 infer_context=True, dirichlet_context_obs_params=torch.tensor([[1]]),
+    #                                 infer_decision_temp=True, infer_policy_rate=True, infer_reward_rate=True)
+
+    C_alphas = torch.zeros((nr, ns, 2)) + 1
+    C_alphas[0,:(ns-nb),:] = 100
+    for i in range(1,nr):
+        C_alphas[i,0,:] = 1
+    
+    bayes_prc = prc.Group2ContextPerception(A, B, torch.tensor([[0.99, 0.01], [0.01, 0.99]]),
+                                    state_prior, utility, torch.tensor([0.99, 0.01]), pol,
                                     alpha_0=alpha_0, dirichlet_rew_params=C_alphas, 
                                     learn_habit = True, mask=valid,
                                     learn_rew = True, T=T, trials=trials,
                                     pol_lambda=pol_lambda, r_lambda=r_lambda,
                                     non_decaying=(ns-nb), dec_temp=dec_temp, 
-                                    nsubs=nsubs, infer_alpha_0=infer_h, use_h=use_h)
+                                    nsubs=nsubs, infer_alpha_0=infer_h, use_h=use_h,
+                                    infer_context=True, dirichlet_context_obs_params=torch.tensor([[1, 1], [1, 1]]),
+                                    learn_context_obs=True,
+                                    infer_decision_temp=True, infer_policy_rate=True, infer_reward_rate=True)
     
     bayes_prc.set_parameters(par_dict=perception_args)
     bayes_prc.reset()

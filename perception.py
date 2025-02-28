@@ -562,7 +562,7 @@ class Group2ContextPerception(object):
         self.infer_policy_rate = infer_policy_rate
         self.infer_reward_rate = infer_reward_rate
         self.infer_decision_temp = infer_decision_temp
-        self.alpha_0 = alpha_0
+        self.alpha_0 = alpha_0/self.npi
         self.hidden_state_mapping = hidden_state_mapping
         self.store_internal_variables = store_internal_variables
 
@@ -593,6 +593,7 @@ class Group2ContextPerception(object):
 
         self.dirichlet_rew_params = [ar.stack([ar.stack([self.dirichlet_rew_params_init for k in range(self.npart)], dim=-1) for j in range(self.nsubs)], dim=-1)]
         self.dirichlet_pol_params = [self.dirichlet_pol_params_init]
+        self.dirichlet_update_counts = [ar.zeros_like(self.dirichlet_pol_params_init)]
 
         prior_policies_init = self.dirichlet_pol_params[0] / self.dirichlet_pol_params[0].sum(axis=0)[None,...]
         self.prior_policies = [prior_policies_init]
@@ -661,7 +662,9 @@ class Group2ContextPerception(object):
             if self.use_h:
                 par_dict["habitual tendency"] = ar.sigmoid(locs[...,count])
             else:
-                par_dict["habitual tendency"] = ar.exp(locs[...,count])
+                hab_tend = 100*ar.sigmoid(locs[...,count])
+                #hab_tend = ar.exp(locs[...,count])
+                par_dict["habitual tendency"] = hab_tend
 
         # print("locs to pars")
         # print(par_dict)
@@ -706,9 +709,14 @@ class Group2ContextPerception(object):
             self.dec_temp = par_dict['dec temp']
         if 'habitual tendency' in par_dict.keys():
             if self.use_h:
-                self.alpha_0 = 1./par_dict['habitual tendency']
+                self.alpha_0 = 1./(par_dict['habitual tendency']/self.npi)
+                self.h = par_dict['habitual tendency']
             else:
-                self.alpha_0 = par_dict['habitual tendency']
+                self.alpha_0 = par_dict['habitual tendency']/self.npi
+                self.h = 1./par_dict['habitual tendency']
+
+        # print("alpha_0", self.infer_alpha_0, self.alpha_0.mean(axis=0))
+        # print(self.alpha_0)
 
     def reset(self):
         # if len(self.dec_temp.shape) > 1:
@@ -725,10 +733,16 @@ class Group2ContextPerception(object):
         # print(self.alpha_0.shape)
         # print(self.npart, self.nsubs)
         
-        self.dirichlet_pol_params_init = ar.zeros((self.npi,self.nc,self.npart, self.nsubs)).to(device) + self.alpha_0[None,None,...]
+        self.dirichlet_pol_params_init = ar.ones((self.npi,self.nc,self.npart, self.nsubs)).to(device) + self.alpha_0[None,None,...]
+        # print("init")
+        # print(self.npart, self.nsubs)
+        # print(self.dirichlet_pol_params_init[...,0,0])
+        # print(self.dirichlet_pol_params_init[...,0,:,0])
 
         self.dirichlet_rew_params = [ar.stack([ar.stack([self.dirichlet_rew_params_init for k in range(self.npart)], dim=-1) for j in range(self.nsubs)], dim=-1)]
         self.dirichlet_pol_params = [self.dirichlet_pol_params_init]
+        self.dirichlet_update_counts = [ar.zeros_like(self.dirichlet_pol_params_init)]
+        self.h = ar.ones((self.npart, self.nsubs))*1./self.alpha_0
 
         prior_policies_init = self.dirichlet_pol_params[0] / self.dirichlet_pol_params[0].sum(axis=0)[None,...]
         self.prior_policies = [prior_policies_init]
@@ -1002,21 +1016,31 @@ class Group2ContextPerception(object):
 #        self.dirichlet_pol_params[chosen_pol,:] += posterior_context.sum(axis=0)/posterior_context.sum()
         curr_forgetting_factor = (self.pol_lambda*self.mask[tau])[None,None,:,:]*self.posterior_context[-1][None,:,:,:]
         pol_update = chosen_pol[:,:,:,:]*self.mask[tau][None,None,:,:]*self.posterior_context[-1][None,:,:,:]
-        dirichlet_pol_params_curr_context = (1 - curr_forgetting_factor) * self.dirichlet_pol_params[-1] \
+        if False:
+            dirichlet_pol_params_curr_context = (1 - curr_forgetting_factor) * self.dirichlet_pol_params[-1] \
                                           + (1 - (1-curr_forgetting_factor)) * self.dirichlet_pol_params_init \
                                           + pol_update#*self.dirichlet_pol_params_init
         #dirichlet_pol_params[(chosen_pol[0],list(range(self.npart)))] += 1#posterior_context
 
+        updated_counts = self.dirichlet_update_counts[-1] + pol_update
+        self.dirichlet_update_counts.append(updated_counts)
+
         # dirichlet_pol_params = (1.-self.posterior_context[-1][None,:,None,:])*self.dirichlet_pol_params[-1]\
         #                         + self.posterior_context[-1][None,:,None,:]*dirichlet_pol_params_curr_context
-
-        dirichlet_pol_params = dirichlet_pol_params_curr_context
+        if self.use_h:
+            dirichlet_pol_params = 1 + updated_counts*self.h[None,None,...]
+        else:
+            dirichlet_pol_params = self.dirichlet_pol_params_init + updated_counts
 
         prior_policies = dirichlet_pol_params / dirichlet_pol_params.sum(dim=0)[None,...]#ar.exp(scs.digamma(self.dirichlet_pol_params) - scs.digamma(self.dirichlet_pol_params.sum(axis=0))[None,:])
         #prior_policies /= prior_policies.sum(axis=0)[None,:]
 
         self.dirichlet_pol_params.append(dirichlet_pol_params.to(device))
         self.prior_policies.append(prior_policies.to(device))
+
+        # print(tau, t)
+        # print(dirichlet_pol_params[...,0,0])
+        # print(prior_policies[...,0,0])
 
         if self.store_internal_variables:
             if t==self.T-1:
@@ -1055,8 +1079,12 @@ class Group2ContextPerception(object):
         vec_rewards = ar.eye(self.nr)[:,reward]
         vec_subjects = ar.eye(self.nsubs)
         matrix_index = ar.einsum('rn,nm->rm', vec_rewards, vec_subjects)
-        mapped_states = ar.einsum('hm,hcnk->mcnk', self.state_mapping_one_hot[tau], states)
-        addition = mapped_states[None,...]*matrix_index[:,None,None,None,:]*self.mask[None,None,None,tau,...]*self.posterior_context[-1][None,None,:,:,:]
+        if self.hidden_state_mapping:
+            mapped_states = ar.einsum('hm,hcnk->mcnk', self.state_mapping_one_hot[tau], states)
+            addition = mapped_states[None,...]*matrix_index[:,None,None,None,:]*self.mask[None,None,None,tau,...]*self.posterior_context[-1][None,None,:,:,:]
+        else:
+            addition = states[None,...]*matrix_index[:,None,None,None,:]*self.mask[None,None,None,tau,...]*self.posterior_context[-1][None,None,:,:,:]
+
         new_rew_params = dirichlet_rew_params + addition
 
         generative_model_rewards = new_rew_params / new_rew_params.sum(dim=0)[None,...]
