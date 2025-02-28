@@ -662,7 +662,7 @@ class Group2ContextPerception(object):
             if self.use_h:
                 par_dict["habitual tendency"] = ar.sigmoid(locs[...,count])
             else:
-                hab_tend = 100*ar.sigmoid(locs[...,count])
+                hab_tend = 200*ar.sigmoid(locs[...,count])
                 #hab_tend = ar.exp(locs[...,count])
                 par_dict["habitual tendency"] = hab_tend
 
@@ -709,11 +709,11 @@ class Group2ContextPerception(object):
             self.dec_temp = par_dict['dec temp']
         if 'habitual tendency' in par_dict.keys():
             if self.use_h:
-                self.alpha_0 = 1./(par_dict['habitual tendency']/self.npi)
                 self.h = par_dict['habitual tendency']
+                self.alpha_0 = (1./(par_dict['habitual tendency']))/self.npi
             else:
                 self.alpha_0 = par_dict['habitual tendency']/self.npi
-                self.h = 1./par_dict['habitual tendency']
+                self.h = 1./self.alpha_0
 
         # print("alpha_0", self.infer_alpha_0, self.alpha_0.mean(axis=0))
         # print(self.alpha_0)
@@ -742,7 +742,8 @@ class Group2ContextPerception(object):
         self.dirichlet_rew_params = [ar.stack([ar.stack([self.dirichlet_rew_params_init for k in range(self.npart)], dim=-1) for j in range(self.nsubs)], dim=-1)]
         self.dirichlet_pol_params = [self.dirichlet_pol_params_init]
         self.dirichlet_update_counts = [ar.zeros_like(self.dirichlet_pol_params_init)]
-        self.h = ar.ones((self.npart, self.nsubs))*1./self.alpha_0
+        if self.use_h:
+            self.h = ar.ones((self.npart, self.nsubs))*1./self.alpha_0
 
         prior_policies_init = self.dirichlet_pol_params[0] / self.dirichlet_pol_params[0].sum(axis=0)[None,...]
         self.prior_policies = [prior_policies_init]
