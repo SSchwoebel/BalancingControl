@@ -562,7 +562,8 @@ class Group2ContextPerception(object):
         self.infer_policy_rate = infer_policy_rate
         self.infer_reward_rate = infer_reward_rate
         self.infer_decision_temp = infer_decision_temp
-        self.alpha_0 = alpha_0/self.npi
+        self.alpha_0 = ar.tensor([1./self.npi])#alpha_0/self.npi
+        self.hab_bias = alpha_0
         self.hidden_state_mapping = hidden_state_mapping
         self.store_internal_variables = store_internal_variables
 
@@ -662,7 +663,7 @@ class Group2ContextPerception(object):
             if self.use_h:
                 par_dict["habitual tendency"] = ar.sigmoid(locs[...,count])
             else:
-                hab_tend = 200*ar.sigmoid(locs[...,count])
+                hab_tend = 10*ar.sigmoid(locs[...,count])
                 #hab_tend = ar.exp(locs[...,count])
                 par_dict["habitual tendency"] = hab_tend
 
@@ -710,10 +711,11 @@ class Group2ContextPerception(object):
         if 'habitual tendency' in par_dict.keys():
             if self.use_h:
                 self.h = par_dict['habitual tendency']
-                self.alpha_0 = (1./(par_dict['habitual tendency']))/self.npi
+                self.alpha_0 = 1./self.npi#(1./(par_dict['habitual tendency']))/self.npi
             else:
-                self.alpha_0 = par_dict['habitual tendency']/self.npi
+                self.alpha_0 = 1./self.npi#par_dict['habitual tendency']/self.npi
                 self.h = 1./self.alpha_0
+                self.hab_bias = par_dict['habitual tendency']
 
         # print("alpha_0", self.infer_alpha_0, self.alpha_0.mean(axis=0))
         # print(self.alpha_0)
@@ -733,7 +735,7 @@ class Group2ContextPerception(object):
         # print(self.alpha_0.shape)
         # print(self.npart, self.nsubs)
         
-        self.dirichlet_pol_params_init = ar.ones((self.npi,self.nc,self.npart, self.nsubs)).to(device) + self.alpha_0[None,None,...]
+        self.dirichlet_pol_params_init = ar.ones((self.npi,self.nc,self.npart, self.nsubs)).to(device) + self.alpha_0#[None,None,...]
         # print("init")
         # print(self.npart, self.nsubs)
         # print(self.dirichlet_pol_params_init[...,0,0])
@@ -920,9 +922,13 @@ class Group2ContextPerception(object):
         likelihood = (self.fwd_norms[-1]+1e-10).prod(axis=0).to(device)
         norm = likelihood.sum(axis=0).to(device)
         log_like = ar.log(likelihood/norm[None,...]+1e-10).to(device)
-        likelihood = ar.exp(self.dec_temp[None,...]*self.mask[tau]*log_like).to(device)
+        # likelihood = ar.exp(self.dec_temp[None,...]*self.mask[tau]*log_like).to(device)
+        log_likelihood = self.dec_temp[None,...]*self.mask[tau]*log_like
+        log_prior = self.hab_bias[None,...]*self.mask[tau][None,...]*ar.log(self.prior_policies[-1]+1e-10)
+        log_post = log_likelihood + log_prior
+        posterior_policies = ar.nn.Softmax(dim=0)(log_post)
 
-        posterior_policies = likelihood * self.prior_policies[-1]*self.mask[tau][None,...] / (likelihood * self.prior_policies[-1]).sum(axis=0)
+        # posterior_policies = likelihood * self.prior_policies[-1] / (likelihood * self.prior_policies[-1]).sum(axis=0)
 
         self.posterior_policies.append(posterior_policies)
         avg_posterior_policies = ar.einsum('pc...,c...->p...', posterior_policies, self.posterior_context[-1])
