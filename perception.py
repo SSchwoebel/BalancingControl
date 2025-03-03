@@ -563,9 +563,13 @@ class Group2ContextPerception(object):
         self.infer_reward_rate = infer_reward_rate
         self.infer_decision_temp = infer_decision_temp
         self.alpha_0 = ar.tensor([1.])#alpha_0/self.npi
-        self.hab_bias = alpha_0
         self.hidden_state_mapping = hidden_state_mapping
         self.store_internal_variables = store_internal_variables
+
+        if self.use_h:
+            self.h = alpha_0
+        else:
+            self.hab_bias = alpha_0
 
         if hidden_state_mapping:
             self.nm = dirichlet_rew_params.shape[1]
@@ -711,10 +715,9 @@ class Group2ContextPerception(object):
         if 'habitual tendency' in par_dict.keys():
             if self.use_h:
                 self.h = par_dict['habitual tendency']
-                self.alpha_0 = 1./self.npi#(1./(par_dict['habitual tendency']))/self.npi
+                self.alpha_0 = ar.tensor([1.])#(1./(par_dict['habitual tendency']))/self.npi
             else:
                 self.alpha_0 = ar.tensor([1.])#1./self.npi#par_dict['habitual tendency']/self.npi
-                self.h = 1./self.alpha_0
                 self.hab_bias = par_dict['habitual tendency']
 
         # print("alpha_0", self.infer_alpha_0, self.alpha_0.mean(axis=0))
@@ -744,8 +747,8 @@ class Group2ContextPerception(object):
         self.dirichlet_rew_params = [ar.stack([ar.stack([self.dirichlet_rew_params_init for k in range(self.npart)], dim=-1) for j in range(self.nsubs)], dim=-1)]
         self.dirichlet_pol_params = [self.dirichlet_pol_params_init]
         self.dirichlet_update_counts = [ar.zeros_like(self.dirichlet_pol_params_init)]
-        if self.use_h:
-            self.h = ar.ones((self.npart, self.nsubs))*1./self.alpha_0
+        # if self.use_h:
+        #     self.h = ar.ones((self.npart, self.nsubs))*1./self.alpha_0
 
         prior_policies_init = self.dirichlet_pol_params[0] / self.dirichlet_pol_params[0].sum(axis=0)[None,...]
         self.prior_policies = [prior_policies_init]
@@ -1025,20 +1028,21 @@ class Group2ContextPerception(object):
                                           + pol_update#*self.dirichlet_pol_params_init
         #dirichlet_pol_params[(chosen_pol[0],list(range(self.npart)))] += 1#posterior_context
 
-        updated_counts = self.dirichlet_update_counts[-1] + pol_update
+        updated_counts = self.dirichlet_update_counts[-1] + pol_update*self.mask[tau]
         self.dirichlet_update_counts.append(updated_counts)
 
         # dirichlet_pol_params = (1.-self.posterior_context[-1][None,:,None,:])*self.dirichlet_pol_params[-1]\
         #                         + self.posterior_context[-1][None,:,None,:]*dirichlet_pol_params_curr_context
+
+        dirichlet_pol_params = self.dirichlet_pol_params_init + updated_counts
+
         if self.use_h:
-            dirichlet_pol_params = 1 + updated_counts*self.h[None,None,...]
+            exp_prior_policies = ar.pow(dirichlet_pol_params,self.h[None,None,...]).to(device)
         else:
-            dirichlet_pol_params = self.dirichlet_pol_params_init + updated_counts
+            normalized_prior = dirichlet_pol_params / dirichlet_pol_params.sum(dim=0)[None,...]#ar.exp(scs.digamma(self.dirichlet_pol_params) - scs.digamma(self.dirichlet_pol_params.sum(axis=0))[None,:])
+            #prior_policies /= prior_policies.sum(axis=0)[None,:]
 
-        normalized_prior = dirichlet_pol_params / dirichlet_pol_params.sum(dim=0)[None,...]#ar.exp(scs.digamma(self.dirichlet_pol_params) - scs.digamma(self.dirichlet_pol_params.sum(axis=0))[None,:])
-        #prior_policies /= prior_policies.sum(axis=0)[None,:]
-
-        exp_prior_policies = ar.exp(self.hab_bias[None,...]*self.mask[tau]*normalized_prior).to(device)
+            exp_prior_policies = ar.exp(self.hab_bias[None,...]*normalized_prior).to(device)
 
         prior_policies = exp_prior_policies / exp_prior_policies.sum(dim=0)[None,...]
 
