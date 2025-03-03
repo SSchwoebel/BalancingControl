@@ -101,7 +101,7 @@ def run_single_simulation(agent_pars, env_pars):
     return w
 
 
-def restructure_behavioral_data(data, true_vals):
+def restructure_behavioral_data(data, true_vals=None):
     data_obs = torch.stack([d["observations"] for d in data], dim=-1)
     data_rew = torch.stack([d["rewards"] for d in data], dim=-1)
     data_act = torch.stack([d["actions"] for d in data], dim=-1)
@@ -110,17 +110,21 @@ def restructure_behavioral_data(data, true_vals):
 
     structured_data = {"subject": data_ind, "observations": data_obs, "rewards": data_rew, "actions": data_act, "valid": data_val}
     
-    # structure true vals
+    if true_vals is not None:
+        # structure true vals
+        
+        true_pol_rate = torch.stack([torch.tensor([t["policy rate"]]) for t in true_vals], dim=-1)
+        true_rew_rate = torch.stack([torch.tensor([t["reward rate"]]) for t in true_vals], dim=-1)
+        true_dec_temp = torch.stack([torch.tensor([t["dec temp"]]) for t in true_vals], dim=-1)
+        true_hab_tend = torch.stack([torch.tensor([t["habitual tendency"]]) for t in true_vals], dim=-1)
+        true_ind = torch.stack([torch.tensor([t["subject"]]) for t in true_vals], dim=-1)
+        
+        structured_true_vals = {"subject": true_ind, "policy rate": true_pol_rate, "reward rate": true_rew_rate, "dec temp": true_dec_temp, "habitual tendency": true_hab_tend}
     
-    true_pol_rate = torch.stack([torch.tensor([t["policy rate"]]) for t in true_vals], dim=-1)
-    true_rew_rate = torch.stack([torch.tensor([t["reward rate"]]) for t in true_vals], dim=-1)
-    true_dec_temp = torch.stack([torch.tensor([t["dec temp"]]) for t in true_vals], dim=-1)
-    true_hab_tend = torch.stack([torch.tensor([t["habitual tendency"]]) for t in true_vals], dim=-1)
-    true_ind = torch.stack([torch.tensor([t["subject"]]) for t in true_vals], dim=-1)
+        return structured_true_vals, structured_data
     
-    structured_true_vals = {"subject": true_ind, "policy rate": true_pol_rate, "reward rate": true_rew_rate, "dec temp": true_dec_temp, "habitual tendency": true_hab_tend}
-    
-    return structured_true_vals, structured_data
+    else:
+        return structured_data
 
 def load_simulation_outputs(base_dir, exp_name, agent_type):
         
