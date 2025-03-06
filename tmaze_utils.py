@@ -88,9 +88,23 @@ def set_up_TMaze(pars):
     
     return TMaze_environment
 
-def run_single_simulation(agent_pars, env_pars):
 
-    TMaze_environment = set_up_TMaze(env_pars)
+def set_up_ContextualTMaze(pars):
+
+    TMaze_environment = env.ContextualMultiArmedBandid(torch.from_numpy(pars["generative_model_observations"]).float(), 
+                                             torch.from_numpy(pars["generative_model_states"]).float(), 
+                                             torch.from_numpy(pars["generative_process_rewards"]).float(), 
+                                             torch.from_numpy(pars["generative_process_context_obs"]).float(),
+                                             trials=pars["trials"], T=pars["T"])
+    
+    return TMaze_environment
+
+def run_single_simulation(agent_pars, env_pars, context=False):
+
+    if context:
+        TMaze_environment = set_up_ContextualTMaze(env_pars)
+    else:
+        TMaze_environment = set_up_TMaze(env_pars)
 
     bayes_agent, bayes_perception = set_up_Bayesian_agent(agent_pars)
     

@@ -94,6 +94,73 @@ class FakeGridWorld(object):
                           p = self.Theta[:, current_state, int(response)])
 
 
+class ContextualMultiArmedBandid(object):
+
+    def __init__(self, Omega, Theta, Rho, Chi,
+                 trials = 1, T = 10):
+
+        #set probability distribution used for generating observations
+        self.Omega = Omega
+
+        #set probability distribution used for generating rewards
+#        self.Rho = ar.zeros((trials, Rho.shape[0], Rho.shape[1]))
+#        self.Rho[0] = Rho.copy()
+        self.Rho = Rho
+
+        #set probability distribution used for generating state transitions
+        self.Theta = Theta
+
+        self.nh = Theta.shape[0]
+
+#        self.changes = ar.array([0.01, -0.01])
+
+        self.Chi = Chi
+
+        #set container that keeps track the evolution of the hidden states
+        self.hidden_states = ar.zeros((trials, T), dtype = int)
+
+        self.trials = trials
+
+    def set_initial_states(self, tau):
+        #start in lower corner
+        self.hidden_states[tau, 0] = 0
+
+#        if tau%100==0:
+#            print("trial:", tau)
+
+
+    def generate_observations(self, tau, t):
+        #generate one sample from multinomial distribution
+        o = ar.multinomial(self.Omega[:, self.hidden_states[tau, t]],1)
+        return o
+
+
+    def update_hidden_states(self, tau, t, response):
+
+        current_state = self.hidden_states[tau, t-1]
+
+        self.hidden_states[tau, t] = ar.multinomial(self.Theta[:, current_state, int(response)],1)
+
+    def generate_rewards(self, tau, t):
+        #generate one sample from multinomial distribution
+        r = ar.multinomial(self.Rho[tau, :, self.hidden_states[tau, t]],1)
+
+#        if tau < self.trials-1:
+#            #change Rho slowly
+#            change = ar.random.choice(self.changes, size=self.nh-1)
+#            self.Rho[tau+1,0,1:] = self.Rho[tau,0,1:] + change
+#            self.Rho[tau+1,1,1:] = self.Rho[tau,1,1:] - change
+#            self.Rho[tau+1][self.Rho[tau+1] > 1.] = 1.
+#            self.Rho[tau+1][self.Rho[tau+1] < 0.] = 0.
+
+        return r
+    
+    def generate_context_obs(self, tau):
+
+        c = ar.multinomial(self.Chi[tau, :],1)
+
+        return c
+
 class MultiArmedBandid(object):
 
     def __init__(self, Omega, Theta, Rho,
@@ -152,6 +219,7 @@ class MultiArmedBandid(object):
 #            self.Rho[tau+1][self.Rho[tau+1] < 0.] = 0.
 
         return r
+
 
 class TaskSwitching(object):
 
