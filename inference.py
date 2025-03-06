@@ -42,6 +42,8 @@ class SingleInference(object):
         self.T = agent.T
         self.data = data
         self.nsum = len(data)
+        if "context" in data.keys():
+            self.context_obs = True
         print("init", self.data["observations"].shape)
 
     def model(self):
@@ -85,7 +87,10 @@ class SingleInference(object):
 
                 if t==0:
                     prev_response = None
-                    context = None
+                    if self.context_obs:
+                        context = self.data["context"[tau]]
+                    else:
+                        context = None
                 else:
                     prev_response = self.data["actions"][tau, t-1]
                     context = None

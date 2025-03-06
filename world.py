@@ -40,6 +40,9 @@ class World(object):
         #container for rewards
         self.rewards = ar.zeros((self.trials, self.T), dtype = int).to(device)
 
+        #container for context cues
+        self.context = ar.zeros((self.trials), dtype = int).to(device)
+
     def simulate_experiment(self, curr_trials=None):
         """This methods evolves all the states of the world by iterating
         through all the trials and time steps of each trial.
@@ -137,6 +140,7 @@ class World(object):
             response = None
             if hasattr(self.environment, 'Chi'):
                 context = self.environment.generate_context_obs(tau)
+                self.context[tau] = context
             else:
                 context = None
         else:
@@ -183,6 +187,9 @@ class GroupWorld(object):
 
         #container for rewards
         self.rewards = ar.zeros((self.trials, self.T), dtype = int).to(device)
+
+        #container for context cues
+        self.context = ar.zeros((self.trials), dtype = int).to(device)
 
     def simulate_experiment(self, curr_trials=None):
         """This methods evolves all the states of the world by iterating
@@ -296,6 +303,7 @@ class GroupWorld(object):
 
         if hasattr(self.environment, 'Chi'):
             context = self.environment.generate_context_obs(tau)
+            self.context[tau] = context
         else:
             context = ar.tensor([0])
 

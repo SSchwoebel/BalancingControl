@@ -234,6 +234,10 @@ def restructure_behavioral_data(data, true_vals):
 
     structured_data = {"subject": data_ind, "observations": data_obs, "rewards": data_rew, "actions": data_act, "valid": data_val}
     
+    if "context" in data[-1].keys():
+        data_con = torch.stack([d["context"] for d in data], dim=-1)
+        structured_data["context"] = data_con
+    
     # structure true vals
     
     true_pol_rate = torch.stack([torch.tensor([t["policy rate"]]) for t in true_vals], dim=-1)
