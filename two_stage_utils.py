@@ -63,7 +63,7 @@ def set_up_Bayesian_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs
     #state_unc: state transition uncertainty condition
     #goal_pol: evaluate only policies that lead to the goal
     #utility: goal prior, preference p(o)
-    avg, perception_args, infer_h, valid, use_h = agent_par_list
+    avg, perception_args, learn_habit, valid, use_h = agent_par_list
     
     utility = torch.tensor([0.01, 0.99])
     
@@ -146,18 +146,26 @@ def set_up_Bayesian_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs
     C_alphas[0,:(ns-nb),:] = 100
     for i in range(1,nr):
         C_alphas[i,0,:] = 1
+
+    if learn_habit:
+        infer_h = True
+        infer_policy_rate = True
+    else:
+        infer_h = False
+        infer_policy_rate = False
+
     
     bayes_prc = prc.Group2ContextPerception(A, B, torch.tensor([[0.99, 0.01], [0.01, 0.99]]),
                                     state_prior, utility, torch.tensor([0.99, 0.01]), pol,
                                     alpha_0=alpha_0, dirichlet_rew_params=C_alphas, 
-                                    learn_habit = True, mask=valid,
+                                    learn_habit = learn_habit, mask=valid,
                                     learn_rew = True, T=T, trials=trials,
                                     pol_lambda=pol_lambda, r_lambda=r_lambda,
                                     non_decaying=(ns-nb), dec_temp=dec_temp, 
                                     nsubs=nsubs, infer_alpha_0=infer_h, use_h=use_h,
                                     infer_context=True, dirichlet_context_obs_params=torch.tensor([[1, 1], [1, 1]]),
                                     learn_context_obs=True,
-                                    infer_decision_temp=True, infer_policy_rate=True, infer_reward_rate=True)
+                                    infer_decision_temp=True, infer_policy_rate=infer_policy_rate, infer_reward_rate=True)
     
     bayes_prc.set_parameters(par_dict=perception_args)
     bayes_prc.reset()
@@ -302,11 +310,11 @@ def set_up_two_stage_env(Rho, trials, T, A, B):
     
 def simulate_BCC_behavior(par_list, trials, T, ns, na, nr, nb, A, B):
     
-    avg, Rho, perception_args, infer_h, valid, use_h = par_list
+    avg, Rho, perception_args, learn_habit, valid, use_h = par_list
     
     environment = set_up_two_stage_env(Rho, trials, T, A, B)
     
-    agent_par_list = [avg, perception_args, infer_h, valid, use_h]
+    agent_par_list = [avg, perception_args, learn_habit, valid, use_h]
     planner, perception = set_up_Bayesian_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B)
     
     """
@@ -435,18 +443,10 @@ def plot_results(sample_df, param_names, fname_str, ELBO, mean_df, base_dir, max
     #             cmap='vlag', vmin=-1, vmax=1)
     # plt.show()
     
-def run_BCC_simulations(nsubs, infer_h, fname_base, base_dir, Rho, trials, T, 
+def run_BCC_simulations(nsubs, learn_habit, agent_type, n_pars, fname_base, base_dir, Rho, trials, T, 
                         nb, ns, no, na, npi, nr, never_reward, A, B, p_invalid,
                         mask=None, max_dt=6, remove_old=True, use_h=True):
     
-    if infer_h:
-        n_pars = 4
-        agent_type = 'BCC_4param'
-        if not use_h:
-            agent_type += "_htest"
-    else:
-        n_pars = 3
-        agent_type = 'BCC_3param'
 
     # if it does exist, empty previous results, if we want that (remove_old==True)
     if remove_old:
@@ -482,15 +482,16 @@ def run_BCC_simulations(nsubs, infer_h, fname_base, base_dir, Rho, trials, T,
     
     for k, pars in enumerate(true_values_tensor):
     
-        if infer_h:
+        if learn_habit:
             pl, rl, norm_dt, h = pars
             if use_h:
                 tend = h
             else:
                 tend = 10*h
         else:
-            pl, rl, norm_dt = pars
+            rl, norm_dt = pars
             tend = torch.tensor([1])
+            pl = torch.tensor([0])
         
         dt = max_dt*norm_dt+1
         
@@ -508,7 +509,7 @@ def run_BCC_simulations(nsubs, infer_h, fname_base, base_dir, Rho, trials, T,
         else:
             prob_matrix = torch.zeros((trials,1)) + p_invalid
             valid = torch.bernoulli(prob_matrix).bool()
-        pars = [avg, Rho,perception_args, infer_h, valid, use_h]
+        pars = [avg, Rho,perception_args, learn_habit, valid, use_h]
         
         worlds.append(simulate_BCC_behavior(pars, trials, T, ns, na, nr, nb, A, B))
         
@@ -808,7 +809,7 @@ def load_simulation_outputs(base_dir, agent_type):
     
     return stayed_arr, structured_true_vals, structured_data
 
-def set_up_Bayesian_inference_agent(n_agents, infer_h, base_dir, global_experiment_parameters, valid, remove_old=True, use_h=True):
+def set_up_Bayesian_inference_agent(n_agents, learn_habit, base_dir, global_experiment_parameters, valid, remove_old=True, use_h=True):
 
     # if it does exist, empty previous results, if we want that (remove_old==True)
     if remove_old:
@@ -843,7 +844,7 @@ def set_up_Bayesian_inference_agent(n_agents, infer_h, base_dir, global_experime
 
     avg = True
 
-    agent_par_list = [avg, perception_args, infer_h, valid, use_h]
+    agent_par_list = [avg, perception_args, learn_habit, valid, use_h]
     bayes_agent, bayes_perception = set_up_Bayesian_agent(agent_par_list, **global_experiment_parameters, nsubs=n_agents)
 
     return bayes_agent
@@ -890,421 +891,3 @@ def set_up_mbmf_inference_agent(n_agents, use_orig, use_p, restrict_alpha, max_d
 
     return mbmf_agent
 
-
-"""run inference"""
-if __name__=='__main__':
-
-    """experiment parameters"""
-
-    trials =  201#number of trials
-    T = 3 #number of time steps in each trial
-    nb = 4
-    ns = 3+nb #number of states
-    no = ns #number of observations
-    na = 2 #number of actions
-    npi = na**(T-1)
-    nr = 2
-    
-    """
-    create matrices
-    """
-    
-    
-    #generating probability of observations in each state
-    A = torch.eye(no).to(device)
-    
-    
-    #state transition generative probability (matrix)
-    B = torch.zeros((ns, ns, na)).to(device)
-    b1 = 0.7
-    nb1 = 1.-b1
-    b2 = 0.7
-    nb2 = 1.-b2
-    
-    B[:,:,0] = torch.tensor([[  0,  0,  0,  0,  0,  0,  0,],
-                          [ b1,  0,  0,  0,  0,  0,  0,],
-                          [nb1,  0,  0,  0,  0,  0,  0,],
-                          [  0,  1,  0,  1,  0,  0,  0,],
-                          [  0,  0,  0,  0,  1,  0,  0,],
-                          [  0,  0,  1,  0,  0,  1,  0,],
-                          [  0,  0,  0,  0,  0,  0,  1,],])
-    
-    B[:,:,1] = torch.tensor([[  0,  0,  0,  0,  0,  0,  0,],
-                          [nb2,  0,  0,  0,  0,  0,  0,],
-                          [ b2,  0,  0,  0,  0,  0,  0,],
-                          [  0,  0,  0,  1,  0,  0,  0,],
-                          [  0,  1,  0,  0,  1,  0,  0,],
-                          [  0,  0,  0,  0,  0,  1,  0,],
-                          [  0,  0,  1,  0,  0,  0,  1,],])
-
-    """create data"""
-    
-    
-    folder = "data"
-    
-    true_vals = []
-    
-    data = []
-
-    Rho_data_fname = 'dawrandomwalks.mat'
-    
-    fname = os.path.join(folder, Rho_data_fname)
-    
-    rew_probs = loadmat(fname)['dawrandomwalks']
-    assert trials==rew_probs.shape[-1]
-    
-    never_reward = ns-nb
-    
-    Rho = torch.zeros((trials, nr, ns))
-    
-    Rho[:,1,:never_reward] = 0.
-    Rho[:,0,:never_reward] = 1.
-    
-    Rho[:,1,never_reward:never_reward+2] = torch.from_numpy(rew_probs[0,:,:]).permute((1,0))
-    Rho[:,0,never_reward:never_reward+2] = torch.from_numpy(1-rew_probs[0,:,:]).permute((1,0))
-    
-    Rho[:,1,never_reward+2:] = torch.from_numpy(rew_probs[1,:,:]).permute((1,0))
-    Rho[:,0,never_reward+2:] = torch.from_numpy(1-rew_probs[1,:,:]).permute((1,0))
-    
-    plt.figure(figsize=(10,5))
-    for i in range(4):
-        plt.plot(Rho[:,1,3+i], label="$p_{}$".format(i+1), linewidth=4)
-    plt.ylim([0,1])
-    plt.yticks(torch.arange(0,1.1,0.2),fontsize=18)
-    plt.ylabel("reward probability", fontsize=20)
-    plt.xlim([-0.1, trials+0.1])
-    plt.xticks(range(0,trials+1,50),fontsize=18)
-    plt.xlabel("trials", fontsize=20)
-    plt.legend(fontsize=18, bbox_to_anchor=(1.04,1))
-    plt.savefig("twostep_prob.svg",dpi=300)
-    plt.show()
-    
-    # make param combinations:
-    
-    infer_h = True
-    
-    prefix = "BCC_"
-    param_names = ["policy rate", "reward rate", "dec temp", "habitual tendency"]
-    model_name = "Bayesian prior-based contextual control model"
-    
-    if infer_h:
-        n_pars = 4
-        h_str = "4param"
-        agent_type = "BCC_4param"
-    else:
-        n_pars = 3
-        h_str = "3param"
-        agent_type = "BCC_3param"
-        param_names = param_names[:-1]
-        
-    max_dt = 6
-    
-    # prepare for savin results
-    # make base filename and folder string
-    fname_base = prefix+"recovered_"+h_str
-    print(fname_base)
-    # define folder where we want to save data
-    base_dir = os.path.join(folder,fname_base[:-1])
-    
-    remove_old = True
-    
-    # make directory if it doesnt exist
-    if fname_base[:-1] not in os.listdir('data'):
-        os.mkdir(base_dir)
-    # if it does exist, empty previous results, if we want that (remove_old==True)
-    elif remove_old:
-        svgs = glob.glob(os.path.join(base_dir,"*.svg"))
-        for file in svgs:
-            os.remove(file)
-        csvs = glob.glob(os.path.join(base_dir,"*.csv"))
-        for file in csvs:
-            os.remove(file)
-        saves = glob.glob(os.path.join(base_dir,"*.save"))
-        for file in saves:
-            os.remove(file)
-        agents = glob.glob(os.path.join(base_dir,"twostage_agent*"))
-        for file in agents:
-            os.remove(file)
-        
-    
-    nsubs = 10
-    true_values_tensor = torch.rand((nsubs,n_pars,1))
-    
-    # prob for invalid answer (e.g. no reply)
-    p_invalid = 1.-1./201.
-    
-    stayed = []
-    indices = []
-    
-    for pars in true_values_tensor:
-    
-        if infer_h:
-            pl, rl, norm_dt, h = pars
-            tend = h
-        else:
-            pl, rl, norm_dt = pars
-            tend = torch.tensor([1])
-    
-        dt = max_dt*norm_dt+1
-    
-        print(pl, rl, dt, tend)
-        
-        perception_args = {"policy rate": pl, "reward rate": rl, "dec temp": dt, "habitual tendency": tend}
-    
-        # init = torch.tensor([0.6, 0.4, 0.6, 0.4])
-    
-        # Rho_fname = 'twostep_rho.json'
-    
-        # jsonpickle_numpy.register_handlers()
-    
-        # fname = os.path.join(folder, Rho_fname)
-    
-        # if Rho_fname not in os.listdir(folder) or recalc_rho==True:
-        #     Rho[:] = generate_randomwalk(trials, nr, ns, nb, sigma, init)
-        #     pickled = pickle.encode(Rho)
-        #     with open(fname, 'w') as outfile:
-        #         json.dump(pickled, outfile)
-        # else:
-        #     with open(fname, 'r') as infile:
-        #         data = json.load(infile)
-        #     if arr_type == "numpy":
-        #         Rho[:] = pickle.decode(data)[:trials]
-        #     else:
-        #         Rho[:] = torch.from_numpy(pickle.decode(data))[:trials]
-    
-        worlds = []
-        l = []
-        avg = True
-        prob_matrix = torch.zeros((trials)) + p_invalid
-        valid = torch.bernoulli(prob_matrix).bool()
-        pars = [avg, Rho,perception_args, infer_h, valid]
-    
-        worlds.append(simulate_behavior(pars, trials, T, ns, na, nr, nb, A, B))
-    
-        w = worlds[-1]
-    
-        # rewarded = torch.where(w.rewards[:trials-1,-1] == 1)[0]
-    
-        # unrewarded = torch.where(w.rewards[:trials-1,-1] == 0)[0]
-    
-        rewarded = w.rewards[:trials-1,-1] == 1
-    
-        unrewarded = rewarded==False#w.rewards[:trials-1,-1] == 0
-    
-        # rare = torch.cat((torch.where(own_logical_and(w.environment.hidden_states[:,1]==2, w.actions[:,0] == 0) == True)[0],
-        #                  torch.where(own_logical_and(w.environment.hidden_states[:,1]==1, w.actions[:,0] == 1) == True)[0]))
-        # rare.sort()
-    
-        # common = torch.cat((torch.where(own_logical_and(w.environment.hidden_states[:,1]==2, w.actions[:,0] == 1) == True)[0],
-        #                    torch.where(own_logical_and(w.environment.hidden_states[:,1]==1, w.actions[:,0] == 0) == True)[0]))
-        # common.sort()
-    
-        rare = torch.logical_or(torch.logical_and(w.environment.hidden_states[:trials-1,1]==2, w.actions[:trials-1,0] == 0),
-                       torch.logical_and(w.environment.hidden_states[:trials-1,1]==1, w.actions[:trials-1,0] == 1))
-    
-        common = rare==False#own_logical_or(own_logical_and(w.environment.hidden_states[:trials-1,1]==2, w.actions[:trials-1,0] == 1),
-                 #        own_logical_and(w.environment.hidden_states[:trials-1,1]==1, w.actions[:trials-1,0] == 0))
-    
-        names = ["rewarded common", "rewarded rare", "unrewarded common", "unrewarded rare"]
-    
-        # index_list = [torch.intersect1d(rewarded, common), torch.intersect1d(rewarded, rare),
-        #              torch.intersect1d(unrewarded, common), torch.intersect1d(unrewarded, rare)]
-    
-        rewarded_common = torch.where(torch.logical_and(rewarded,common) == True)[0]
-        rewarded_rare = torch.where(torch.logical_and(rewarded,rare) == True)[0]
-        unrewarded_common = torch.where(torch.logical_and(unrewarded,common) == True)[0]
-        unrewarded_rare = torch.where(torch.logical_and(unrewarded,rare) == True)[0]
-    
-        index_list = [rewarded_common, rewarded_rare,
-                     unrewarded_common, unrewarded_rare]
-    
-        stayed_list = [(w.actions[index_list[i],0] == w.actions[index_list[i]+1,0]).sum()/float(len(index_list[i])) for i in range(4)]
-    
-        stayed.append(stayed_list)
-    
-        run_name = "twostage_agent_daw_"+agent_type+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tend)+".json"
-        fname = os.path.join(folder, run_name)
-    
-        # actions = w.actions.numpy()
-        # observations = w.observations.numpy()
-        # rewards = w.rewards.numpy()
-        # states = w.environment.hidden_states.numpy()
-        data.append({"actions": w.actions, "observations": w.observations, "rewards": w.rewards, "states": w.environment.hidden_states, 'mask': valid})
-    
-        jsonpickle_numpy.register_handlers()
-        pickled = pickle.encode(data[-1])
-        with open(fname, 'w') as outfile:
-            json.dump(pickled, outfile)
-    
-        pickled = 0
-    
-        gc.collect()
-    
-        true_vals.append(perception_args)
-    
-    stayed_arr = torch.tensor(stayed)
-    
-    learn_habit = True
-    plt.figure()
-    g = sns.barplot(data=stayed_arr)
-    g.set_xticklabels(names, rotation=45, horizontalalignment='right', fontsize=16)
-    plt.ylim([0,1])
-    plt.yticks(torch.arange(0,1.1,0.2),fontsize=16)
-    if learn_habit:
-        plt.title("habit and goal-directed", fontsize=18)
-        plt.savefig("habit_and_goal.svg",dpi=300)
-    else:
-        plt.title("purely goal-drected", fontsize=18)
-        plt.savefig("pure_goal.svg",dpi=300)
-    plt.ylabel("stay probability")
-    plt.show()
-    
-    print('analyzing '+str(len(true_vals))+' data sets')
-    
-    
-    C_alphas = torch.zeros((nr, ns)).to(device)
-    C_alphas += 1
-    C_alphas[0,:3] = 100
-    for i in range(1,nr):
-        C_alphas[i,0] = 1
-    #    C_alphas[0,1:,:] = 100
-    #    for c in range(nb):
-    #        C_alphas[1,c+1,c] = 100
-    #        C_alphas[0,c+1,c] = 1
-    #C_alphas[:,13] = [100, 1]
-    
-    #C_agent = torch.zeros((nr, ns, nc))
-    # for c in range(nc):
-    #     C_agent[:,:,c] = torch.tensor([(C_alphas[:,i,c])/(C_alphas[:,i,c]).sum() for i in range(ns)]).T
-    C_agent = C_alphas[:,:] / C_alphas[:,:].sum(axis=0)[None,:]
-    #torch.tensor([torch.random.dirichlet(C_alphas[:,i]) for i in range(ns)]).T
-    
-    # context transition matrix
-    
-    transition_matrix_context = torch.ones(1).to(device)
-    
-    
-    """
-    create policies
-    """
-    
-    pol = torch.tensor(list(itertools.product(list(range(na)), repeat=T-1))).to(device)
-    
-    #pol = pol[-2:]
-    npi = pol.shape[0]
-    
-    
-    """
-    set state prior (where agent thinks it starts)
-    """
-    
-    state_prior = torch.zeros((ns)).to(device)
-    
-    state_prior[0] = 1.
-    
-    prior_context = torch.tensor([1.]).to(device)
-    
-    #    prior_context[0] = 1.
-    prior_pi = torch.zeros(npi) / torch.zeros(npi).sum()
-    """
-    set up agent
-    """
-    #bethe agent
-    
-    data_obs = torch.stack([d["observations"] for d in data], dim=-1)
-    data_rew = torch.stack([d["rewards"] for d in data], dim=-1)
-    data_act = torch.stack([d["actions"] for d in data], dim=-1)
-    
-    structured_data = {"observations": data_obs, "rewards": data_rew, "actions": data_act}
-    
-    # perception
-    pol_lambda = torch.tensor([1])
-    r_lambda = torch.tensor([0.5])
-    dec_temp = torch.tensor([2])   
-    alpha_0 = torch.tensor([1])
-    
-    alphas = torch.zeros((npi)) + alpha_0
-    prior_pi = alphas / alphas.sum(axis=0)
-    learn_habit = True
-    
-    npart = 15
-    
-    # obs_message_list = [[]]
-    # for tau in range(trials):
-    #     obs_message_tau = []
-    #     rew_message_tau = []
-    #     for t in range(T):
-    #         observations = torch.stack(data_obs[tau][-t-1:])
-    #         obs_messages = []
-    #         for n in range(nsubs):
-    #             prev_obs = [A[o] for o in observations[-t-1:,n]]
-    #             obs = prev_obs + [torch.zeros((ns)).to(device)+1./ns]*(T-t-1)
-    #             obs = [torch.stack(obs).T.to(device)]*npart
-    #             obs_messages.append(torch.stack(obs, dim=-1))
-    #         obs_messages = torch.stack(obs_messages, dim=-1).to(device)
-    #         obs_message_tau.append(obs_messages)
-        
-    #         rewards = torch.stack(data_rew[tau][-t-1:])
-    #         rew_messages = []
-    #         for n in range(nsubs):
-    #             rew_messages.append(torch.stack([torch.stack([generative_model_rewards[r,:,i,n].to(device) for r in rewards[-t-1:,n]]  \
-    #                                                    + [utility.matmul(generative_model_rewards[:,:,i,n].to(device)).to(device)]*(self.T-t-1)).T.to(device) for i in range(self.npart)], dim=-1).to(device))
-    #         rew_messages = torch.stack(rew_messages, dim=-1).to(device)
-    #         rew_message_tau.append(rew_messages)
-            
-    #     obs_message_list.append(obs_message_tau)
-    prior_context = torch.ones(1)
-    
-    # perception
-    bayes_prc = prc.Group2ContextPerception(A, B, C_agent, transition_matrix_context,
-                                           state_prior, utility, prior_pi, prior_context, pol,
-                                           alpha_0, C_alphas,
-                                           learn_habit = learn_habit, mask=valid[:,None],
-                                           learn_rew = True, T=T, trials=trials,
-                                           pol_lambda=pol_lambda, r_lambda=r_lambda,
-                                           non_decaying=(ns-nb), dec_temp=dec_temp, 
-                                           nsubs=1, infer_alpha_0=infer_h, use_h=True, infer_context=True)
-    
-    agent = agt.FittingAgent(bayes_prc, [], pol,
-                      trials = trials, T = T,
-                      prior_states = state_prior,
-                      prior_policies = prior_pi,
-                      number_of_states = ns,
-                      prior_context = prior_context,
-                      #save_everything = True,
-                      number_of_policies = npi,
-                      number_of_rewards = nr,
-                      nsubs = nsubs)
-    
-    # inferrer = inf.SingleInference(agent, structured_data)#data[0])
-    
-    inferrer = inf.GeneralGroupInference(agent, structured_data)
-    
-    print("this is inference using", type(inferrer))
-    
-    num_steps = 600
-    size_chunk = 50
-    total_num_iter_so_far = 0
-    
-    for i in range(total_num_iter_so_far, num_steps, size_chunk):
-        print('taking steps '+str(i+1)+' to '+str(i+size_chunk)+' out of total '+str(num_steps))
-    
-        fname_str = fname_base + str(total_num_iter_so_far+size_chunk)+'_'+str(nsubs)+'agents'
-    
-        infer(inferrer, size_chunk, fname_str)
-        total_num_iter_so_far += size_chunk
-        full_df, mean_df, sample_df = sample_posterior(inferrer, fname_str) 
-        
-        # plot_posterior(full_df, fname_str)
-        # plot_correlations(full_df, fname_str)
-        
-        plot_results(sample_df, fname_str, inferrer.loss, mean_df)
-        
-        print("This is recovery for the twostage task using the "+model_name+"with "+str(nsubs)+" agents.")
-        print("The settings are: infer h", infer_h)
-    
-    #print("this is inference for pl =", pl, "rl =", rl, "dt =", dt, "tend=", tend)
-    # print(param_dict)
-    
-    print("This is recovery for the twostage task using the "+model_name+"with "+str(nsubs)+" agents.")
-    print("The settings are: infer h", infer_h)
