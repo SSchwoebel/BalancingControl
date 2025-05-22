@@ -512,12 +512,14 @@ class Group2ContextPerception(object):
                  prior_context,
                  policies,
                  alpha_0 = ar.tensor([1]),
+                 cached_reward_params = None,
                  dirichlet_rew_params = None,
                  dirichlet_context_obs_params = None,
                  learn_habit = False,
                  learn_rew = False,
                  infer_context = False,
                  learn_context_obs = False,
+                 learn_cached_rewards = False,
                  mask=None,
                  hidden_state_mapping = False,
                  state_mapping = None,
@@ -525,8 +527,10 @@ class Group2ContextPerception(object):
                  infer_reward_rate = True,
                  infer_decision_temp = True,
                  infer_alpha_0=True,
-                 T=5, trials=10, pol_lambda=0, r_lambda=0, non_decaying=0,
-                 dec_temp=1., npart=1, nsubs=1, use_h=False,
+                 infer_cached_weight = False,
+                 infer_cached_rate = False,
+                 T=5, trials=10, pol_lambda=0, r_lambda=0, cached_r_lambda=0, non_decaying=0,
+                 dec_temp=1., cached_weight=0., npart=1, nsubs=1, use_h=False,
                  store_internal_variables=False):
         
         ### if another generative model is supposed to be given, i.e. generative model rewards, simply give it as dirichlet params
@@ -546,8 +550,11 @@ class Group2ContextPerception(object):
         self.learn_rew = learn_rew
         self.infer_context = infer_context
         self.learn_context_gen = learn_context_obs
+        self.learn_cached_rewards = learn_cached_rewards
         self.pol_lambda = pol_lambda
         self.r_lambda = r_lambda
+        self.cached_r_lambda = cached_r_lambda
+        self.cached_weight = cached_weight
         self.non_decaying = non_decaying
         self.dec_temp = dec_temp
         self.policies = policies
@@ -562,6 +569,8 @@ class Group2ContextPerception(object):
         self.infer_policy_rate = infer_policy_rate
         self.infer_reward_rate = infer_reward_rate
         self.infer_decision_temp = infer_decision_temp
+        self.infer_cached_weight = infer_cached_weight
+        self.infer_cached_rate = infer_cached_rate
         self.alpha_0 = ar.tensor([1.])#alpha_0/self.npi
         self.hidden_state_mapping = hidden_state_mapping
         self.store_internal_variables = store_internal_variables
@@ -578,6 +587,18 @@ class Group2ContextPerception(object):
             self.state_mapping_one_hot = ar.nn.functional.one_hot(self.state_mapping, num_classes=self.nm).float()
         else:
             self.nh, self.nm = [prior_states.shape[0]]*2
+
+        if self.learn_cached_rewards:
+            if cached_reward_params is not None:
+                self.cached_reward_params_init = cached_reward_params
+            else:
+                self.cached_reward_params_init = ar.ones((self.nr, self.npi, self.nc))
+            self.cached_reward_params = [ar.stack([ar.stack([self.cached_reward_params_init for k in range(self.npart)], dim=-1) for j in range(self.nsubs)], dim=-1)]
+            self.cached_rewards = [self.cached_reward_params[0] / self.cached_reward_params.sum(dim=0)[None,...]]
+
+            cached_preference = (self.cached_rewards[0] * self.prior_rewards[:,None]).sum(dim=0)
+            cached_policy_val = cached_preference / cached_preference.sum(dim=0)[None,...]
+            self.cached_policy_val = [cached_policy_val]
         
         if mask is None:
             self.mask = ar.ones(trials, nsubs).bool()[:,None,:]
@@ -925,9 +946,26 @@ class Group2ContextPerception(object):
         likelihood = (self.fwd_norms[-1]+1e-10).prod(axis=0).to(device)
         norm = likelihood.sum(axis=0).to(device)
         log_like = ar.log(likelihood/norm[None,...]+1e-10).to(device)
-        likelihood = ar.exp(self.dec_temp[None,...]*self.mask[tau]*log_like).to(device)
+        weighted_log_like = self.dec_temp[None,...]*self.mask[tau][None,...]*log_like
+        # likelihood = ar.exp(self.dec_temp[None,...]*self.mask[tau][None,...]*log_like).to(device)
 
-        posterior_policies = likelihood * self.prior_policies[-1]*self.mask[tau][None,...] / (likelihood * self.prior_policies[-1]).sum(axis=0)
+        if self.learn_habit and not self.use_h:
+            log_prior = ar.log(self.prior_policies[-1])+1e-10
+            weighted_log_prior = self.hab_bias[None,...]*self.mask[tau][None,...]*log_prior
+            # prior = ar.exp(self.hab_bias[None,...]*self.mask[tau][None,...]*log_prior).to(device)
+        else:
+            weighted_log_prior = ar.log(self.prior_policies[-1]+1e-10)
+
+        log_post = weighted_log_like + weighted_log_prior
+
+        if self.learn_cached_rewards:
+            log_cached = ar.log(self.cached_policy_val[-1]+1e-10)
+            weighted_log_cached = self.cached_weight[None,...] * log_cached
+            log_post += weighted_log_cached
+
+        posterior_policies = ar.nn.functional.softmax(log_post, dim=0)
+
+        # posterior_policies = likelihood * prior/ (likelihood * prior).sum(axis=0)
 
         self.posterior_policies.append(posterior_policies)
         avg_posterior_policies = ar.einsum('pc...,c...->p...', posterior_policies, self.posterior_context[-1])
@@ -1022,31 +1060,31 @@ class Group2ContextPerception(object):
 #        self.dirichlet_pol_params[chosen_pol,:] += posterior_context.sum(axis=0)/posterior_context.sum()
         curr_forgetting_factor = (self.pol_lambda*self.mask[tau])[None,None,:,:]*self.posterior_context[-1][None,:,:,:]
         pol_update = chosen_pol[:,:,:,:]*self.mask[tau][None,None,:,:]*self.posterior_context[-1][None,:,:,:]
-        if False:
-            dirichlet_pol_params_curr_context = (1 - curr_forgetting_factor) * self.dirichlet_pol_params[-1] \
-                                          + (1 - (1-curr_forgetting_factor)) * self.dirichlet_pol_params_init \
+        if True:
+            dirichlet_pol_params = (1 - curr_forgetting_factor) * self.dirichlet_pol_params[-1] \
+                                          + curr_forgetting_factor * self.dirichlet_pol_params_init \
                                           + pol_update#*self.dirichlet_pol_params_init
         #dirichlet_pol_params[(chosen_pol[0],list(range(self.npart)))] += 1#posterior_context
 
-        updated_counts = self.dirichlet_update_counts[-1] + pol_update*self.mask[tau]
-        self.dirichlet_update_counts.append(updated_counts)
+        # updated_counts = self.dirichlet_update_counts[-1] + pol_update*self.mask[tau]
+        # self.dirichlet_update_counts.append(updated_counts)
 
         # dirichlet_pol_params = (1.-self.posterior_context[-1][None,:,None,:])*self.dirichlet_pol_params[-1]\
         #                         + self.posterior_context[-1][None,:,None,:]*dirichlet_pol_params_curr_context
 
-        dirichlet_pol_params = self.dirichlet_pol_params_init + updated_counts
+        # dirichlet_pol_params = self.dirichlet_pol_params_init + updated_counts
 
         if self.use_h:
             exp_prior_policies = ar.pow(dirichlet_pol_params,self.h[None,None,...]).to(device)
         else:
-            normalized_prior = dirichlet_pol_params / dirichlet_pol_params.sum(dim=0)[None,...]#ar.exp(scs.digamma(self.dirichlet_pol_params) - scs.digamma(self.dirichlet_pol_params.sum(axis=0))[None,:])
+            exp_prior_policies = dirichlet_pol_params# / dirichlet_pol_params.sum(dim=0)[None,...]#ar.exp(scs.digamma(self.dirichlet_pol_params) - scs.digamma(self.dirichlet_pol_params.sum(axis=0))[None,:])
             #prior_policies /= prior_policies.sum(axis=0)[None,:]
 
-            exp_prior_policies = ar.exp(self.hab_bias[None,...]*normalized_prior).to(device)
+            # exp_prior_policies = normalized_prior#ar.exp(self.hab_bias[None,...]*normalized_prior).to(device)
 
         prior_policies = exp_prior_policies / exp_prior_policies.sum(dim=0)[None,...]
 
-        self.dirichlet_pol_params.append(exp_prior_policies.to(device))
+        self.dirichlet_pol_params.append(dirichlet_pol_params.to(device))
         self.prior_policies.append(prior_policies.to(device))
 
         # print(tau, t)
@@ -1107,6 +1145,41 @@ class Group2ContextPerception(object):
                 self.generative_model_rewards_mb.append(generative_model_rewards)
 
         #return dirichlet_rew_params
+
+    def update_beliefs_dirichlet_cached_rew_params(self, tau, t):
+
+        assert(t==self.T-1)
+
+        chosen = ar.argmax(self.posterior_policies[-1], dim=0)
+        vec_pol = ar.nn.functional.one_hot(chosen, num_classes=self.npi).permute(3,0,1,2).float()
+
+        curr_forgetting_factor = (self.cached_r_lambda*self.mask[tau])[None,None,:,:]*self.posterior_context[-1][None,None,:,:,:]
+
+        # going only to T-2 leaves out the reward for t=0, which is reasonable since no action has been selected at that point
+        for k in range(0,self.T-1):
+
+            tp = -(self.T-2) + k
+            reward = self.rewards[tp]
+
+            vec_rewards = ar.nn.functional.one_hot(reward, num_classes=self.nr).permute(1,0).float()
+
+            matrix_index = vec_rewards[:,None,...] * vec_pol[None,...]
+
+            addition = matrix_index*self.posterior_context[-1][None,None,:,:,:]*self.mask[None,None,tau,...]
+
+            cached_rew_params = (1 - curr_forgetting_factor) * self.cached_reward_params[-1] + addition + curr_forgetting_factor * self.cached_reward_params_init
+
+            self.cached_reward_params.append(cached_rew_params)
+
+            cached_rewards = cached_rew_params / cached_rew_params.sum(dim=0)[None,...]
+
+            self.cached_rewards.append(cached_rewards)
+
+            cached_preference = (cached_rewards * self.prior_rewards[:,None]).sum(dim=0)
+
+            cached_policy_val = cached_preference / cached_preference.sum(dim=0)[None,...]
+
+            self.cached_policy_val.append(cached_policy_val)
 
 
 class GroupPerception(object):

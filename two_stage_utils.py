@@ -472,6 +472,10 @@ def run_BCC_simulations(nsubs, learn_habit, agent_type, n_pars, fname_base, base
     
     
     true_values_tensor = torch.rand((nsubs,n_pars,1))
+    # print("dt", true_values_tensor[:,0,0])
+    # print("rew lamb", true_values_tensor[:,1,0])
+    # print("ht", true_values_tensor[:,2,0])
+    # print("pol lamb", true_values_tensor[:,3,0])
     
     true_vals = []
     data = []
@@ -486,13 +490,13 @@ def run_BCC_simulations(nsubs, learn_habit, agent_type, n_pars, fname_base, base
             if use_h:
                 tend = h
             else:
-                tend = 10*h
+                tend = max_dt*h
         else:
             rl, norm_dt = pars
-            tend = torch.tensor([1])
+            tend = torch.tensor([0])
             pl = torch.tensor([0])
         
-        dt = max_dt*norm_dt+1
+        dt = (max_dt-1)*norm_dt+1
         
         # print(pl, rl, dt, tend)
         
