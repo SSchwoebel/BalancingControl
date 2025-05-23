@@ -63,7 +63,7 @@ def set_up_Bayesian_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs
     #state_unc: state transition uncertainty condition
     #goal_pol: evaluate only policies that lead to the goal
     #utility: goal prior, preference p(o)
-    avg, perception_args, learn_habit, valid, use_h = agent_par_list
+    avg, perception_args, learn_rewards, learn_habit, learn_cached, valid, use_h = agent_par_list
     
     utility = torch.tensor([0.01, 0.99])
     
@@ -127,9 +127,18 @@ def set_up_Bayesian_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs
     else:
         alpha_0 = perception_args["habitual tendency"]
     alphas = torch.zeros((npi)) + alpha_0
+    cached_weight = perception_args["cached weight"]
+    cached_r_lambda = perception_args["cached rate"]
 
-    print(use_h)
-    print(alpha_0)
+    # print(use_h)
+    # print(alpha_0)
+
+    if learn_rewards:
+        infer_decision_temp = True
+        infer_reward_rate = True
+    else:
+        infer_decision_temp = False
+        infer_reward_rate = False
 
     if learn_habit:
         infer_h = True
@@ -138,16 +147,26 @@ def set_up_Bayesian_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs
         infer_h = False
         infer_policy_rate = False
 
+    if learn_cached:
+        infer_cached_weight = True
+        infer_cached_rate = True
+    else:
+        infer_cached_weight = False
+        infer_cached_rate = False
+
     bayes_prc = prc.Group2ContextPerception(A, B, torch.tensor([[1]]),
                                     state_prior, utility, torch.tensor([1]), pol,
                                     alpha_0=alpha_0, dirichlet_rew_params=C_alphas, 
-                                    learn_habit = learn_habit, mask=valid,
-                                    learn_rew = True, T=T, trials=trials,
+                                    learn_habit = learn_habit, mask=valid, learn_cached_rewards=learn_cached,
+                                    learn_rew = learn_rewards, T=T, trials=trials,
                                     pol_lambda=pol_lambda, r_lambda=r_lambda,
                                     non_decaying=(ns-nb), dec_temp=dec_temp, 
+                                    cached_weight=cached_weight, cached_r_lambda=cached_r_lambda,
                                     nsubs=nsubs, infer_alpha_0=infer_h, use_h=use_h,
                                     infer_context=False, dirichlet_context_obs_params=torch.tensor([[1]]),
-                                    infer_decision_temp=True, infer_policy_rate=infer_policy_rate, infer_reward_rate=True)
+                                    infer_decision_temp=infer_decision_temp, infer_policy_rate=infer_policy_rate, 
+                                    infer_reward_rate=infer_reward_rate, infer_cached_weight=infer_cached_weight, 
+                                    infer_cached_rate=infer_cached_rate)
 
     # C_alphas = torch.zeros((nr, ns, 2)) + 1
     # C_alphas[0,:(ns-nb),:] = 100
@@ -309,11 +328,11 @@ def set_up_two_stage_env(Rho, trials, T, A, B):
     
 def simulate_BCC_behavior(par_list, trials, T, ns, na, nr, nb, A, B):
     
-    avg, Rho, perception_args, learn_habit, valid, use_h = par_list
+    avg, Rho, perception_args, learn_rewards, learn_habit, learn_cached, valid, use_h = par_list
     
     environment = set_up_two_stage_env(Rho, trials, T, A, B)
     
-    agent_par_list = [avg, perception_args, learn_habit, valid, use_h]
+    agent_par_list = [avg, perception_args, learn_rewards, learn_habit, learn_cached, valid, use_h]
     planner, perception = set_up_Bayesian_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B)
     
     """
@@ -442,7 +461,7 @@ def plot_results(sample_df, param_names, fname_str, ELBO, mean_df, base_dir, max
     #             cmap='vlag', vmin=-1, vmax=1)
     # plt.show()
     
-def run_BCC_simulations(nsubs, learn_habit, agent_type, n_pars, fname_base, base_dir, Rho, trials, T, 
+def run_BCC_simulations(nsubs, learn_rewards, learn_habit, learn_cached, agent_type, n_pars, fname_base, base_dir, Rho, trials, T, 
                         nb, ns, no, na, npi, nr, never_reward, A, B, p_invalid,
                         mask=None, max_dt=6, remove_old=True, use_h=True):
     
@@ -470,12 +489,20 @@ def run_BCC_simulations(nsubs, learn_habit, agent_type, n_pars, fname_base, base
         for file in outputs:
             os.remove(file)
     
+    if learn_rewards:
+        true_vals_rewards = torch.rand((nsubs,2,1))
+    else:
+        true_vals_rewards = torch.zeros((nsubs,2,1))
+    if learn_habit:
+        true_vals_repetition = torch.rand((nsubs,2,1))
+    else:
+        true_vals_repetition = torch.zeros((nsubs,2,1))
+    if learn_cached:
+        true_vals_cached = torch.rand((nsubs,2,1))
+    else:
+        true_vals_cached = torch.zeros((nsubs,2,1))
     
-    true_values_tensor = torch.rand((nsubs,n_pars,1))
-    # print("dt", true_values_tensor[:,0,0])
-    # print("rew lamb", true_values_tensor[:,1,0])
-    # print("ht", true_values_tensor[:,2,0])
-    # print("pol lamb", true_values_tensor[:,3,0])
+    true_values_tensor = torch.cat([true_vals_rewards, true_vals_repetition, true_vals_cached], dim=1)
     
     true_vals = []
     data = []
@@ -484,23 +511,29 @@ def run_BCC_simulations(nsubs, learn_habit, agent_type, n_pars, fname_base, base
     indices = []
     
     for k, pars in enumerate(true_values_tensor):
+
+        norm_dt, rl, norm_h, pl, norm_cw, cl = pars
     
-        if learn_habit:
-            pl, rl, norm_dt, h = pars
-            if use_h:
-                tend = h
-            else:
-                tend = max_dt*h
+        if use_h or not learn_habit:
+            tend = norm_h
         else:
-            rl, norm_dt = pars
-            tend = torch.tensor([0])
-            pl = torch.tensor([0])
+            tend = (max_dt-1)*norm_h + 1
         
-        dt = (max_dt-1)*norm_dt+1
+        if learn_rewards:
+            dt = (max_dt-1)*norm_dt+1
+        else:
+            dt = norm_dt
+        if learn_cached:
+            cw = (max_dt-1)*norm_cw+1
+        else:
+            cw = norm_cw
         
         # print(pl, rl, dt, tend)
         
-        perception_args = {"subject": torch.tensor([k]), "policy rate": pl, "reward rate": rl, "dec temp": dt, "habitual tendency": tend}
+        perception_args = {"subject": torch.tensor([k]), 
+                           "dec temp": dt, "reward rate": rl, 
+                           "habitual tendency": tend, "policy rate": pl, 
+                           "cached weight": cw, "cached rate": cl}
         
         print(perception_args)
         
@@ -512,7 +545,7 @@ def run_BCC_simulations(nsubs, learn_habit, agent_type, n_pars, fname_base, base
         else:
             prob_matrix = torch.zeros((trials,1)) + p_invalid
             valid = torch.bernoulli(prob_matrix).bool()
-        pars = [avg, Rho,perception_args, learn_habit, valid, use_h]
+        pars = [avg, Rho,perception_args, learn_rewards, learn_habit, learn_cached, valid, use_h]
         
         worlds.append(simulate_BCC_behavior(pars, trials, T, ns, na, nr, nb, A, B))
         
@@ -539,7 +572,7 @@ def run_BCC_simulations(nsubs, learn_habit, agent_type, n_pars, fname_base, base
         
         stayed.append(stayed_list)
         
-        run_name = "twostage_agent_daw_"+agent_type+"_pl"+str(pl)+"_rl"+str(rl)+"_dt"+str(dt)+"_tend"+str(tend)+".json"
+        run_name = "twostage_agent_daw_"+agent_type+"_dt"+str(dt)+"_rl"+str(rl)+"_tend"+str(tend)+"_pl"+str(pl)+"_cw"+str(cw)+"_cl"+str(cl)+".json"
         fname_behavior = os.path.join(base_dir, run_name)
         
         data.append({"subject": torch.tensor([k]), "actions": w.actions, "observations": w.observations, "rewards": w.rewards, "states": w.environment.hidden_states, 'valid': valid})
@@ -572,9 +605,14 @@ def run_BCC_simulations(nsubs, learn_habit, agent_type, n_pars, fname_base, base
     true_rew_rate = torch.stack([t["reward rate"] for t in true_vals], dim=-1)
     true_dec_temp = torch.stack([t["dec temp"] for t in true_vals], dim=-1)
     true_hab_tend = torch.stack([t["habitual tendency"] for t in true_vals], dim=-1)
+    true_cac_wght = torch.stack([t["cached weight"] for t in true_vals], dim=-1)
+    true_cac_rate = torch.stack([t["cached rate"] for t in true_vals], dim=-1)
     true_ind = torch.stack([t["subject"] for t in true_vals], dim=-1)
     
-    structured_true_vals = {"subject": true_ind, "policy rate": true_pol_rate, "reward rate": true_rew_rate, "dec temp": true_dec_temp, "habitual tendency": true_hab_tend}
+    structured_true_vals = {"subject": true_ind, 
+                            "dec temp": true_dec_temp, "reward rate": true_rew_rate, 
+                            "habitual tendency": true_hab_tend, "policy rate": true_pol_rate,
+                            "cached weight": true_cac_wght, "cached rate": true_cac_rate}
     
     # save to disk
     
@@ -812,7 +850,7 @@ def load_simulation_outputs(base_dir, agent_type):
     
     return stayed_arr, structured_true_vals, structured_data
 
-def set_up_Bayesian_inference_agent(n_agents, learn_habit, base_dir, global_experiment_parameters, valid, remove_old=True, use_h=True):
+def set_up_Bayesian_inference_agent(n_agents, learn_rewards, learn_habit, learn_cached, base_dir, global_experiment_parameters, valid, remove_old=True, use_h=True):
 
     # if it does exist, empty previous results, if we want that (remove_old==True)
     if remove_old:
@@ -838,16 +876,21 @@ def set_up_Bayesian_inference_agent(n_agents, learn_habit, base_dir, global_expe
             os.remove(file)
 
     # perception args for init, will instantly be over-written, but have to be set for initialization
-    pol_lambda = torch.tensor([1.])
+    pol_lambda = torch.tensor([0.5])
     r_lambda = torch.tensor([0.5])
     dec_temp = torch.tensor([2.])   
     alpha_0 = torch.tensor([1.])
+    c_weight = torch.tensor([1.])
+    c_lambda = torch.tensor([0.5])
 
     perception_args = {"policy rate": pol_lambda, "reward rate": r_lambda, "dec temp": dec_temp, "habitual tendency": alpha_0}
+    perception_args = {"dec temp": dec_temp, "reward rate": r_lambda, 
+                       "habitual tendency": alpha_0, "policy rate": pol_lambda, 
+                       "cached weight": c_weight, "cached rate": c_lambda}
 
     avg = True
 
-    agent_par_list = [avg, perception_args, learn_habit, valid, use_h]
+    agent_par_list = [avg, perception_args, learn_rewards, learn_habit, learn_cached, valid, use_h]
     bayes_agent, bayes_perception = set_up_Bayesian_agent(agent_par_list, **global_experiment_parameters, nsubs=n_agents)
 
     return bayes_agent
