@@ -113,7 +113,7 @@ def big_custom_plot(plot_df, param_names, base_dir, fname_str, ELBO, param_range
     
     axes_names = param_names
     ranges = param_ranges
-    positions = [[0,0], [1,0], [0,1], [1,1], [2,0], [2,1]]
+    positions = [[0,0], [1,0], [0,1], [1,1], [0,2], [1,2]]
 
     fig = plt.figure(layout='constrained', figsize=(14,12))
     axes = fig.subplots(3, 3)
