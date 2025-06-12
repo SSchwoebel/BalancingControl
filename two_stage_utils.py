@@ -173,17 +173,20 @@ def set_up_Bayesian_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs
     # for i in range(1,nr):
     #     C_alphas[i,0,:] = 1
     
-    # bayes_prc = prc.Group2ContextPerception(A, B, torch.tensor([[0.99, 0.01], [0.01, 0.99]]),
-    #                                 state_prior, utility, torch.tensor([0.99, 0.01]), pol,
-    #                                 alpha_0=alpha_0, dirichlet_rew_params=C_alphas, 
-    #                                 learn_habit = learn_habit, mask=valid,
-    #                                 learn_rew = True, T=T, trials=trials,
-    #                                 pol_lambda=pol_lambda, r_lambda=r_lambda,
-    #                                 non_decaying=(ns-nb), dec_temp=dec_temp, 
-    #                                 nsubs=nsubs, infer_alpha_0=infer_h, use_h=use_h,
-    #                                 infer_context=True, dirichlet_context_obs_params=torch.tensor([[1, 1], [1, 1]]),
-    #                                 learn_context_obs=True,
-    #                                 infer_decision_temp=True, infer_policy_rate=infer_policy_rate, infer_reward_rate=True)
+    # bayes_prc = prc.Group2Perception(A, B, 
+    #                             state_prior, utility, pol,
+    #                             alpha_0=alpha_0, dirichlet_rew_params=C_alphas, 
+    #                             learn_habit = learn_habit, mask=valid, learn_cached_rewards=learn_cached,
+    #                             learn_rew = learn_rewards, T=T, trials=trials,
+    #                             pol_lambda=pol_lambda, r_lambda=r_lambda,
+    #                             non_decaying=(ns-nb), dec_temp=dec_temp, 
+    #                             nsubs=nsubs, infer_alpha_0=infer_h, use_h=use_h,
+    #                             cached_weight=cached_weight, cached_r_lambda=cached_r_lambda,
+    #                             infer_decision_temp=infer_decision_temp, infer_policy_rate=infer_policy_rate, 
+    #                             infer_reward_rate=infer_reward_rate, infer_cached_weight=infer_cached_weight, 
+    #                             infer_cached_rate=infer_cached_rate)
+
+    print(bayes_prc)
     
     bayes_prc.set_parameters(par_dict=perception_args)
     bayes_prc.reset()
