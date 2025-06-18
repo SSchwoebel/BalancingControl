@@ -2926,9 +2926,17 @@ class mfmb2Perception(object):
                  trials=10,
                  T=3,
                  npart=1, nsubs=1,
+                 learn_rep=False,
                  use_p=True,
                  restrict_alpha=False,
-                 max_dt=10, min_alpha=0):
+                 max_dt=10, min_alpha=0,
+                 infer_discount=True,
+                 infer_learning_rate=True,
+                 infer_mf_weight=True,
+                 infer_mb_weight=True,
+                 infer_prior_weight=True,
+                 infer_prior_lr=True,
+                 infer_p=False):
 
         self.generative_model_states = generative_model_states[:3,:3,...]
         self.alpha = alpha
@@ -2944,6 +2952,15 @@ class mfmb2Perception(object):
         self.prev_first_action = []
         self.action_probs = []
         self.nsubs = nsubs
+
+        self.learn_rep = learn_rep
+        self.infer_discount = infer_discount
+        self.infer_learning_rate = infer_learning_rate
+        self.infer_mf_weight = infer_mf_weight
+        self.infer_mb_weight = infer_mb_weight
+        self.infer_prior_weight = infer_prior_weight
+        self.infer_prior_lr = infer_prior_lr
+        self.infer_p = infer_p
 
         if mask is None:
             self.mask = ar.ones(trials, nsubs).bool()
@@ -2973,29 +2990,51 @@ class mfmb2Perception(object):
         self.posterior_actions = [ar.zeros((self.na))+1./self.na]
 
     def locs_to_pars(self, locs):
-        
-        if self.restrict_alpha:
-            alpha = self.min_alpha + ar.sigmoid(locs[...,1])*(1.-self.min_alpha)
-        else:
-            alpha = ar.sigmoid(locs[...,1])
+            
+        count = 0
+        par_dict = {}
 
-        if self.use_p:
-            par_dict = {"discount": ar.sigmoid(locs[...,0]),
-                        "learning rate": alpha,
-                        "mf weight": self.max_dt*ar.sigmoid(locs[...,2]),
-                        "mb weight": self.max_dt*ar.sigmoid(locs[...,3]),
-                        "repetition": self.max_dt*ar.sigmoid(locs[...,4])}
-        else:
-            par_dict = {"discount": ar.sigmoid(locs[...,0]),
-                        "learning rate": alpha,
-                        "mf weight": self.max_dt*ar.sigmoid(locs[...,2]),
-                        "mb weight": self.max_dt*ar.sigmoid(locs[...,3])}
+        if self.infer_discount:
+            par_dict["discount"] = ar.sigmoid(locs[...,count])
+            count += 1
+        if self.infer_learning_rate:
+            if self.restrict_alpha:
+                alpha = self.min_alpha + ar.sigmoid(locs[...,count])*(1.-self.min_alpha)
+            else:
+                alpha = ar.sigmoid(locs[...,count])
+            par_dict["learning rate"] = alpha
+            count += 1
+        if self.infer_mf_weight:
+            par_dict["mf weight"] = self.max_dt*ar.sigmoid(locs[...,count])
+            count += 1
+        if self.infer_mb_weight:
+            par_dict["mb weight"] = self.max_dt*ar.sigmoid(locs[...,count])
+            count += 1
+        if self.infer_prior_weight:
+            par_dict["prior weight"] = self.max_dt*ar.sigmoid(locs[...,count])
+            count += 1
+        if self.infer_prior_lr:
+            par_dict["prior lr"] = ar.sigmoid(locs[...,count])
+            count += 1
+        if self.infer_p:
+            par_dict["repetition"] = self.max_dt*ar.sigmoid(locs[...,count])
+
 
         return par_dict
 
-    def set_parameters(self, locs):
+    def set_parameters(self, locs=None, par_dict=None):
 
-        par_dict = self.locs_to_pars(locs)
+        if locs is not None:
+            par_dict = self.locs_to_pars(locs)
+
+            if len(locs[...,0].shape) > 1:
+                self.npart = locs[...,0].shape[0]
+                self.nsubs = locs[...,0].shape[1]
+            else:
+                self.nsubs = locs[...,0].shape[0]
+                self.npart = 1
+                for key in par_dict.keys():
+                    par_dict[key] = par_dict[key][None,...]
 
         if 'discount' in par_dict:
             self.lamb = par_dict['discount']
@@ -3005,6 +3044,10 @@ class mfmb2Perception(object):
             self.beta_mf = par_dict['mf weight']
         if 'mb weight' in par_dict:
             self.beta_mb = par_dict['mb weight']
+        if 'prior weight' in par_dict:
+            self.beta_prior = par_dict['prior weight']
+        if 'prior lr' in par_dict:
+            self.lr_prior = par_dict['prior lr']
         if 'repetition' in par_dict:
             self.p = par_dict['repetition']
         else:
@@ -3012,24 +3055,13 @@ class mfmb2Perception(object):
 
     def reset(self):
 
-        if len(self.alpha.shape) > 1:
-            self.npart = self.alpha.shape[0]
-            self.nsubs = self.alpha.shape[1]
-        else:
-            self.nsubs = self.alpha.shape[0]
-            self.npart = 1
-            #self.alpha_0 = self.alpha_0[None,:]
-            self.lamb = self.lamb[None,:]
-            self.alpha = self.alpha[None,:]
-            self.beta_mf = self.beta_mf[None,:]
-            self.beta_mb = self.beta_mb[None,:]
-            self.p = self.p[None,:]
-
         self.prev_first_action = []
         self.action_probs = []
 
         self.Q_mf = [[ar.stack([ar.stack([self.Q_mf_init[k]]*self.npart)]*self.nsubs).permute(2,3,1,0) for k in range(2)]] #sxa
         self.Q_mb = [[ar.stack([ar.stack([self.Q_mb_init[k]]*self.npart)]*self.nsubs).permute(2,3,1,0) for k in range(2)]] #sxa
+        self.Q_rep = []
+        self.counts = []
 
         self.posterior_actions = [ar.zeros(self.na,self.npart,self.nsubs)+1./self.na]
 
@@ -3119,17 +3151,58 @@ class mfmb2Perception(object):
 
         self.Q_mb.append(new_Q_mb)
 
+    def update_repetition_prior(self, tau, t):
+
+        counts = self.counts[-1]
+
+        action1 = self.actions[-2]
+        action2 = self.actions[-1]
+
+        state1 = self.observations[-3]
+        state2 = self.observations[-2]
+
+        state_action_pair1 = ar.eye(self.ns)[:,state1][:,None,None,...]*ar.eye(self.na)[:,action1][None,:,None,...]
+
+        state_action_pair2 = ar.eye(self.ns)[:,state2][:,None,None,...]*ar.eye(self.na)[:,action2][None,:,None,...]
+
+        new_counts = (1-self.lr_prior)[None,None,...]*counts + self.lr_prior[None,None,...]*(state_action_pair1+state_action_pair2) + 1
+
+        Q_rep = new_counts / new_counts.sum(dim=1)[None,...]
+
+        self.Q_rep.append(Q_rep)
+
+    def update_repetition_prior_pred_err(self, tau, t):
+
+        Q_rep = self.Q_rep[-1]
+
+        action1 = self.actions[-2]
+        action2 = self.actions[-1]
+
+        state1 = self.observations[-3]
+        state2 = self.observations[-2]
+
+        state_action_pair1 = ar.eye(self.ns)[:,state1][:,None,None,...]*ar.eye(self.na)[:,action1][None,:,None,...]
+
+        state_action_pair2 = ar.eye(self.ns)[:,state2][:,None,None,...]*ar.eye(self.na)[:,action2][None,:,None,...]
+
+        pred_err = Q_rep - (state_action_pair1+state_action_pair2)
+
+        new_Q_rep = Q_rep + self.lr_prior[None,None,...]*(pred_err)
+
+        self.Q_rep.append(new_Q_rep)
+
     def calc_action_probs(self, tau, t):
 
         Q_mb = ar.stack([self.Q_mb[-1][t][self.observations[-1][i],:,:,i] for i in range(self.nsubs)], dim=-1)
         Q_mf = ar.stack([self.Q_mf[-1][t][self.observations[-1][i],:,:,i] for i in range(self.nsubs)], dim=-1)
+        Q_rep = ar.stack([self.Q_rep[-1][t][self.observations[-1][i],:,:,i] for i in range(self.nsubs)], dim=-1)
 
         if t==0:
             rep = ar.eye(self.na)[:,self.prev_first_action[-1]][:,None,:]
         else:
             rep = 0
 
-        exponent = self.beta_mb*Q_mb + self.beta_mf*Q_mf + self.p*rep
+        exponent = self.beta_mb*Q_mb + self.beta_mf*Q_mf + self.p*rep + self.beta_prior*Q_rep
 
         action_probs = ar.softmax(exponent, dim=0)
 
@@ -3152,6 +3225,8 @@ class mfmb2Perception(object):
             # print(reward)
             self.update_mf(tau, t)
             self.update_mb(tau, t)
+            if self.learn_rep:
+                self.update_repetition_prior(tau, t)
         elif tau>0 and t<self.T-1:
             self.calc_action_probs(tau, t)
         elif tau==0 and t<self.T-1:
@@ -3159,6 +3234,7 @@ class mfmb2Perception(object):
 
 
 class mfmb3Perception(object):
+
     def __init__(self,
                  generative_model_states,
                  policies,
@@ -3176,7 +3252,15 @@ class mfmb3Perception(object):
                  npart=1, nsubs=1,
                  use_p=True,
                  restrict_alpha=False,
-                 max_dt=10, min_alpha=0):
+                 max_dt=10, min_alpha=0,
+                 learn_rep=False,
+                 infer_discount=True,
+                 infer_learning_rate=True,
+                 infer_mf_weight=True,
+                 infer_mb_weight=True,
+                 infer_prior_weight=True,
+                 infer_prior_lr=True,
+                 infer_p=False):
 
         self.generative_model_states = generative_model_states[:3,:3,...]
         self.alpha = alpha
@@ -3192,6 +3276,15 @@ class mfmb3Perception(object):
         self.prev_first_action = []
         self.action_probs = []
         self.nsubs = nsubs
+
+        self.learn_rep = learn_rep
+        self.infer_discount = infer_discount
+        self.infer_learning_rate = infer_learning_rate
+        self.infer_mf_weight = infer_mf_weight
+        self.infer_mb_weight = infer_mb_weight
+        self.infer_prior_weight = infer_prior_weight
+        self.infer_prior_lr = infer_prior_lr
+        self.infer_p = infer_p
 
         if mask is None:
             self.mask = ar.ones(trials, nsubs).bool()
@@ -3222,28 +3315,49 @@ class mfmb3Perception(object):
 
     def locs_to_pars(self, locs):
         
-        if self.restrict_alpha:
-            alpha = self.min_alpha + ar.sigmoid(locs[...,1])*(1.-self.min_alpha)
-        else:
-            alpha = ar.sigmoid(locs[...,1])
+        count = 0
+        par_dict = {}
 
-        if self.use_p:
-            par_dict = {"discount": ar.sigmoid(locs[...,0]),
-                        "learning rate": alpha,
-                        "mf weight": self.max_dt*ar.sigmoid(locs[...,2]),
-                        "mb weight": self.max_dt*ar.sigmoid(locs[...,3]),
-                        "repetition": ar.sigmoid(locs[...,4])}
-        else:
-            par_dict = {"discount": ar.sigmoid(locs[...,0]),
-                        "learning rate": alpha,
-                        "mf weight": self.max_dt*ar.sigmoid(locs[...,2]),
-                        "mb weight": self.max_dt*ar.sigmoid(locs[...,3])}
+        if self.infer_discount:
+            par_dict["discount"] = ar.sigmoid(locs[...,count])
+            count += 1
+        if self.infer_learning_rate:
+            if self.restrict_alpha:
+                alpha = self.min_alpha + ar.sigmoid(locs[...,count])*(1.-self.min_alpha)
+            else:
+                alpha = ar.sigmoid(locs[...,count])
+            par_dict["learning rate"] = alpha
+            count += 1
+        if self.infer_mf_weight:
+            par_dict["mf weight"] = self.max_dt*ar.sigmoid(locs[...,count])
+            count += 1
+        if self.infer_mb_weight:
+            par_dict["mb weight"] = self.max_dt*ar.sigmoid(locs[...,count])
+            count += 1
+        if self.infer_prior_weight:
+            par_dict["prior weight"] = self.max_dt*ar.sigmoid(locs[...,count])
+            count += 1
+        if self.infer_prior_lr:
+            par_dict["prior lr"] = ar.sigmoid(locs[...,count])
+            count += 1
+        if self.infer_p:
+            par_dict["repetition"] = ar.sigmoid(locs[...,count])
 
         return par_dict
 
-    def set_parameters(self, locs):
+    def set_parameters(self, locs=None, par_dict=None):
 
-        par_dict = self.locs_to_pars(locs)
+        if locs is not None:
+            par_dict = self.locs_to_pars(locs)
+
+            if len(locs[...,0].shape) > 1:
+                self.npart = locs[...,0].shape[0]
+                self.nsubs = locs[...,0].shape[1]
+            else:
+                self.nsubs = locs[...,0].shape[0]
+                self.npart = 1
+                for key in par_dict.keys():
+                    par_dict[key] = par_dict[key][None,...]
 
         if 'discount' in par_dict:
             self.lamb = par_dict['discount']
@@ -3253,6 +3367,10 @@ class mfmb3Perception(object):
             self.beta_mf = par_dict['mf weight']
         if 'mb weight' in par_dict:
             self.beta_mb = par_dict['mb weight']
+        if 'prior weight' in par_dict:
+            self.beta_prior = par_dict['prior weight']
+        if 'prior lr' in par_dict:
+            self.lr_prior = par_dict['prior lr']
         if 'repetition' in par_dict:
             self.p = par_dict['repetition']
         else:
@@ -3278,6 +3396,8 @@ class mfmb3Perception(object):
 
         self.Q_mf = [[ar.stack([ar.stack([self.Q_mf_init[k]]*self.npart)]*self.nsubs).permute(2,3,1,0) for k in range(2)]] #sxa
         self.Q_mb = [[ar.stack([ar.stack([self.Q_mb_init[k]]*self.npart)]*self.nsubs).permute(2,3,1,0) for k in range(2)]] #sxa
+        self.Q_rep = []
+        self.counts = []
 
         self.posterior_actions = [ar.zeros(self.na,self.npart,self.nsubs)+1./self.na]
 
@@ -3366,6 +3486,46 @@ class mfmb3Perception(object):
         new_Q_mb = [new_Q_mb1, Q_mf2]
 
         self.Q_mb.append(new_Q_mb)
+
+    def update_repetition_prior(self, tau, t):
+
+        counts = self.counts[-1]
+
+        action1 = self.actions[-2]
+        action2 = self.actions[-1]
+
+        state1 = self.observations[-3]
+        state2 = self.observations[-2]
+
+        state_action_pair1 = ar.eye(self.ns)[:,state1][:,None,None,...]*ar.eye(self.na)[:,action1][None,:,None,...]
+
+        state_action_pair2 = ar.eye(self.ns)[:,state2][:,None,None,...]*ar.eye(self.na)[:,action2][None,:,None,...]
+
+        new_counts = (1-self.lr_prior)[None,None,...]*counts + self.lr_prior[None,None,...]*(state_action_pair1+state_action_pair2) + 1
+
+        Q_rep = new_counts / new_counts.sum(dim=1)[None,...]
+
+        self.Q_rep.append(Q_rep)
+
+    def update_repetition_prior_pred_err(self, tau, t):
+
+        Q_rep = self.Q_rep[-1]
+
+        action1 = self.actions[-2]
+        action2 = self.actions[-1]
+
+        state1 = self.observations[-3]
+        state2 = self.observations[-2]
+
+        state_action_pair1 = ar.eye(self.ns)[:,state1][:,None,None,...]*ar.eye(self.na)[:,action1][None,:,None,...]
+
+        state_action_pair2 = ar.eye(self.ns)[:,state2][:,None,None,...]*ar.eye(self.na)[:,action2][None,:,None,...]
+
+        pred_err = Q_rep - (state_action_pair1+state_action_pair2)
+
+        new_Q_rep = Q_rep + self.lr_prior[None,None,...]*(pred_err)
+
+        self.Q_rep.append(new_Q_rep)
 
     def calc_action_probs(self, tau, t):
 
@@ -3400,6 +3560,8 @@ class mfmb3Perception(object):
             # print(reward)
             self.update_mf(tau, t)
             self.update_mb(tau, t)
+            if self.learn_rep:
+                self.update_repetition_prior(tau, t)
         elif tau>0 and t<self.T-1:
             self.calc_action_probs(tau, t)
         elif tau==0 and t<self.T-1:
