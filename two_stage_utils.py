@@ -154,37 +154,37 @@ def set_up_Bayesian_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs
         infer_cached_weight = False
         infer_cached_rate = False
 
-    bayes_prc = prc.Group2ContextPerception(A, B, torch.tensor([[1]]),
-                                    state_prior, utility, torch.tensor([1]), pol,
-                                    alpha_0=alpha_0, dirichlet_rew_params=C_alphas, 
-                                    learn_habit = learn_habit, mask=valid, learn_cached_rewards=learn_cached,
-                                    learn_rew = learn_rewards, T=T, trials=trials,
-                                    pol_lambda=pol_lambda, r_lambda=r_lambda,
-                                    non_decaying=(ns-nb), dec_temp=dec_temp, 
-                                    cached_weight=cached_weight, cached_r_lambda=cached_r_lambda,
-                                    nsubs=nsubs, infer_alpha_0=infer_h, use_h=use_h,
-                                    infer_context=False, dirichlet_context_obs_params=torch.tensor([[1]]),
-                                    infer_decision_temp=infer_decision_temp, infer_policy_rate=infer_policy_rate, 
-                                    infer_reward_rate=infer_reward_rate, infer_cached_weight=infer_cached_weight, 
-                                    infer_cached_rate=infer_cached_rate)
+    # bayes_prc = prc.Group2ContextPerception(A, B, torch.tensor([[1]]),
+    #                                 state_prior, utility, torch.tensor([1]), pol,
+    #                                 alpha_0=alpha_0, dirichlet_rew_params=C_alphas, 
+    #                                 learn_habit = learn_habit, mask=valid, learn_cached_rewards=learn_cached,
+    #                                 learn_rew = learn_rewards, T=T, trials=trials,
+    #                                 pol_lambda=pol_lambda, r_lambda=r_lambda,
+    #                                 non_decaying=(ns-nb), dec_temp=dec_temp, 
+    #                                 cached_weight=cached_weight, cached_r_lambda=cached_r_lambda,
+    #                                 nsubs=nsubs, infer_alpha_0=infer_h, use_h=use_h,
+    #                                 infer_context=False, dirichlet_context_obs_params=torch.tensor([[1]]),
+    #                                 infer_decision_temp=infer_decision_temp, infer_policy_rate=infer_policy_rate, 
+    #                                 infer_reward_rate=infer_reward_rate, infer_cached_weight=infer_cached_weight, 
+    #                                 infer_cached_rate=infer_cached_rate)
 
     # C_alphas = torch.zeros((nr, ns, 2)) + 1
     # C_alphas[0,:(ns-nb),:] = 100
     # for i in range(1,nr):
     #     C_alphas[i,0,:] = 1
     
-    # bayes_prc = prc.Group2Perception(A, B, 
-    #                             state_prior, utility, pol,
-    #                             alpha_0=alpha_0, dirichlet_rew_params=C_alphas, 
-    #                             learn_habit = learn_habit, mask=valid, learn_cached_rewards=learn_cached,
-    #                             learn_rew = learn_rewards, T=T, trials=trials,
-    #                             pol_lambda=pol_lambda, r_lambda=r_lambda,
-    #                             non_decaying=(ns-nb), dec_temp=dec_temp, 
-    #                             nsubs=nsubs, infer_alpha_0=infer_h, use_h=use_h,
-    #                             cached_weight=cached_weight, cached_r_lambda=cached_r_lambda,
-    #                             infer_decision_temp=infer_decision_temp, infer_policy_rate=infer_policy_rate, 
-    #                             infer_reward_rate=infer_reward_rate, infer_cached_weight=infer_cached_weight, 
-    #                             infer_cached_rate=infer_cached_rate)
+    bayes_prc = prc.Group2Perception(A, B, 
+                                state_prior, utility, pol,
+                                alpha_0=alpha_0, dirichlet_rew_params=C_alphas, 
+                                learn_habit = learn_habit, mask=valid, learn_cached_rewards=learn_cached,
+                                learn_rew = learn_rewards, T=T, trials=trials,
+                                pol_lambda=pol_lambda, r_lambda=r_lambda,
+                                non_decaying=(ns-nb), dec_temp=dec_temp, 
+                                nsubs=nsubs, infer_alpha_0=infer_h, use_h=use_h,
+                                cached_weight=cached_weight, cached_r_lambda=cached_r_lambda,
+                                infer_decision_temp=infer_decision_temp, infer_policy_rate=infer_policy_rate, 
+                                infer_reward_rate=infer_reward_rate, infer_cached_weight=infer_cached_weight, 
+                                infer_cached_rate=infer_cached_rate)
 
     print(bayes_prc)
     
