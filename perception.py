@@ -3241,10 +3241,13 @@ class mfmb3Perception(object):
                  Q_mf_init,
                  Q_mb_init,
                  utility,
+                 counts_init = None,
                  lamb = ar.tensor([0.9]),
                  alpha = ar.tensor([0.1]),
+                 lr_prior = ar.tensor([0.0]),
                  beta_mf = ar.tensor([4.]),
                  beta_mb = ar.tensor([4.]),
+                 beta_prior = ar.tensor([0.0]),
                  p = ar.tensor([2.]),
                  mask = None,
                  trials=10,
@@ -3266,6 +3269,8 @@ class mfmb3Perception(object):
         self.alpha = alpha
         self.beta_mb = beta_mb
         self.beta_mf = beta_mf
+        self.beta_prior = beta_prior
+        self.lr_prior = lr_prior
         self.lamb = lamb
         self.p = p
         self.ns = self.generative_model_states.shape[0]
@@ -3286,6 +3291,11 @@ class mfmb3Perception(object):
         self.infer_prior_lr = infer_prior_lr
         self.infer_p = infer_p
 
+        if counts_init is None:
+            self.counts_init = ar.ones((3,self.na))
+        else:
+            self.counts_init = counts_init
+
         if mask is None:
             self.mask = ar.ones(trials, nsubs).bool()
         else:
@@ -3296,16 +3306,16 @@ class mfmb3Perception(object):
         if self.restrict_alpha:
             self.min_alpha = min_alpha
         self.max_dt = max_dt
-        if self.use_p:
-            self.npars = 5
-        else:
-            self.npars = 4
+        self.npars = self.infer_discount+self.infer_learning_rate+self.infer_mf_weight+self.infer_mb_weight+self.infer_p+self.infer_prior_lr+self.infer_prior_weight
         self.param_names = list(self.locs_to_pars(ar.zeros(self.npars)).keys())
 
         self.Q_mf_init = Q_mf_init
         self.Q_mb_init = Q_mb_init
         self.Q_mf = [Q_mf_init] #sxa
         self.Q_mb = [Q_mb_init] #sxa
+
+        self.counts = [self.counts_init] #sxa
+        self.Q_rep = [self.counts[-1] / self.counts[-1].sum(dim=1)[:,None,...]]
 
         self.observations = []
         self.rewards = []
@@ -3396,8 +3406,8 @@ class mfmb3Perception(object):
 
         self.Q_mf = [[ar.stack([ar.stack([self.Q_mf_init[k]]*self.npart)]*self.nsubs).permute(2,3,1,0) for k in range(2)]] #sxa
         self.Q_mb = [[ar.stack([ar.stack([self.Q_mb_init[k]]*self.npart)]*self.nsubs).permute(2,3,1,0) for k in range(2)]] #sxa
-        self.Q_rep = []
-        self.counts = []
+        self.counts = [ar.stack([ar.stack([self.counts_init]*self.npart)]*self.nsubs).permute(2,3,1,0)] #sxa
+        self.Q_rep = [self.counts[-1] / self.counts[-1].sum(dim=1)[:,None,...]]
 
         self.posterior_actions = [ar.zeros(self.na,self.npart,self.nsubs)+1./self.na]
 
@@ -3503,7 +3513,7 @@ class mfmb3Perception(object):
 
         new_counts = (1-self.lr_prior)[None,None,...]*counts + self.lr_prior[None,None,...]*(state_action_pair1+state_action_pair2) + 1
 
-        Q_rep = new_counts / new_counts.sum(dim=1)[None,...]
+        Q_rep = new_counts / new_counts.sum(dim=1)[:,None,...]
 
         self.Q_rep.append(Q_rep)
 
@@ -3531,19 +3541,20 @@ class mfmb3Perception(object):
 
         Q_mb = ar.stack([self.Q_mb[-1][t][self.observations[-1][i],:,:,i] for i in range(self.nsubs)], dim=-1)
         Q_mf = ar.stack([self.Q_mf[-1][t][self.observations[-1][i],:,:,i] for i in range(self.nsubs)], dim=-1)
+        Q_rep = ar.stack([self.Q_rep[-1][self.observations[-1][i],:,:,i] for i in range(self.nsubs)], dim=-1)
 
         if t==0:
             rep = ar.eye(self.na)[:,self.prev_first_action[-1]][:,None,:]#ar.nn.functional.one_hot(self.prev_first_action[-1]).permute(1,0)[:,None,:]
         else:
             rep = ar.zeros(self.na, self.npart, self.nsubs)
 
-        exponent = self.beta_mb[None,...]*Q_mb + self.beta_mf[None,...]*Q_mf + self.p[None,...]*rep
+        exponent = self.beta_mb[None,...]*Q_mb + self.beta_mf[None,...]*Q_mf + self.p[None,...]*rep + self.beta_prior[None,...]*Q_rep
 
         action_probs = ar.softmax(exponent, dim=0)
 
         self.posterior_actions.append(action_probs)
 
-    def update_beliefs(self, tau, t, observation, reward, chosen_action, possible_policies):
+    def update_beliefs(self, tau, t, observation, reward, chosen_action, possible_policies, context):
 
         self.observations.append(observation)
         self.rewards.append(reward)

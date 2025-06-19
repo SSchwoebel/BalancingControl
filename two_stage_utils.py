@@ -276,6 +276,7 @@ def set_up_mfmb_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs=1, 
 
     Q_mf_init = [torch.zeros((3,na)), torch.zeros((3,na))]
     Q_mb_init = [torch.zeros((3,na)), torch.zeros((3,na))]
+    counts_init = torch.ones((3,na))
 
     # perception
     if use_orig:
@@ -286,6 +287,11 @@ def set_up_mfmb_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs=1, 
         p = perception_args["repetition"]
         max_dt = perception_args["max dt"]
         min_alpha = perception_args["min learning rate"]
+        prior_lr = perception_args["prior lr"]
+        prior_weight = perception_args["prior weight"]
+        learn_prior = perception_args["learn_prior"]
+
+        # attention mfmbOrig2Perception is not fully implemented yet.
         
         mbmf_prc = prc.mfmbOrig2Perception(B, pol, Q_mf_init, Q_mb_init, utility,
                                         lamb, alpha, beta, w,
@@ -300,12 +306,27 @@ def set_up_mfmb_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs=1, 
         p = perception_args["repetition"]
         max_dt = perception_args["max dt"]
         min_alpha = perception_args["min learning rate"]
+        prior_lr = perception_args["prior lr"]
+        prior_weight = perception_args["prior weight"]
+        learn_prior = perception_args["learn_prior"]
+        if learn_prior:
+            infer_prior_weight = True
+            infer_prior_lr = True
+        else:
+            infer_prior_weight = False
+            infer_prior_lr = False
         
         mbmf_prc = prc.mfmb3Perception(B, pol, Q_mf_init, Q_mb_init, utility,
-                                    lamb, alpha, beta_mf, beta_mb,
-                                    p, nsubs=1, use_p=use_p, mask=valid,
-                                    restrict_alpha=restrict_alpha,
-                                    max_dt=max_dt, min_alpha=min_alpha)
+                                       counts_init=counts_init,
+                                       lamb = lamb, alpha = alpha,
+                                       lr_prior = prior_lr, learn_rep=learn_prior,
+                                       beta_mf = beta_mf, beta_mb = beta_mb,
+                                       beta_prior = prior_weight, p=p,
+                                       nsubs=1, use_p=use_p, mask=valid,
+                                       restrict_alpha=restrict_alpha,
+                                       max_dt=max_dt, min_alpha=min_alpha, 
+                                       infer_prior_weight=infer_prior_weight,
+                                       infer_prior_lr=infer_prior_lr)
     mbmf_prc.reset()
 
     planner = agt.FittingAgent(mbmf_prc, ac_sel, pol,
@@ -640,28 +661,9 @@ def run_BCC_simulations(nsubs, learn_rewards, learn_habit, learn_cached, agent_t
     return stayed_arr, structured_true_vals, structured_data
 
 
-def run_mfmb_simulations(nsubs, use_orig, use_p, restrict_alpha, fname_base, base_dir, Rho, trials, T, 
-                        nb, ns, no, na, npi, nr, never_reward, A, B, p_invalid,
+def run_mfmb_simulations(nsubs, agent_type, n_pars, learn_prior, use_orig, use_p, restrict_alpha, min_alpha, fname_base, base_dir, Rho, trials, T, 
+                        nb, ns, no, na, npi, nr, never_reward, A, B, mask, p_invalid,
                         max_dt=6, remove_old=True):
-    
-    if use_p:
-        n_pars = 5
-        if use_orig:
-            agent_type = 'mbmfOrig_5param'
-        else:
-            agent_type = 'mbmf_5param'
-    else:
-        n_pars = 4
-        if use_orig:
-            agent_type = 'mbmfOrig_4param'
-        else:
-            agent_type = 'mbmf_4param'
-
-    if restrict_alpha:
-        min_alpha = 0.1
-    else:
-        restr_str = ""
-        min_alpha = 0
 
     # if it does exist, empty previous results, if we want that (remove_old==True)
     if remove_old:
@@ -685,9 +687,20 @@ def run_mfmb_simulations(nsubs, use_orig, use_p, restrict_alpha, fname_base, bas
         outputs = glob.glob(os.path.join(base_dir,"*.json"))
         for file in outputs:
             os.remove(file)
+
+    true_values_tensor_mfmb = torch.rand((nsubs,4,1))
     
+    if learn_prior:
+        true_vals_prior = torch.rand((nsubs,2,1))
+    else:
+        true_vals_prior = torch.zeros((nsubs,2,1))
     
-    true_values_tensor = torch.rand((nsubs,n_pars,1))
+    if use_p: 
+        true_vals_p = torch.rand((nsubs,1,1))
+    else:
+        true_vals_p = torch.zeros((nsubs,1,1))
+
+    true_values_tensor = torch.cat([true_values_tensor_mfmb, true_vals_prior, true_vals_p], dim=1)
     
     true_vals = []
     data = []
@@ -699,11 +712,7 @@ def run_mfmb_simulations(nsubs, use_orig, use_p, restrict_alpha, fname_base, bas
     
         # make parameters for original mb mf: discount lambda, learning rate, dec temp, balancing w, perserveration
         if use_orig:
-            if use_p:
-                discount, norm_lr, norm_dt, weight, perserv = pars
-            else:
-                discount, norm_lr, norm_dt, weight = pars
-                perserv = torch.tensor([0])
+            discount, norm_lr, norm_dt, weight, prior_lr, norm_prior_weight, perserv = pars
         
             dt = max_dt*norm_dt
             if restrict_alpha:
@@ -711,34 +720,32 @@ def run_mfmb_simulations(nsubs, use_orig, use_p, restrict_alpha, fname_base, bas
             else:
                 lr = norm_lr
             perception_args = {"subject": torch.tensor([i]), "discount": discount, "learning rate": lr, "dec temp": dt, "weight": weight, "repetition": perserv, 
-                                "max dt": max_dt, "min learning rate": min_alpha}
+                                "max dt": max_dt, "min learning rate": min_alpha, "learn_prior": learn_prior}
             
         # make parameters for two beta mb mf: discount lambda, learning rate, mb dec temp, mf dec temp, perserveration
         else:
-            if use_p:
-                discount, norm_lr, norm_dt_mf, norm_dt_mb, norm_perserv = pars
-                perserv = norm_perserv#max_dt*
-            else:
-                discount, norm_lr, norm_dt_mf, norm_dt_mb = pars
-                perserv = torch.tensor([0])
+
+            discount, norm_lr, norm_dt_mf, norm_dt_mb, prior_lr, norm_prior_weight, norm_perserv = pars
         
             dt_mf = max_dt*norm_dt_mf
             dt_mb = max_dt*norm_dt_mb
+            dt_prior = max_dt*norm_prior_weight
+            perserv = max_dt*norm_perserv
             if restrict_alpha:
                 lr = min_alpha + norm_lr*(1.-min_alpha)
             else:
                 lr = norm_lr
 
-            perception_args = {"subject": torch.tensor([i]), "discount": discount, "learning rate": lr, "mf weight": dt_mf, "mb weight": dt_mb, "repetition": perserv, 
-                                "max dt": max_dt, "min learning rate": min_alpha}
+            perception_args = {"subject": torch.tensor([i]), "discount": discount, "learning rate": lr, "mf weight": dt_mf, "mb weight": dt_mb, 
+                               "prior lr": prior_lr, "prior weight": dt_prior, "repetition": perserv,  "learn_prior": learn_prior,
+                               "max dt": max_dt, "min learning rate": min_alpha}
             
         print(perception_args)
         
         worlds = []
         l = []
         avg = True
-        prob_matrix = torch.zeros((trials,1)) + p_invalid
-        valid = torch.bernoulli(prob_matrix).bool()
+        valid = mask[:,[i]]
         pars = [avg, Rho,perception_args, use_orig, use_p, restrict_alpha, valid]
         
         worlds.append(simulate_mfmb_behavior(pars, trials, T, ns, na, nr, nb, A, B))
@@ -803,10 +810,12 @@ def run_mfmb_simulations(nsubs, use_orig, use_p, restrict_alpha, fname_base, bas
     true_mf_weight = torch.stack([t["mf weight"] for t in true_vals], dim=-1)
     true_mb_weight = torch.stack([t["mb weight"] for t in true_vals], dim=-1)
     true_repetition = torch.stack([t["repetition"] for t in true_vals], dim=-1)
+    true_prior_lr = torch.stack([t["prior lr"] for t in true_vals], dim=-1)
+    true_prior_weight = torch.stack([t["prior weight"] for t in true_vals], dim=-1)
     true_ind = torch.stack([t["subject"] for t in true_vals], dim=-1)
     
     structured_true_vals = {"subject": true_ind, "discount": true_discount, "learning rate": true_learn_rate, 
-                            "mf weight": true_mf_weight, "mb weight": true_mb_weight, "repetition": true_repetition}
+                            "mf weight": true_mf_weight, "mb weight": true_mb_weight, "repetition": true_repetition, "prior lr": true_prior_lr, "prior weight": true_prior_weight}
     
     # save to disk
     
@@ -898,7 +907,7 @@ def set_up_Bayesian_inference_agent(n_agents, learn_rewards, learn_habit, learn_
 
     return bayes_agent
 
-def set_up_mbmf_inference_agent(n_agents, use_orig, use_p, restrict_alpha, max_dt, min_alpha, base_dir, global_experiment_parameters, valid, remove_old=True):
+def set_up_mbmf_inference_agent(n_agents, learn_prior,use_orig, use_p, restrict_alpha, max_dt, min_alpha, base_dir, global_experiment_parameters, valid, remove_old=True):
 
     # if it does exist, empty previous results, if we want that (remove_old==True)
     if remove_old:
@@ -928,10 +937,13 @@ def set_up_mbmf_inference_agent(n_agents, use_orig, use_p, restrict_alpha, max_d
     lr = torch.tensor([0.05])
     dt_mf = torch.tensor([2.])
     dt_mb = torch.tensor([2.])
+    dt_prior = torch.tensor([0.])
+    prior_lr = torch.tensor([0.])
     perserv = torch.tensor([0.1])
 
-    perception_args = {"discount": discount, "learning rate": lr, "mf weight": dt_mf, "mb weight": dt_mb, "repetition": perserv, 
-                        "max dt": max_dt, "min learning rate": min_alpha}
+    perception_args = {"discount": discount, "learning rate": lr, "mf weight": dt_mf, "mb weight": dt_mb, 
+                               "prior lr": prior_lr, "prior weight": dt_prior, "repetition": perserv,  "learn_prior": learn_prior,
+                               "max dt": max_dt, "min learning rate": min_alpha}
     
     avg = True
 
