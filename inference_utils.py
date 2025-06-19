@@ -157,7 +157,7 @@ def big_custom_plot(plot_df, param_names, base_dir, fname_str, ELBO, param_range
     
     p_opacity = pval_corrected*0.5 +0.5
 
-    sns.heatmap(plot_df.corr(), annot=True, fmt='.2f', alpha=p_opacity, 
+    sns.heatmap(plot_df.corr(), annot=True, fmt='.2f', #alpha=p_opacity, 
                 cmap='vlag', vmin=-1, vmax=1, ax=ax)
     
     # sns.heatmap(mean_df.corr(), annot=True, fmt='.2f', ax=ax)#[pval_corrected<alphaB]
