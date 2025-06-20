@@ -3504,7 +3504,9 @@ class mfmb3Perception(object):
 
         state_action_pair2 = ar.eye(self.ns)[:,state2][:,None,None,...]*ar.eye(self.na)[:,action2][None,:,None,...]
 
-        new_counts = (1-self.lr_prior)[None,None,...]*counts + self.lr_prior[None,None,...]*(state_action_pair1+state_action_pair2) + 1
+        new_counts = (1-self.lr_prior)[None,None,...]*counts + self.lr_prior[None,None,...]*state_action_pair1 + 1#+state_action_pair2)
+
+        self.counts.append(new_counts)
 
         Q_rep = new_counts / new_counts.sum(dim=1)[:,None,...]
 
@@ -3524,7 +3526,7 @@ class mfmb3Perception(object):
 
         state_action_pair2 = ar.eye(self.ns)[:,state2][:,None,None,...]*ar.eye(self.na)[:,action2][None,:,None,...]
 
-        pred_err = Q_rep - (state_action_pair1+state_action_pair2)
+        pred_err = (state_action_pair1) - Q_rep#+state_action_pair2
 
         new_Q_rep = Q_rep + self.lr_prior[None,None,...]*(pred_err)
 
@@ -3565,7 +3567,7 @@ class mfmb3Perception(object):
             self.update_mf(tau, t)
             self.update_mb(tau, t)
             if self.learn_rep:
-                self.update_repetition_prior(tau, t)
+                self.update_repetition_prior_pred_err(tau, t)
         elif tau>0 and t<self.T-1:
             self.calc_action_probs(tau, t)
         elif tau==0 and t<self.T-1:
