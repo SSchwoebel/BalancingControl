@@ -862,7 +862,7 @@ def load_simulation_outputs(base_dir, agent_type):
     
     return stayed_arr, structured_true_vals, structured_data
 
-def set_up_Bayesian_inference_agent(n_agents, learn_rewards, learn_habit, learn_cached, base_dir, global_experiment_parameters, valid, remove_old=True, use_h=True):
+def set_up_Bayesian_inference_agent(n_agents, learn_rewards, learn_habit, learn_cached, base_dir, global_experiment_parameters, valid, remove_old=True, use_h=False):
 
     # if it does exist, empty previous results, if we want that (remove_old==True)
     if remove_old:
