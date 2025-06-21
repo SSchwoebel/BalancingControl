@@ -3526,7 +3526,7 @@ class mfmb3Perception(object):
 
         state_action_pair2 = ar.eye(self.ns)[:,state2][:,None,None,...]*ar.eye(self.na)[:,action2][None,:,None,...]
 
-        pred_err = (state_action_pair1) - Q_rep#+state_action_pair2
+        pred_err = (state_action_pair1+state_action_pair2) - Q_rep#
 
         new_Q_rep = Q_rep + self.lr_prior[None,None,...]*(pred_err)
 
