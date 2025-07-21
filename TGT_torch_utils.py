@@ -152,7 +152,9 @@ def set_up_Bayesian_agent(pars, n_agents=1):
         infer_alpha_0=pars["infer_alpha_0"],
         infer_decision_temp=pars["infer_decision_temp"],
         infer_policy_rate=pars["infer_policy_rate"],
-        infer_reward_rate=pars["infer_reward_rate"]
+        infer_reward_rate=pars["infer_reward_rate"],
+        infer_cached_rate=pars["infer_cached_rate"],
+        infer_cached_weight=pars["infer_cached_weight"]
     )
     agent_perception.pars = pars
 
@@ -244,9 +246,14 @@ def restructure_behavioral_data(data, true_vals):
     true_rew_rate = torch.stack([torch.tensor([t["reward rate"]]) for t in true_vals], dim=-1)
     true_dec_temp = torch.stack([torch.tensor([t["dec temp"]]) for t in true_vals], dim=-1)
     true_hab_tend = torch.stack([torch.tensor([t["habitual tendency"]]) for t in true_vals], dim=-1)
+    true_cac_wght = torch.stack([torch.tensor([t["cached weight"]]) for t in true_vals], dim=-1)
+    true_cac_rate = torch.stack([torch.tensor([t["cached rate"]]) for t in true_vals], dim=-1)
     true_ind = torch.stack([torch.tensor([t["subject"]]) for t in true_vals], dim=-1)
     
-    structured_true_vals = {"subject": true_ind, "policy rate": true_pol_rate, "reward rate": true_rew_rate, "dec temp": true_dec_temp, "habitual tendency": true_hab_tend}
+    structured_true_vals = {"subject": true_ind, 
+                        "dec temp": true_dec_temp, "reward rate": true_rew_rate, 
+                        "habitual tendency": true_hab_tend, "policy rate": true_pol_rate,
+                        "cached weight": true_cac_wght, "cached rate": true_cac_rate}
     
     return structured_true_vals, structured_data
 
@@ -394,6 +401,7 @@ def plot_choice_accuracy_mean(dataframe,simulation_params):
     g.vlines(ymin=0, ymax=1, x=simulation_params["training_blocks"]+simulation_params["degradation_blocks"]+0.5, ls='--',color='gray')
     g.set_xticks(ticks=np.arange(1,df.block.unique().size+1))
     g.set_ylim([0,1.05])
+    plt.show()
 
 
 def plot_choice_accuracy_alpha_rho(dataframe,simulation_params):
@@ -432,6 +440,7 @@ def plot_context_inference_mean(dataframe, simulation_params):
     g.vlines(ymin=0, ymax=1, x=simulation_params["training_blocks"]+simulation_params["degradation_blocks"]+0.5, ls='--',color='gray')
     g.set_xticks(ticks=np.arange(1,df.block.unique().size+1))
     g.set_ylim([0,1.05])
+    plt.show()
 
 def plot_context_inference_t_alpha_rho(dataframe, simulation_params):
     df = dataframe.copy()
@@ -524,7 +533,7 @@ def plot_heatmap(data,title=None,vmin=0,vmax=1):
     if not isinstance(axes, np.ndarray):
         axes = np.array([axes])
 
-    
+    plt.rcParams.update(plt.rcParamsDefault)
 
     for ai, ax, im in zip(np.arange(len(data)), axes, data):
         sns.heatmap(data=im, annot=True, cmap="viridis", cbar=False, fmt='.2f', ax=ax,vmin=vmin, vmax=vmax)

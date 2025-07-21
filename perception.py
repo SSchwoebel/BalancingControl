@@ -1124,27 +1124,19 @@ class Group2ContextPerception(object):
         # weighted_log_like = self.dec_temp[None,...]*self.mask[tau][None,...]*log_like
         likelihood = ar.exp(self.dec_temp[None,...]*self.mask[tau][None,...]*log_like).to(device)
 
-        #### test
-        # normed_like = likelihood/norm[None,...]
-        # likelihood = ar.pow(normed_like, self.dec_temp[None,...])
+        log_prior = ar.log(self.prior_policies[-1]+1e-10)
+        # weighted_log_prior = self.hab_bias[None,...]*self.mask[tau][None,...]*log_prior
+        prior = ar.exp(self.hab_bias[None,...]*self.mask[tau][None,...]*log_prior).to(device)
 
-        if self.learn_habit and not self.use_h:
-            log_prior = ar.log(self.prior_policies[-1])+1e-10
-            # weighted_log_prior = self.hab_bias[None,...]*self.mask[tau][None,...]*log_prior
-            prior = ar.exp(self.hab_bias[None,...]*self.mask[tau][None,...]*log_prior).to(device)
-        else:
-            # weighted_log_prior = ar.log(self.prior_policies[-1]+1e-10)
-            prior = ar.ones_like(self.prior_policies[-1])
+        log_cached = ar.log(self.cached_policy_val[-1]+1e-10)
+        # weighted_log_cached = self.cached_weight[None,...] * log_cached
+        # log_post += weighted_log_cached
+        cached = ar.exp(self.cached_weight[None,...]*self.mask[tau][None,...] * log_cached)
 
-        # log_post = weighted_log_like + weighted_log_prior
-
-        if self.learn_cached_rewards:
-            log_cached = ar.log(self.cached_policy_val[-1]+1e-10)
-            # weighted_log_cached = self.cached_weight[None,...] * log_cached
-            # log_post += weighted_log_cached
-            cached = ar.exp(self.cached_weight[None,...]*self.mask[tau][None,...] * log_cached)
-        else:
-            cached = ar.ones_like(self.cached_policy_val[-1])
+        log_cached = ar.log(self.cached_policy_val[-1]+1e-10)
+        # weighted_log_cached = self.cached_weight[None,...] * log_cached
+        # log_post += weighted_log_cached
+        cached = ar.exp(self.cached_weight[None,...]*self.mask[tau][None,...] * log_cached)
 
         # posterior_policies = ar.nn.functional.softmax(log_post, dim=0)
 
