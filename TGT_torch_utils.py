@@ -81,10 +81,10 @@ def set_up_Bayesian_agent(pars, n_agents=1):
     pars["prior_context"] = prior_context
 
     ### set policy prior p(pi|c)
-    C_alphas = np.zeros([npi, nc]) + pars["alpha_0"]
-    prior_pi = normalize(C_alphas)
-    pars["prior_policies"] = prior_pi
-    pars["dirichlet_pol_params"] = C_alphas
+    # C_alphas = np.zeros([npi, nc]) + pars["alpha_0"]
+    # prior_pi = normalize(C_alphas)
+    # pars["prior_policies"] = prior_pi
+    # pars["dirichlet_pol_params"] = C_alphas
 
     ### set state prior p(s_1)
     state_prior = normalize(np.ones((ns)))
