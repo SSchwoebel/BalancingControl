@@ -716,14 +716,16 @@ class Group2ContextPerception(object):
         self.infer_decision_temp = infer_decision_temp
         self.infer_cached_weight = infer_cached_weight
         self.infer_cached_rate = infer_cached_rate
-        self.alpha_0 = ar.tensor([1.])#alpha_0/self.npi
         self.hidden_state_mapping = hidden_state_mapping
         self.store_internal_variables = store_internal_variables
 
         if self.use_h:
-            self.h = alpha_0
+            self.alpha_0 = alpha_0#/self.npi
+            self.h = 1./self.alpha_0
+            self.hab_bias = ar.ones_like(alpha_0)
         else:
             self.hab_bias = alpha_0
+            self.alpha_0 = ar.tensor([1.])#alpha_0/self.npi
 
         if hidden_state_mapping:
             self.nm = dirichlet_rew_params.shape[1]
@@ -888,7 +890,8 @@ class Group2ContextPerception(object):
         if 'habitual tendency' in par_dict.keys():
             if self.use_h:
                 self.h = par_dict['habitual tendency']
-                self.alpha_0 = ar.tensor([1.])#(1./(par_dict['habitual tendency']))/self.npi
+                self.alpha_0 = 1./(par_dict['habitual tendency'])
+                self.hab_bias = ar.ones_like(self.h)
             else:
                 self.alpha_0 = ar.tensor([1.])#1./self.npi#par_dict['habitual tendency']/self.npi
                 self.hab_bias = par_dict['habitual tendency']
@@ -1248,7 +1251,7 @@ class Group2ContextPerception(object):
 
         # dirichlet_pol_params = self.dirichlet_pol_params_init + updated_counts
 
-        if self.use_h:
+        if False:#self.use_h:
             exp_prior_policies = ar.pow(dirichlet_pol_params,self.h[None,None,...]).to(device)
         else:
             exp_prior_policies = dirichlet_pol_params# / dirichlet_pol_params.sum(dim=0)[None,...]#ar.exp(scs.digamma(self.dirichlet_pol_params) - scs.digamma(self.dirichlet_pol_params.sum(axis=0))[None,:])
