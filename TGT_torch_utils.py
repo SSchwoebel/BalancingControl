@@ -134,6 +134,7 @@ def set_up_Bayesian_agent(pars, n_agents=1):
         dirichlet_context_obs_params=torch.from_numpy(pars["dirichlet_context_obs_params"]).float(),
         learn_habit=pars["learn_habit"],
         learn_rew=pars["learn_rew"],
+        learn_cached_rewards=pars["learn_cached_rewards"],
         infer_context=pars["infer_context"],
         learn_context_obs=pars["learn_context_obs"],
         #to do: make simulation mask!
