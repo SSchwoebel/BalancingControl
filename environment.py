@@ -532,7 +532,9 @@ class PlanetSystem(object):
         self.npl = self.Rho[0].shape[1]                      # number of unique planet types
 
         self.context_cues = context_cues            # background colors, look at run_agent_simulation, load vars for coding
-        self.state_mapping = planet_configurations                          # planet identities for each trial
+        self.state_mapping = planet_configurations  
+        if len(self.state_mapping.shape) > 2:
+            self.state_mapping = self.state_mapping.squeeze()      # planet identities for each trial
         self.starting_position = starts                                   # initial rocket position for each trial
         # hidden states tracks location and not planet identity
         

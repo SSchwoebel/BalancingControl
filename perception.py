@@ -731,7 +731,8 @@ class Group2ContextPerception(object):
             self.nm = dirichlet_rew_params.shape[1]
             self.nh = prior_states.shape[0]
             self.state_mapping = state_mapping
-            self.state_mapping_one_hot = ar.nn.functional.one_hot(self.state_mapping, num_classes=self.nm).float()
+            self.state_mapping_one_hot = \
+                ar.nn.functional.one_hot(self.state_mapping, num_classes=self.nm).permute((0,1,3,2)).float()
         else:
             self.nh, self.nm = [prior_states.shape[0]]*2
 
@@ -1010,7 +1011,7 @@ class Group2ContextPerception(object):
         rew_messages = ar.cat((prev_rew, exp_rews[:self.T-t-1]), dim=0).permute((1,0,2,3,4))
 
         if self.hidden_state_mapping:
-            rew_messages = ar.einsum('hm,mtcnk->htcnk', self.state_mapping_one_hot[tau], rew_messages)
+            rew_messages = ar.einsum('hmk,mtcnk->htcnk', self.state_mapping_one_hot[tau], rew_messages)
 
         self.obs_messages.append(obs_messages)
         self.rew_messages.append(rew_messages)
@@ -1306,7 +1307,7 @@ class Group2ContextPerception(object):
         vec_subjects = ar.eye(self.nsubs)
         matrix_index = ar.einsum('rn,nm->rm', vec_rewards, vec_subjects)
         if self.hidden_state_mapping:
-            mapped_states = ar.einsum('hm,hcnk->mcnk', self.state_mapping_one_hot[tau], states)
+            mapped_states = ar.einsum('hmk,hcnk->mcnk', self.state_mapping_one_hot[tau], states)
             addition = mapped_states[None,...]*matrix_index[:,None,None,None,:]*self.mask[None,None,None,tau,...]*self.posterior_context[-1][None,None,:,:,:]
         else:
             addition = states[None,...]*matrix_index[:,None,None,None,:]*self.mask[None,None,None,tau,...]*self.posterior_context[-1][None,None,:,:,:]
