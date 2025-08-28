@@ -569,7 +569,13 @@ def run_BCC_simulations(nsubs, learn_rewards, learn_habit, learn_cached, agent_t
         else:
             prob_matrix = torch.zeros((trials,1)) + p_invalid
             valid = torch.bernoulli(prob_matrix).bool()
-        pars = [avg, Rho,perception_args, learn_rewards, learn_habit, learn_cached, valid, use_h]
+
+        if len(Rho.shape) > 3:
+            Rho_subj = Rho[k]
+        else:
+            Rho_subj = Rho
+            
+        pars = [avg, Rho_subj,perception_args, learn_rewards, learn_habit, learn_cached, valid, use_h]
         
         worlds.append(simulate_BCC_behavior(pars, trials, T, ns, na, nr, nb, A, B))
         
