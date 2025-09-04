@@ -34,6 +34,7 @@ from numpy import eye
 from statsmodels.stats.multitest import multipletests
 from scipy.io import loadmat
 from misc import annot_corrfunc
+import numpy as np
 
 ###################################
 """inference convenience functions"""
@@ -230,3 +231,33 @@ def plot_results(sample_df, param_names, fname_str, ELBO, mean_df, base_dir, max
     #             cmap='vlag', vmin=-1, vmax=1)
     # plt.show()
 
+def plot_correlations(plot_df, x_vars_of_interest, y_vars_of_interest):
+
+    if set(x_vars_of_interest) == set(y_vars_of_interest):
+        square = True
+        vars_of_interest = x_vars_of_interest
+    else:
+        square = False
+        vars_of_interest = x_vars_of_interest+y_vars_of_interest
+    rho = plot_df[vars_of_interest].corr()
+    pval = plot_df[vars_of_interest].corr(method=lambda x, y: pearsonr(x, y)[1]) - eye(*rho.shape)
+    reject, pval_corrected, alphaS, alphaB = multipletests(pval, method='bonferroni')
+
+    if square:
+        mask = np.triu(np.ones_like(rho, dtype=bool), k=1)
+    else:
+        mask = np.zeros_like(rho.loc[x_vars_of_interest,y_vars_of_interest], dtype=bool)
+
+    plt.figure()
+
+    alpha_plot = np.where(pval.loc[x_vars_of_interest,y_vars_of_interest]<0.05, 1, 0.1)
+    # sns.set(font_scale=1.2)
+    g = sns.heatmap(rho.loc[x_vars_of_interest,y_vars_of_interest], annot=rho.loc[x_vars_of_interest,y_vars_of_interest], fmt='.2f', cmap='Spectral_r', alpha=alpha_plot, 
+                # palettes: crest, icefire, vlag, Greys, RdGy, RdBu, etc etc, and add _r for reversed
+                vmin=-1, vmax=1, mask=mask, annot_kws={"size": 12})#, ax=ax)
+    g.set_xticklabels(g.get_xmajorticklabels(), fontsize = 12)
+    g.set_yticklabels(g.get_ymajorticklabels(), fontsize = 12)
+    cbar = g.collections[0].colorbar
+    cbar.ax.tick_params(labelsize=12)
+
+    plt.show()
