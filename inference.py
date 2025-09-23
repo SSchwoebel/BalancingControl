@@ -307,13 +307,17 @@ class SingleInference(object):
 
 class GeneralGroupInference(object):
 
-    def __init__(self, agent, data):
+    def __init__(self, agent, data, max_responses=None):
 
         pyro.clear_param_store()
 
         self.agent = agent
         self.trials = agent.trials
         self.T = agent.T
+        if max_responses is None:
+            self.max_T = self.T-1
+        else:
+            self.max_T = max_responses
         self.data = data
         self.nsubs = len(data['rewards'][0,0])
         self.svi = None
@@ -365,7 +369,7 @@ class GeneralGroupInference(object):
 
                     self.agent.update_beliefs(tau, t, observation, reward, prev_response, context)
 
-                    if t < self.T-1:
+                    if t < self.max_T:#self.T-1:
 
                         probs = self.agent.perception.posterior_actions[-1]
                         if ar.any(ar.isnan(probs)):
