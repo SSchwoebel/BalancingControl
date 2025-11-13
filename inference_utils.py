@@ -33,6 +33,7 @@ import sys
 from numpy import eye
 from statsmodels.stats.multitest import multipletests
 from scipy.io import loadmat
+from scipy.stats import ttest_1samp
 from misc import annot_corrfunc
 import numpy as np
 
@@ -261,3 +262,391 @@ def plot_correlations(plot_df, x_vars_of_interest, y_vars_of_interest):
     cbar.ax.tick_params(labelsize=12)
 
     plt.show()
+
+
+def calculate_log_likelihood(data, agent, locs_df, npars, trials, T):
+
+    # question: what do with nan trials? If I ignore them, they will decrease the likelihood and make subject seem to fit better. If I make them uniform, itll decrease by a lot?
+    # this is the likelihood of the average parameter
+
+    n_agents = data["actions"].shape[-1]
+    log_like = torch.zeros(n_agents)
+    
+    locs_list = []
+    for k in range(npars):
+        locs_subs = []
+        for i in range(n_agents):
+            locs_subs.append(locs_df[locs_df["subject"]==i]["locs"+str(k)].mean())
+        locs_list.append(torch.tensor(locs_subs).float())
+
+    locs = torch.stack(locs_list, dim=-1)
+    
+    assert(locs.shape[0]==n_agents)
+
+    agent.reset(locs)
+
+    for tau in pyro.markov(range(trials)):
+        for t in range(T):
+
+            if t==0:
+                prev_response = None
+                context = None
+            else:
+                prev_response = data["actions"][tau, t-1]
+                context = None
+
+            observation = data["observations"][tau, t]
+
+            reward = data["rewards"][tau, t]
+
+            agent.update_beliefs(tau, t, observation, reward, prev_response, context)
+
+            if t < T-1:
+
+                probs = agent.perception.posterior_actions[-1]
+                if torch.any(torch.isnan(probs)):
+                    print(probs)
+                    #print(param_dict)
+                    print(tau,t)
+
+                curr_response = data["actions"][tau, t]*data["valid"][tau].long()
+
+                one_hot_responses = torch.nn.functional.one_hot(curr_response, num_classes=2).permute((1,0))[:,None,:].float()
+
+                likes = (probs * one_hot_responses).sum(dim=0)[0]
+
+                masked_probs = torch.where(data["valid"][tau], likes, torch.tensor([0.5]))
+
+                log_like += torch.log(masked_probs)
+
+    return -log_like.clone().detach()
+
+    
+def calculate_BIC(data, agent, locs_df, npars, trials, T):
+
+    # use bic to circumvent the number of trials problem
+
+    n_agents = data["actions"].shape[-1]
+    BIC = torch.zeros(n_agents)
+    
+    locs_list = []
+    for k in range(npars):
+        locs_subs = []
+        for i in range(n_agents):
+            locs_subs.append(locs_df[locs_df["subject"]==i]["locs"+str(k)].mean())
+        locs_list.append(torch.tensor(locs_subs).float())
+
+    locs = torch.stack(locs_list, dim=-1)
+    
+    assert(locs.shape[0]==n_agents)
+
+    agent.reset(locs)
+
+    for tau in pyro.markov(range(trials)):
+        for t in range(T):
+
+            if t==0:
+                prev_response = None
+                context = None
+            else:
+                prev_response = data["actions"][tau, t-1]
+                context = None
+
+            observation = data["observations"][tau, t]
+
+            reward = data["rewards"][tau, t]
+
+            agent.update_beliefs(tau, t, observation, reward, prev_response, context)
+
+            if t < T-1:
+
+                probs = agent.perception.posterior_actions[-1]
+                if torch.any(torch.isnan(probs)):
+                    print(probs)
+                    #print(param_dict)
+                    print(tau,t)
+
+                curr_response = data["actions"][tau, t]*data["valid"][tau].long()
+
+                one_hot_responses = torch.nn.functional.one_hot(curr_response, num_classes=2).permute((1,0))[:,None,:].float()
+
+                likes = (probs * one_hot_responses).sum(dim=0)[0]
+
+                masked_probs = torch.where(data["valid"][tau], likes, torch.tensor(0.5))
+
+                print(masked_probs.shape)
+
+                BIC -= 2*torch.log(masked_probs)
+
+    # question: is it noraml that the first term of the BIC (k*ln(n)) is much smaller than the second (-2*ln(L))?
+    BIC += npars*torch.log(data["valid"].sum(axis=0))
+
+    return BIC
+    
+
+def calculate_lppd(data, agent, locs_df, npars, trials, T, max_samples=-1):
+
+    # question: what do with nan trials? If I ignore them, they will decrease the likelihood and make subject seem to fit better. If I make them uniform, itll decrease by a lot?
+    # Eqs (4,5) from here:
+    # http://www.stat.columbia.edu/~gelman/research/published/waic_understand3.pdf
+    # this is the average likelihood
+
+    n_agents = data["actions"].shape[-1]
+    
+    locs_list = []
+    for k in range(npars):
+        locs_subs = []
+        for i in range(n_agents):
+            locs_subs.append(torch.tensor(locs_df[locs_df["subject"]==i]["locs"+str(k)].values[:max_samples]).float())
+        locs_list.append(torch.stack(locs_subs, dim=-1))
+
+    locs = torch.stack(locs_list, dim=-1)
+
+    n_samples = locs.shape[0]
+
+    likelihoods = []
+
+    agent.reset(locs)
+
+    for tau in pyro.markov(range(trials)):
+        for t in range(T):
+
+            if t==0:
+                prev_response = None
+                context = None
+            else:
+                prev_response = data["actions"][tau, t-1]
+                context = None
+
+            observation = data["observations"][tau, t]
+
+            reward = data["rewards"][tau, t]
+
+            agent.update_beliefs(tau, t, observation, reward, prev_response, context)
+
+            if t < T-1:
+
+                probs = agent.perception.posterior_actions[-1]
+                #print("probs", probs.shape)
+                if torch.any(torch.isnan(probs)):
+                    print(probs)
+                    #print(param_dict)
+                    print(tau,t)
+
+                curr_response = data["actions"][tau, t]*data["valid"][tau].long()
+
+                one_hot_responses = torch.nn.functional.one_hot(curr_response, num_classes=2).permute((1,0))[:,None,:].float()
+
+                likes = (probs * one_hot_responses).sum(dim=0)
+
+                masked_probs = torch.where(data["valid"][tau], likes, torch.tensor([0.5]))
+                #print("masked probs", masked_probs.shape)
+
+                likelihoods.append(masked_probs)
+
+                #print(tau,t)
+
+    mean_like = torch.stack(likelihoods, dim=0)
+    # print("mean like stacked", mean_like.shape)
+    # print(mean_like)
+
+    mean_like = mean_like.sum(dim=-2) / n_samples
+    # print("mean like summed", mean_like.shape)
+    # print(mean_like)
+
+    mean_log_like = torch.log(mean_like).sum(dim=0)
+
+    #print(mean_log_like)
+    # print("mean log like", mean_log_like.shape)
+    # print(mean_log_like)
+
+    return mean_log_like
+    
+
+def calculate_waic(data, agent, locs_df, npars, trials, T, max_samples=-1):
+
+    # question: what do with nan trials? If I ignore them, they will decrease the likelihood and make subject seem to fit better. If I make them uniform, itll decrease by a lot?
+    # Eqs (12,13) from here:
+    # http://www.stat.columbia.edu/~gelman/research/published/waic_understand3.pdf
+    # this is the average WAIC
+    # are the larger number of params handled correctly?
+
+    n_agents = data["actions"].shape[-1]
+    
+    locs_list = []
+    for k in range(npars):
+        locs_subs = []
+        for i in range(n_agents):
+            locs_subs.append(torch.tensor(locs_df[locs_df["subject"]==i]["locs"+str(k)].values[:max_samples]).float())
+        locs_list.append(torch.stack(locs_subs, dim=-1))
+
+    locs = torch.stack(locs_list, dim=-1)
+
+    n_samples = locs.shape[0]
+
+    likelihoods = []
+
+    agent.reset(locs)
+
+    for tau in pyro.markov(range(trials)):
+        for t in range(T):
+
+            if t==0:
+                prev_response = None
+                context = None
+            else:
+                prev_response = data["actions"][tau, t-1]
+                context = None
+
+            observation = data["observations"][tau, t]
+
+            reward = data["rewards"][tau, t]
+
+            agent.update_beliefs(tau, t, observation, reward, prev_response, context)
+
+            if t < T-1:
+
+                probs = agent.perception.posterior_actions[-1]
+                #print("probs", probs.shape)
+                if torch.any(torch.isnan(probs)):
+                    print(probs)
+                    #print(param_dict)
+                    print(tau,t)
+
+                curr_response = data["actions"][tau, t]*data["valid"][tau].long()
+
+                one_hot_responses = torch.nn.functional.one_hot(curr_response, num_classes=2).permute((1,0))[:,None,:].float()
+
+                likes = (probs * one_hot_responses).sum(dim=0)
+
+                masked_probs = torch.where(data["valid"][tau], likes, torch.tensor([0.5]))
+                #print("masked probs", masked_probs.shape)
+
+                likelihoods.append(masked_probs)
+
+                #print(tau,t)
+
+
+
+    mean_like = torch.stack(likelihoods, dim=0)
+    # print("mean like stacked", mean_like.shape)
+    # print(mean_like)
+
+    mean_like_samples = mean_like.sum(dim=-2) / n_samples
+    # print("mean like summed", mean_like.shape)
+    # print(mean_like)
+
+    lppd = torch.log(mean_like_samples).sum(dim=0)
+    # print("mean log like", mean_log_like.shape)
+    # print(mean_log_like)
+
+    mean_log_like_samples = torch.log(mean_like.sum(dim=-2)) / n_samples
+
+    V_s = ((torch.log(mean_like) - mean_log_like_samples[:,None,:])**2).sum(dim=-2) / (n_samples-1)
+
+    p_waic = V_s.sum(dim=0)
+
+    ellp_waic = lppd - p_waic
+
+    # text says it needs to be -2 * eq 13.
+    # minus is required to make lower better, and the 2 converts it to variance scale
+
+    return -2*ellp_waic
+    
+
+def predictive_accuracy_mean_param(data, agent, locs_df, npars, trials, T):
+
+    n_agents = data["actions"].shape[-1]
+
+    predicted_accuracy = torch.zeros(n_agents)
+    
+    locs_list = []
+    for k in range(npars):
+        locs_subs = []
+        for i in range(n_agents):
+            locs_subs.append(locs_df[locs_df["subject"]==i]["locs"+str(k)].mean())
+        locs_list.append(torch.tensor(locs_subs).float())
+
+    locs = torch.stack(locs_list, dim=-1)
+    
+    assert(locs.shape[0]==n_agents)
+
+    agent.reset(locs)
+
+    num_valid_responses = torch.zeros(data["actions"].shape[-1])
+
+    for tau in pyro.markov(range(trials)):
+        for t in range(T):
+
+            if t==0:
+                prev_response = None
+                context = None
+            else:
+                prev_response = data["actions"][tau, t-1]
+                context = None
+
+            observation = data["observations"][tau, t]
+
+            reward = data["rewards"][tau, t]
+
+            agent.update_beliefs(tau, t, observation, reward, prev_response, context)
+
+            if t < T-1:
+                #print(tau,t)
+
+                probs = agent.perception.posterior_actions[-1]
+                if torch.any(torch.isnan(probs)):
+                    print(probs)
+                    #print(param_dict)
+                    print(tau,t)
+
+                curr_response = data["actions"][tau, t]#*data["valid"][tau].long()
+                #print(curr_response)
+
+                predicted_response = torch.argmax(probs, dim=0)[0]
+
+                #print(probs)
+
+                #print(predicted_response)
+
+                correct_response_predicted = (curr_response == predicted_response).int()
+
+                #print(correct_response_predicted)
+
+                predicted_accuracy += correct_response_predicted
+
+                num_valid_responses += data["valid"][tau]
+
+                #print(num_valid_responses)
+
+
+    corrected_predicted_accuracy = predicted_accuracy / num_valid_responses
+
+    return corrected_predicted_accuracy
+
+
+def calculate_exceedance_prob(measure, n_exc_samples=500):
+    
+    p_model = torch.nn.functional.softmax(measure, dim=-1)
+
+    print("p model mean according to measure", p_model.mean(dim=0))
+
+    dirichlet_counts = p_model.sum(dim=0)
+
+    model_prob_dirichlet = dist.Dirichlet(dirichlet_counts)
+
+    n_exc_samples = 500
+
+    dir_samples = model_prob_dirichlet.sample(sample_shape=torch.tensor([n_exc_samples]))
+
+    avg_best_model = dir_samples.mean(dim=0).argmax()
+
+    best_model = dir_samples.argmax(dim=1)
+
+    exc_prob = (best_model == avg_best_model).sum()/n_exc_samples
+
+    print("best model:", avg_best_model, "exceedance prob", exc_prob)
+
+    significant_best_model = ttest_1samp(dir_samples[:,avg_best_model], 1./measure.shape[-1], alternative="greater")
+
+    print("is significantly different from uniform?", significant_best_model)
