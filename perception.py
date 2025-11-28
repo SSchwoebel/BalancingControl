@@ -433,7 +433,7 @@ class Group2Perception(object):
 
         states = (posterior_states[:,t,:,:,:] * posterior_policies[None,:,:,:]).sum(axis=1)
 
-        curr_forgetting_factor = (self.r_lambda*self.mask[tau])[None,None,:,:]*states[None,:,:,:]###
+        curr_forgetting_factor = (self.r_lambda*self.mask[tau])[None,None,:,:]#*states[None,:,:,:]###
 
         # dirichlet_rew_params = self.dirichlet_rew_params[0].clone().to(device)#.detach()
         # dirichlet_rew_params[:,self.non_decaying:,:,:] = (1-self.r_lambda*self.mask[tau])[None,None,:,:] * self.dirichlet_rew_params[-1][:,self.non_decaying:,:,:] \
@@ -458,7 +458,7 @@ class Group2Perception(object):
         chosen = ar.argmax(self.posterior_policies[-1], dim=0)
         vec_pol = ar.nn.functional.one_hot(chosen, num_classes=self.npi).permute(2,0,1).float()
 
-        curr_forgetting_factor = (self.cached_r_lambda*self.mask[tau])[None,None,:,:]*vec_pol[None,:,:,: ]###
+        curr_forgetting_factor = (self.cached_r_lambda*self.mask[tau])[None,None,:,:]#*vec_pol[None,:,:,: ]###
 
         vec_rewards = ar.nn.functional.one_hot(reward, num_classes=self.nr).permute(1,0).float()
 
