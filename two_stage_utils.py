@@ -184,7 +184,7 @@ def set_up_Bayesian_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs
                                 cached_weight=cached_weight, cached_r_lambda=cached_r_lambda,
                                 infer_decision_temp=infer_decision_temp, infer_policy_rate=infer_policy_rate, 
                                 infer_reward_rate=infer_reward_rate, infer_cached_weight=infer_cached_weight, 
-                                infer_cached_rate=infer_cached_rate, which_rewards=[T-1])
+                                infer_cached_rate=infer_cached_rate, which_rewards=list(range(1,T)))#[T-1])#
 
     print(bayes_prc)
     
