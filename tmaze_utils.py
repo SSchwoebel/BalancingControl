@@ -46,8 +46,7 @@ def set_up_Bayesian_agent(pars, n_agents=1):
         learn_rew=pars["learn_rew"],
         infer_context=pars["infer_context"],
         learn_context_obs=pars["learn_context_obs"],
-        #to do: make simulation mask!
-        mask=pars["mask"],
+        mask=torch.from_numpy(pars["mask"]),
         hidden_state_mapping=pars["hidden_state_mapping"],
         T=pars["T"],
         trials=pars["trials"],
