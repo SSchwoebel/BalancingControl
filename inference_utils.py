@@ -650,3 +650,30 @@ def calculate_exceedance_prob(measure, n_exc_samples=500):
     significant_best_model = ttest_1samp(dir_samples[:,avg_best_model], 1./measure.shape[-1], alternative="greater")
 
     print("is significantly different from uniform?", significant_best_model)
+
+
+def calculate_exceedance_prob_1D(measure, n_exc_samples=500):
+    
+    p_model = torch.nn.functional.softmax(measure, dim=-1)
+
+    print("p model mean according to measure", p_model)
+
+    dirichlet_counts = measure
+
+    model_prob_dirichlet = dist.Dirichlet(dirichlet_counts)
+
+    n_exc_samples = 500
+
+    dir_samples = model_prob_dirichlet.sample(sample_shape=torch.tensor([n_exc_samples]))
+
+    avg_best_model = dir_samples.mean(dim=0).argmax()
+
+    best_model = dir_samples.argmax(dim=1)
+
+    exc_prob = (best_model == avg_best_model).sum()/n_exc_samples
+
+    print("best model:", avg_best_model, "exceedance prob", exc_prob)
+
+    significant_best_model = ttest_1samp(dir_samples[:,avg_best_model], 1./measure.shape[-1], alternative="greater")
+
+    print("is significantly different from uniform?", significant_best_model)
