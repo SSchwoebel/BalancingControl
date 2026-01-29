@@ -512,7 +512,7 @@ def run_BCC_simulations(nsubs, learn_rewards, learn_habit, learn_cached, agent_t
         outputs = glob.glob(os.path.join(base_dir,"*.json"))
         for file in outputs:
             os.remove(file)
-    
+
     if learn_rewards:
         true_vals_rewards = torch.rand((nsubs,2,1))
     else:
@@ -527,6 +527,7 @@ def run_BCC_simulations(nsubs, learn_rewards, learn_habit, learn_cached, agent_t
         true_vals_cached = torch.zeros((nsubs,2,1))
     
     true_values_tensor = torch.cat([true_vals_rewards, true_vals_repetition, true_vals_cached], dim=1)
+        
     
     true_vals = []
     data = []
@@ -551,6 +552,182 @@ def run_BCC_simulations(nsubs, learn_rewards, learn_habit, learn_cached, agent_t
             cw = (max_dt-1)*norm_cw+1
         else:
             cw = norm_cw
+        
+        # print(pl, rl, dt, tend)
+        
+        perception_args = {"subject": torch.tensor([k]), 
+                           "dec temp": dt, "reward rate": rl, 
+                           "habitual tendency": tend, "policy rate": pl, 
+                           "cached weight": cw, "cached rate": cl}
+        
+        print(perception_args)
+        
+        worlds = []
+        l = []
+        avg = True
+        if mask is not None:
+            valid = mask[:,[k]]
+        else:
+            prob_matrix = torch.zeros((trials,1)) + p_invalid
+            valid = torch.bernoulli(prob_matrix).bool()
+
+        if len(Rho.shape) > 3:
+            Rho_subj = Rho[k]
+        else:
+            Rho_subj = Rho
+            
+        pars = [avg, Rho_subj,perception_args, learn_rewards, learn_habit, learn_cached, valid, use_h]
+        
+        worlds.append(simulate_BCC_behavior(pars, trials, T, ns, na, nr, nb, A, B))
+        
+        w = worlds[-1]
+        
+        rewarded = w.rewards[:trials-1,-1] == 1
+        
+        unrewarded = rewarded==False
+        
+        rare = torch.logical_or(torch.logical_and(w.environment.hidden_states[:trials-1,1]==2, w.actions[:trials-1,0] == 0),
+                       torch.logical_and(w.environment.hidden_states[:trials-1,1]==1, w.actions[:trials-1,0] == 1))
+        
+        common = rare==False
+        
+        rewarded_common = torch.where(torch.logical_and(rewarded,common) == True)[0]
+        rewarded_rare = torch.where(torch.logical_and(rewarded,rare) == True)[0]
+        unrewarded_common = torch.where(torch.logical_and(unrewarded,common) == True)[0]
+        unrewarded_rare = torch.where(torch.logical_and(unrewarded,rare) == True)[0]
+        
+        index_list = [rewarded_common, rewarded_rare,
+                     unrewarded_common, unrewarded_rare]
+        
+        stayed_list = [(w.actions[index_list[i],0] == w.actions[index_list[i]+1,0]).sum()/float(len(index_list[i])) for i in range(4)]
+        
+        stayed.append(stayed_list)
+        
+        run_name = "twostage_agent_daw_"+agent_type+"_dt"+str(dt)+"_rl"+str(rl)+"_tend"+str(tend)+"_pl"+str(pl)+"_cw"+str(cw)+"_cl"+str(cl)+".json"
+        fname_behavior = os.path.join(base_dir, run_name)
+        
+        data.append({"subject": torch.tensor([k]), "actions": w.actions, "observations": w.observations, "rewards": w.rewards, "states": w.environment.hidden_states, 'valid': valid})
+        
+        pickled_behavior = pickle.encode(data[-1])
+        with open(fname_behavior, 'w') as outfile:
+            json.dump(pickled_behavior, outfile)
+        
+        pickled_behavior = 0
+        
+        gc.collect()
+    
+        true_vals.append(perception_args)
+    
+    stayed_arr = torch.tensor(stayed)
+    
+    # structure data
+    
+    data_obs = torch.stack([d["observations"] for d in data], dim=-1)
+    data_rew = torch.stack([d["rewards"] for d in data], dim=-1)
+    data_act = torch.stack([d["actions"] for d in data], dim=-1)
+    data_val = torch.cat([d["valid"] for d in data], dim=-1)
+    data_ind = torch.stack([d["subject"] for d in data], dim=-1)
+
+    structured_data = {"subject": data_ind, "observations": data_obs, "rewards": data_rew, "actions": data_act, "valid": data_val}
+    
+    # structure true vals
+    
+    true_pol_rate = torch.stack([t["policy rate"] for t in true_vals], dim=-1)
+    true_rew_rate = torch.stack([t["reward rate"] for t in true_vals], dim=-1)
+    true_dec_temp = torch.stack([t["dec temp"] for t in true_vals], dim=-1)
+    true_hab_tend = torch.stack([t["habitual tendency"] for t in true_vals], dim=-1)
+    true_cac_wght = torch.stack([t["cached weight"] for t in true_vals], dim=-1)
+    true_cac_rate = torch.stack([t["cached rate"] for t in true_vals], dim=-1)
+    true_ind = torch.stack([t["subject"] for t in true_vals], dim=-1)
+    
+    structured_true_vals = {"subject": true_ind, 
+                            "dec temp": true_dec_temp, "reward rate": true_rew_rate, 
+                            "habitual tendency": true_hab_tend, "policy rate": true_pol_rate,
+                            "cached weight": true_cac_wght, "cached rate": true_cac_rate}
+    
+    # save to disk
+    
+    # stayed arr
+    fname_stayed = os.path.join(base_dir, "twostage_agent_daw_"+agent_type+"_stayed_arr.json")
+    pickled_stayed_arr = pickle.encode(stayed_arr)
+    with open(fname_stayed, 'w') as outfile:
+        json.dump(pickled_stayed_arr, outfile)
+        
+    # data 
+    fname_data = os.path.join(base_dir, "twostage_agent_daw_"+agent_type+"_data.json")
+    pickled_data = pickle.encode(structured_data)
+    with open(fname_data, 'w') as outfile:
+        json.dump(pickled_data, outfile)
+        
+    # true values 
+    fname_true_vals = os.path.join(base_dir, "twostage_agent_daw_"+agent_type+"_true_vals.json")
+    pickled_true_vals = pickle.encode(structured_true_vals)
+    with open(fname_true_vals, 'w') as outfile:
+        json.dump(pickled_true_vals, outfile)
+    
+    return stayed_arr, structured_true_vals, structured_data
+
+def run_BCC_post_pred_simulations(nsubs, learn_rewards, learn_habit, learn_cached, parameter_values, agent_type, n_pars, fname_base, base_dir, Rho, trials, T, 
+                        nb, ns, no, na, npi, nr, never_reward, A, B, p_invalid,
+                        mask=None, max_dt=6, remove_old=True, use_h=True):
+    
+
+    # if it does exist, empty previous results, if we want that (remove_old==True)
+    if remove_old:
+            
+        svgs = glob.glob(os.path.join(base_dir,"*.svg"))
+        for file in svgs:
+            os.remove(file)
+            
+        csvs = glob.glob(os.path.join(base_dir,"*.csv"))
+        for file in csvs:
+            os.remove(file)
+            
+        saves = glob.glob(os.path.join(base_dir,"*.save"))
+        for file in saves:
+            os.remove(file)
+            
+        agents = glob.glob(os.path.join(base_dir,"twostage_agent*"))
+        for file in agents:
+            os.remove(file)
+            
+        outputs = glob.glob(os.path.join(base_dir,"*.json"))
+        for file in outputs:
+            os.remove(file)
+
+    if learn_rewards:
+        true_dec_temp = torch.from_numpy(parameter_values["inferred dec temp"].to_numpy())
+        true_reward_rate = torch.from_numpy(parameter_values["inferred reward rate"].to_numpy())
+        true_vals_rewards = torch.stack([true_dec_temp, true_reward_rate], dim=1)[:,:,None]
+    else:
+        true_vals_rewards = torch.zeros((nsubs,2,1))
+
+    if learn_habit:
+        true_hab_tend = torch.from_numpy(parameter_values["inferred habitual tendency"].to_numpy())
+        true_pol_rate = torch.from_numpy(parameter_values["inferred policy rate"].to_numpy())
+        true_vals_repetition = torch.stack([true_hab_tend, true_pol_rate], dim=1)[:,:,None]
+    else:
+        true_vals_repetition = torch.zeros((nsubs,2,1))
+
+    if learn_cached:
+        true_cached_weight = torch.from_numpy(parameter_values["inferred cached weight"].to_numpy())
+        true_cached_rate = torch.from_numpy(parameter_values["inferred cached rate"].to_numpy())
+        true_vals_cached = torch.stack([true_cached_weight, true_cached_rate], dim=1)[:,:,None]
+    else:
+        true_vals_cached = torch.zeros((nsubs,2,1))
+    
+    true_values_tensor = torch.cat([true_vals_rewards, true_vals_repetition, true_vals_cached], dim=1).float()
+        
+    
+    true_vals = []
+    data = []
+    
+    stayed = []
+    indices = []
+    
+    for k, pars in enumerate(true_values_tensor):
+
+        dt, rl, tend, pl, cw, cl = pars
         
         # print(pl, rl, dt, tend)
         
