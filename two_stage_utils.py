@@ -924,12 +924,17 @@ def run_mfmb_simulations(nsubs, agent_type, n_pars, learn_prior, use_orig, use_p
                                "max dt": max_dt, "min learning rate": min_alpha}
             
         print(perception_args)
+
+        if len(Rho.shape) > 3:
+            Rho_subj = Rho[i]
+        else:
+            Rho_subj = Rho
         
         worlds = []
         l = []
         avg = True
         valid = mask[:,[i]]
-        pars = [avg, Rho,perception_args, use_orig, use_p, restrict_alpha, valid]
+        pars = [avg, Rho_subj,perception_args, use_orig, use_p, restrict_alpha, valid]
         
         worlds.append(simulate_mfmb_behavior(pars, trials, T, ns, na, nr, nb, A, B))
         
@@ -1094,12 +1099,17 @@ def run_mfmb_post_pred_simulations(nsubs, agent_type, n_pars, learn_prior, use_o
                                "max dt": max_dt, "min learning rate": min_alpha}
             
         print(perception_args)
+
+        if len(Rho.shape) > 3:
+            Rho_subj = Rho[i]
+        else:
+            Rho_subj = Rho
         
         worlds = []
         l = []
         avg = True
         valid = mask[:,[i]]
-        pars = [avg, Rho,perception_args, use_orig, use_p, restrict_alpha, valid]
+        pars = [avg, Rho_subj,perception_args, use_orig, use_p, restrict_alpha, valid]
         
         worlds.append(simulate_mfmb_behavior(pars, trials, T, ns, na, nr, nb, A, B))
         
