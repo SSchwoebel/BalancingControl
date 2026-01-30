@@ -1022,6 +1022,191 @@ def run_mfmb_simulations(nsubs, agent_type, n_pars, learn_prior, use_orig, use_p
     
     return stayed_arr, structured_true_vals, structured_data
 
+def run_mfmb_post_pred_simulations(nsubs, agent_type, n_pars, learn_prior, use_orig, use_p, parameter_values, restrict_alpha, min_alpha, fname_base, base_dir, Rho, trials, T, 
+                        nb, ns, no, na, npi, nr, never_reward, A, B, mask, p_invalid,
+                        max_dt=6, remove_old=True):
+
+    # if it does exist, empty previous results, if we want that (remove_old==True)
+    if remove_old:
+            
+        svgs = glob.glob(os.path.join(base_dir,"*.svg"))
+        for file in svgs:
+            os.remove(file)
+            
+        csvs = glob.glob(os.path.join(base_dir,"*.csv"))
+        for file in csvs:
+            os.remove(file)
+            
+        saves = glob.glob(os.path.join(base_dir,"*.save"))
+        for file in saves:
+            os.remove(file)
+            
+        agents = glob.glob(os.path.join(base_dir,"twostage_agent*"))
+        for file in agents:
+            os.remove(file)
+            
+        outputs = glob.glob(os.path.join(base_dir,"*.json"))
+        for file in outputs:
+            os.remove(file)
+
+    true_discount = torch.from_numpy(parameter_values["inferred discount"].to_numpy())
+    true_learn_rate = torch.from_numpy(parameter_values["inferred learning rate"].to_numpy())
+    true_mb_weight = torch.from_numpy(parameter_values["inferred mb weight"].to_numpy())
+    true_mf_weight = torch.from_numpy(parameter_values["inferred mf weight"].to_numpy())
+    true_vals_mfmb_min = torch.stack([true_discount, true_learn_rate, true_mb_weight, true_mf_weight], dim=1)[:,:,None]
+
+    if learn_prior:
+        true_prior_lr = torch.from_numpy(parameter_values["inferred prior lr"].to_numpy())
+        true_prior_weight = torch.from_numpy(parameter_values["inferred prior weight"].to_numpy())
+        true_vals_prior = torch.stack([true_prior_lr, true_prior_weight], dim=1)[:,:,None]
+    else:
+        true_vals_prior = torch.zeros((nsubs,2,1))
+
+    if use_p:
+        true_perserv = torch.from_numpy(parameter_values["inferred perserv"].to_numpy())[:,None,None]
+    else:
+        true_perserv = torch.zeros((nsubs,1,1))
+    
+    true_values_tensor = torch.cat([true_vals_mfmb_min, true_vals_prior, true_perserv], dim=1).float()
+    
+
+    true_values_tensor_mfmb = torch.rand((nsubs,4,1))
+    
+    if learn_prior:
+        true_vals_prior = torch.rand((nsubs,2,1))
+    else:
+        true_vals_prior = torch.zeros((nsubs,2,1))
+    
+    if use_p: 
+        true_vals_p = torch.rand((nsubs,1,1))
+    else:
+        true_vals_p = torch.zeros((nsubs,1,1))
+
+    true_values_tensor = torch.cat([true_values_tensor_mfmb, true_vals_prior, true_vals_p], dim=1)
+    
+    true_vals = []
+    data = []
+    
+    stayed = []
+    indices = []
+    
+    for i, pars in enumerate(true_values_tensor):
+    
+        # make parameters for original mb mf: discount lambda, learning rate, dec temp, balancing w, perserveration
+        if use_orig:
+            discount, lr, dt, weight, prior_lr, prior_weight, perserv = pars
+        
+            perception_args = {"subject": torch.tensor([i]), "discount": discount, "learning rate": lr, "dec temp": dt, "weight": weight, "repetition": perserv, 
+                                "max dt": max_dt, "min learning rate": min_alpha, "learn_prior": learn_prior}
+            
+        # make parameters for two beta mb mf: discount lambda, learning rate, mb dec temp, mf dec temp, perserveration
+        else:
+
+            discount, lr, dt_mf, dt_mb, prior_lr, dt_prior, perserv = pars
+
+            perception_args = {"subject": torch.tensor([i]), "discount": discount, "learning rate": lr, "mf weight": dt_mf, "mb weight": dt_mb, 
+                               "prior lr": prior_lr, "prior weight": dt_prior, "repetition": perserv,  "learn_prior": learn_prior,
+                               "max dt": max_dt, "min learning rate": min_alpha}
+            
+        print(perception_args)
+        
+        worlds = []
+        l = []
+        avg = True
+        valid = mask[:,[i]]
+        pars = [avg, Rho,perception_args, use_orig, use_p, restrict_alpha, valid]
+        
+        worlds.append(simulate_mfmb_behavior(pars, trials, T, ns, na, nr, nb, A, B))
+        
+        w = worlds[-1]
+        
+        rewarded = w.rewards[:trials-1,-1] == 1
+        
+        unrewarded = rewarded==False
+        
+        rare = torch.logical_or(torch.logical_and(w.environment.hidden_states[:trials-1,1]==2, w.actions[:trials-1,0] == 0),
+                       torch.logical_and(w.environment.hidden_states[:trials-1,1]==1, w.actions[:trials-1,0] == 1))
+        
+        common = rare==False
+        
+        rewarded_common = torch.where(torch.logical_and(rewarded,common) == True)[0]
+        rewarded_rare = torch.where(torch.logical_and(rewarded,rare) == True)[0]
+        unrewarded_common = torch.where(torch.logical_and(unrewarded,common) == True)[0]
+        unrewarded_rare = torch.where(torch.logical_and(unrewarded,rare) == True)[0]
+        
+        index_list = [rewarded_common, rewarded_rare,
+                     unrewarded_common, unrewarded_rare]
+        
+        stayed_list = [(w.actions[index_list[i],0] == w.actions[index_list[i]+1,0]).sum()/float(len(index_list[i])) for i in range(4)]
+        
+        stayed.append(stayed_list)
+        
+        if use_orig:
+            run_name = "twostage_agent_daw_"+agent_type+"_"+str(i)+"_disc"+str(discount)+"_lr"+str(lr)+"_dt"+str(dt)+"weight"+str(weight)+"_perserv"+str(perserv)+".json"
+        else:
+            run_name = "twostage_agent_daw_"+agent_type+"_"+str(i)+"_disc"+str(discount)+"_lr"+str(lr)+"_dt_mf"+str(dt_mf)+"_dt_mb"+str(dt_mb)+"_perserv"+str(perserv)+".json"
+        fname_behavior = os.path.join(base_dir, run_name)
+        
+        data.append({"subject": torch.tensor([i]), "actions": w.actions, "observations": w.observations, "rewards": w.rewards, "states": w.environment.hidden_states, 'valid': valid})
+        
+        pickled_behavior = pickle.encode(data[-1])
+        with open(fname_behavior, 'w') as outfile:
+            json.dump(pickled_behavior, outfile)
+        
+        pickled_behavior = 0
+        
+        gc.collect()
+    
+        true_vals.append(perception_args)
+    
+    stayed_arr = torch.tensor(stayed)
+    
+    # structure data
+    
+    data_obs = torch.stack([d["observations"] for d in data], dim=-1)
+    data_rew = torch.stack([d["rewards"] for d in data], dim=-1)
+    data_act = torch.stack([d["actions"] for d in data], dim=-1)
+    data_val = torch.cat([d["valid"] for d in data], dim=-1)
+    data_ind = torch.stack([d["subject"] for d in data], dim=-1)
+
+    structured_data = {"subject": data_ind, "observations": data_obs, "rewards": data_rew, "actions": data_act, "valid": data_val}
+    
+    # structure true vals
+    
+    true_discount = torch.stack([t["discount"] for t in true_vals], dim=-1)
+    true_learn_rate = torch.stack([t["learning rate"] for t in true_vals], dim=-1)
+    true_mf_weight = torch.stack([t["mf weight"] for t in true_vals], dim=-1)
+    true_mb_weight = torch.stack([t["mb weight"] for t in true_vals], dim=-1)
+    true_repetition = torch.stack([t["repetition"] for t in true_vals], dim=-1)
+    true_prior_lr = torch.stack([t["prior lr"] for t in true_vals], dim=-1)
+    true_prior_weight = torch.stack([t["prior weight"] for t in true_vals], dim=-1)
+    true_ind = torch.stack([t["subject"] for t in true_vals], dim=-1)
+    
+    structured_true_vals = {"subject": true_ind, "discount": true_discount, "learning rate": true_learn_rate, 
+                            "mf weight": true_mf_weight, "mb weight": true_mb_weight, "repetition": true_repetition, "prior lr": true_prior_lr, "prior weight": true_prior_weight}
+    
+    # save to disk
+    
+    # stayed arr
+    fname_stayed = os.path.join(base_dir, "twostage_agent_daw_"+agent_type+"_stayed_arr.json")
+    pickled_stayed_arr = pickle.encode(stayed_arr)
+    with open(fname_stayed, 'w') as outfile:
+        json.dump(pickled_stayed_arr, outfile)
+        
+    # data 
+    fname_data = os.path.join(base_dir, "twostage_agent_daw_"+agent_type+"_data.json")
+    pickled_data = pickle.encode(structured_data)
+    with open(fname_data, 'w') as outfile:
+        json.dump(pickled_data, outfile)
+        
+    # true values 
+    fname_true_vals = os.path.join(base_dir, "twostage_agent_daw_"+agent_type+"_true_vals.json")
+    pickled_true_vals = pickle.encode(structured_true_vals)
+    with open(fname_true_vals, 'w') as outfile:
+        json.dump(pickled_true_vals, outfile)
+    
+    return stayed_arr, structured_true_vals, structured_data
+
 
 def load_simulation_outputs(base_dir, agent_type):
 
