@@ -1069,21 +1069,6 @@ def run_mfmb_post_pred_simulations(nsubs, agent_type, n_pars, learn_prior, use_o
     
     true_values_tensor = torch.cat([true_vals_mfmb_min, true_vals_prior, true_perserv], dim=1).float()
     
-
-    true_values_tensor_mfmb = torch.rand((nsubs,4,1))
-    
-    if learn_prior:
-        true_vals_prior = torch.rand((nsubs,2,1))
-    else:
-        true_vals_prior = torch.zeros((nsubs,2,1))
-    
-    if use_p: 
-        true_vals_p = torch.rand((nsubs,1,1))
-    else:
-        true_vals_p = torch.zeros((nsubs,1,1))
-
-    true_values_tensor = torch.cat([true_values_tensor_mfmb, true_vals_prior, true_vals_p], dim=1)
-    
     true_vals = []
     data = []
     
