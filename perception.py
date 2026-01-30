@@ -3851,7 +3851,7 @@ class mfmbOrig2Perception(object):
 
         self.posterior_actions.append(action_probs)
 
-    def update_beliefs(self, tau, t, observation, reward, chosen_action, possible_policies):
+    def update_beliefs(self, tau, t, observation, reward, chosen_action, possible_policies, context):
 
         self.observations.append(observation)
         self.rewards.append(reward)

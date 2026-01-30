@@ -898,12 +898,13 @@ def run_mfmb_simulations(nsubs, agent_type, n_pars, learn_prior, use_orig, use_p
             discount, norm_lr, norm_dt, weight, prior_lr, norm_prior_weight, perserv = pars
         
             dt = max_dt*norm_dt
+            dt_prior = max_dt*norm_prior_weight
             if restrict_alpha:
                 lr = min_alpha + norm_lr*(1.-min_alpha)
             else:
                 lr = norm_lr
             perception_args = {"subject": torch.tensor([i]), "discount": discount, "learning rate": lr, "dec temp": dt, "weight": weight, "repetition": perserv, 
-                                "max dt": max_dt, "min learning rate": min_alpha, "learn_prior": learn_prior}
+                                "prior lr": prior_lr, "prior weight": dt_prior, "max dt": max_dt, "min learning rate": min_alpha, "learn_prior": learn_prior}
             
         # make parameters for two beta mb mf: discount lambda, learning rate, mb dec temp, mf dec temp, perserveration
         else:
@@ -993,16 +994,30 @@ def run_mfmb_simulations(nsubs, agent_type, n_pars, learn_prior, use_orig, use_p
     
     # structure true vals
     
-    true_discount = torch.stack([t["discount"] for t in true_vals], dim=-1)
-    true_learn_rate = torch.stack([t["learning rate"] for t in true_vals], dim=-1)
-    true_mf_weight = torch.stack([t["mf weight"] for t in true_vals], dim=-1)
-    true_mb_weight = torch.stack([t["mb weight"] for t in true_vals], dim=-1)
-    true_repetition = torch.stack([t["repetition"] for t in true_vals], dim=-1)
-    true_prior_lr = torch.stack([t["prior lr"] for t in true_vals], dim=-1)
-    true_prior_weight = torch.stack([t["prior weight"] for t in true_vals], dim=-1)
-    true_ind = torch.stack([t["subject"] for t in true_vals], dim=-1)
+    if use_orig:
+        true_discount = torch.stack([t["discount"] for t in true_vals], dim=-1)
+        true_learn_rate = torch.stack([t["learning rate"] for t in true_vals], dim=-1)
+        true_dec_temp = torch.stack([t["dec temp"] for t in true_vals], dim=-1)
+        true_weight = torch.stack([t["weight"] for t in true_vals], dim=-1)
+        true_repetition = torch.stack([t["repetition"] for t in true_vals], dim=-1)
+        true_prior_lr = torch.stack([t["prior lr"] for t in true_vals], dim=-1)
+        true_prior_weight = torch.stack([t["prior weight"] for t in true_vals], dim=-1)
+        true_ind = torch.stack([t["subject"] for t in true_vals], dim=-1)
     
-    structured_true_vals = {"subject": true_ind, "discount": true_discount, "learning rate": true_learn_rate, 
+        structured_true_vals = {"subject": true_ind, "discount": true_discount, "learning rate": true_learn_rate, 
+                            "dec temp": true_dec_temp, "weight": true_weight, "repetition": true_repetition, "prior lr": true_prior_lr, "prior weight": true_prior_weight}
+
+    else:
+        true_discount = torch.stack([t["discount"] for t in true_vals], dim=-1)
+        true_learn_rate = torch.stack([t["learning rate"] for t in true_vals], dim=-1)
+        true_mf_weight = torch.stack([t["mf weight"] for t in true_vals], dim=-1)
+        true_mb_weight = torch.stack([t["mb weight"] for t in true_vals], dim=-1)
+        true_repetition = torch.stack([t["repetition"] for t in true_vals], dim=-1)
+        true_prior_lr = torch.stack([t["prior lr"] for t in true_vals], dim=-1)
+        true_prior_weight = torch.stack([t["prior weight"] for t in true_vals], dim=-1)
+        true_ind = torch.stack([t["subject"] for t in true_vals], dim=-1)
+    
+        structured_true_vals = {"subject": true_ind, "discount": true_discount, "learning rate": true_learn_rate, 
                             "mf weight": true_mf_weight, "mb weight": true_mb_weight, "repetition": true_repetition, "prior lr": true_prior_lr, "prior weight": true_prior_weight}
     
     # save to disk
@@ -1084,10 +1099,10 @@ def run_mfmb_post_pred_simulations(nsubs, agent_type, n_pars, learn_prior, use_o
     
         # make parameters for original mb mf: discount lambda, learning rate, dec temp, balancing w, perserveration
         if use_orig:
-            discount, lr, dt, weight, prior_lr, prior_weight, perserv = pars
+            discount, lr, dt, weight, prior_lr, dt_prior, perserv = pars
         
             perception_args = {"subject": torch.tensor([i]), "discount": discount, "learning rate": lr, "dec temp": dt, "weight": weight, "repetition": perserv, 
-                                "max dt": max_dt, "min learning rate": min_alpha, "learn_prior": learn_prior}
+                                "prior lr": prior_lr, "prior weight": dt_prior, "max dt": max_dt, "min learning rate": min_alpha, "learn_prior": learn_prior}
             
         # make parameters for two beta mb mf: discount lambda, learning rate, mb dec temp, mf dec temp, perserveration
         else:
@@ -1168,16 +1183,30 @@ def run_mfmb_post_pred_simulations(nsubs, agent_type, n_pars, learn_prior, use_o
     
     # structure true vals
     
-    true_discount = torch.stack([t["discount"] for t in true_vals], dim=-1)
-    true_learn_rate = torch.stack([t["learning rate"] for t in true_vals], dim=-1)
-    true_mf_weight = torch.stack([t["mf weight"] for t in true_vals], dim=-1)
-    true_mb_weight = torch.stack([t["mb weight"] for t in true_vals], dim=-1)
-    true_repetition = torch.stack([t["repetition"] for t in true_vals], dim=-1)
-    true_prior_lr = torch.stack([t["prior lr"] for t in true_vals], dim=-1)
-    true_prior_weight = torch.stack([t["prior weight"] for t in true_vals], dim=-1)
-    true_ind = torch.stack([t["subject"] for t in true_vals], dim=-1)
+    if use_orig:
+        true_discount = torch.stack([t["discount"] for t in true_vals], dim=-1)
+        true_learn_rate = torch.stack([t["learning rate"] for t in true_vals], dim=-1)
+        true_dec_temp = torch.stack([t["dec temp"] for t in true_vals], dim=-1)
+        true_weight = torch.stack([t["weight"] for t in true_vals], dim=-1)
+        true_repetition = torch.stack([t["repetition"] for t in true_vals], dim=-1)
+        true_prior_lr = torch.stack([t["prior lr"] for t in true_vals], dim=-1)
+        true_prior_weight = torch.stack([t["prior weight"] for t in true_vals], dim=-1)
+        true_ind = torch.stack([t["subject"] for t in true_vals], dim=-1)
     
-    structured_true_vals = {"subject": true_ind, "discount": true_discount, "learning rate": true_learn_rate, 
+        structured_true_vals = {"subject": true_ind, "discount": true_discount, "learning rate": true_learn_rate, 
+                            "dec temp": true_dec_temp, "weight": true_weight, "repetition": true_repetition, "prior lr": true_prior_lr, "prior weight": true_prior_weight}
+
+    else:
+        true_discount = torch.stack([t["discount"] for t in true_vals], dim=-1)
+        true_learn_rate = torch.stack([t["learning rate"] for t in true_vals], dim=-1)
+        true_mf_weight = torch.stack([t["mf weight"] for t in true_vals], dim=-1)
+        true_mb_weight = torch.stack([t["mb weight"] for t in true_vals], dim=-1)
+        true_repetition = torch.stack([t["repetition"] for t in true_vals], dim=-1)
+        true_prior_lr = torch.stack([t["prior lr"] for t in true_vals], dim=-1)
+        true_prior_weight = torch.stack([t["prior weight"] for t in true_vals], dim=-1)
+        true_ind = torch.stack([t["subject"] for t in true_vals], dim=-1)
+    
+        structured_true_vals = {"subject": true_ind, "discount": true_discount, "learning rate": true_learn_rate, 
                             "mf weight": true_mf_weight, "mb weight": true_mb_weight, "repetition": true_repetition, "prior lr": true_prior_lr, "prior weight": true_prior_weight}
     
     # save to disk
@@ -1296,17 +1325,30 @@ def set_up_mbmf_inference_agent(n_agents, learn_prior,use_orig, use_p, restrict_
             os.remove(file)
 
     # perception args for init, will instantly be over-written, but have to be set for initialization
-    discount = torch.tensor([0.99])
-    lr = torch.tensor([0.05])
-    dt_mf = torch.tensor([2.])
-    dt_mb = torch.tensor([2.])
-    dt_prior = torch.tensor([0.])
-    prior_lr = torch.tensor([0.])
-    perserv = torch.tensor([0.1])
+    if use_orig:
+        discount = torch.tensor([0.99])
+        lr = torch.tensor([0.05])
+        dt = torch.tensor([2.])
+        weight = torch.tensor([0.5])
+        dt_prior = torch.tensor([0.])
+        prior_lr = torch.tensor([0.])
+        perserv = torch.tensor([0.1])
 
-    perception_args = {"discount": discount, "learning rate": lr, "mf weight": dt_mf, "mb weight": dt_mb, 
-                               "prior lr": prior_lr, "prior weight": dt_prior, "repetition": perserv,  "learn_prior": learn_prior,
-                               "max dt": max_dt, "min learning rate": min_alpha}
+        perception_args = {"discount": discount, "learning rate": lr, "dec temp": dt, "weight": weight, 
+                                "prior lr": prior_lr, "prior weight": dt_prior, "repetition": perserv,  "learn_prior": learn_prior,
+                                "max dt": max_dt, "min learning rate": min_alpha}
+    else:
+        discount = torch.tensor([0.99])
+        lr = torch.tensor([0.05])
+        dt_mf = torch.tensor([2.])
+        dt_mb = torch.tensor([2.])
+        dt_prior = torch.tensor([0.])
+        prior_lr = torch.tensor([0.])
+        perserv = torch.tensor([0.1])
+
+        perception_args = {"discount": discount, "learning rate": lr, "mf weight": dt_mf, "mb weight": dt_mb, 
+                                "prior lr": prior_lr, "prior weight": dt_prior, "repetition": perserv,  "learn_prior": learn_prior,
+                                "max dt": max_dt, "min learning rate": min_alpha}
     
     avg = True
 
