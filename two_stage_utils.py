@@ -290,14 +290,23 @@ def set_up_mfmb_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs=1, 
         prior_lr = perception_args["prior lr"]
         prior_weight = perception_args["prior weight"]
         learn_prior = perception_args["learn_prior"]
+        if learn_prior:
+            infer_prior_weight = True
+            infer_prior_lr = True
+        else:
+            infer_prior_weight = False
+            infer_prior_lr = False
 
         # attention mfmbOrig2Perception is not fully implemented yet.
         
         mbmf_prc = prc.mfmbOrig2Perception(B, pol, Q_mf_init, Q_mb_init, utility,
                                         lamb, alpha, beta, w,
                                         p, nsubs=1, use_p=use_p, mask=valid,
-                                        restrict_alpha=restrict_alpha,
-                                        max_dt=max_dt, min_alpha=min_alpha)
+                                        restrict_alpha=restrict_alpha, lr_prior = prior_lr, beta_prior = prior_weight,
+                                        max_dt=max_dt, min_alpha=min_alpha,
+                                        learn_prior=learn_prior, counts_init=counts_init,
+                                        infer_prior_weight=infer_prior_weight,
+                                        infer_prior_lr=infer_prior_lr)
     else:
         lamb = perception_args["discount"]
         alpha = perception_args["learning rate"]
@@ -1069,11 +1078,18 @@ def run_mfmb_post_pred_simulations(nsubs, agent_type, n_pars, learn_prior, use_o
         for file in outputs:
             os.remove(file)
 
-    true_discount = torch.from_numpy(parameter_values["inferred discount"].to_numpy())
-    true_learn_rate = torch.from_numpy(parameter_values["inferred learning rate"].to_numpy())
-    true_mb_weight = torch.from_numpy(parameter_values["inferred mb weight"].to_numpy())
-    true_mf_weight = torch.from_numpy(parameter_values["inferred mf weight"].to_numpy())
-    true_vals_mfmb_min = torch.stack([true_discount, true_learn_rate, true_mb_weight, true_mf_weight], dim=1)[:,:,None]
+    if use_orig:
+        true_discount = torch.from_numpy(parameter_values["inferred discount"].to_numpy())
+        true_learn_rate = torch.from_numpy(parameter_values["inferred learning rate"].to_numpy())
+        true_dec_temp = torch.from_numpy(parameter_values["inferred dec temp"].to_numpy())
+        true_weight = torch.from_numpy(parameter_values["inferred weight"].to_numpy())
+        true_vals_mfmb_min = torch.stack([true_discount, true_learn_rate, true_dec_temp, true_weight], dim=1)[:,:,None]
+    else:
+        true_discount = torch.from_numpy(parameter_values["inferred discount"].to_numpy())
+        true_learn_rate = torch.from_numpy(parameter_values["inferred learning rate"].to_numpy())
+        true_mb_weight = torch.from_numpy(parameter_values["inferred mb weight"].to_numpy())
+        true_mf_weight = torch.from_numpy(parameter_values["inferred mf weight"].to_numpy())
+        true_vals_mfmb_min = torch.stack([true_discount, true_learn_rate, true_mb_weight, true_mf_weight], dim=1)[:,:,None]
 
     if learn_prior:
         true_prior_lr = torch.from_numpy(parameter_values["inferred prior lr"].to_numpy())

@@ -3639,12 +3639,23 @@ class mfmbOrig2Perception(object):
                  beta = ar.tensor(2.),
                  w = ar.tensor(2.),
                  p = ar.tensor(0.1),
+                 lr_prior = ar.tensor(0.1),
+                 beta_prior = ar.tensor(2.),
                  mask = None,
                  trials=10,
                  T=3,
                  npart=1, nsubs=1,
                  use_p=True,
+                 learn_prior=False,
+                 infer_discount=True,
+                 infer_learning_rate=True,
+                 infer_dec_temp=True,
+                 infer_weight=True,
+                 infer_prior_weight=True,
+                 infer_prior_lr=True,
+                 infer_p=False,
                  restrict_alpha=False,
+                 counts_init=None,
                  max_dt=10, min_alpha=0):
 
         self.generative_model_states = generative_model_states[:3,:3,...]
@@ -3660,6 +3671,18 @@ class mfmbOrig2Perception(object):
         self.T = T
         self.prev_first_action = []
         self.action_probs = []
+        self.beta_prior = beta_prior
+        self.lr_prior = lr_prior
+        self.infer_discount = infer_discount
+        self.infer_learning_rate = infer_learning_rate
+        self.infer_dec_temp = infer_dec_temp
+        self.infer_weight = infer_weight
+        self.infer_prior_lr = infer_prior_lr
+        self.infer_prior_weight = infer_prior_weight
+        self.infer_p = infer_p
+        self.learn_prior = learn_prior
+        self.npart = npart
+        self.nsubs = nsubs
         
         if mask is None:
             self.mask = ar.ones(trials, nsubs).bool()
@@ -3668,19 +3691,26 @@ class mfmbOrig2Perception(object):
 
         self.use_p = use_p
         if self.use_p:
-            self.npars = 5
+            self.npars = 5+int(infer_prior_weight)+int(infer_prior_lr)
         else:
-            self.npars = 4
+            self.npars = 4+int(infer_prior_weight)+int(infer_prior_lr)
         self.restrict_alpha = restrict_alpha
         if self.restrict_alpha:
             self.min_alpha = min_alpha
         self.max_dt = max_dt
         self.param_names = list(self.locs_to_pars(ar.zeros(self.npars)).keys())
 
+        if counts_init is None:
+            self.counts_init = ar.ones((3,self.na))
+        else:
+            self.counts_init = counts_init
+
         self.Q_mf_init = Q_mf_init
         self.Q_mb_init = Q_mb_init
         self.Q_mf = [Q_mf_init] #sxa
         self.Q_mb = [Q_mb_init] #sxa
+        self.counts = [ar.stack([ar.stack([self.counts_init]*self.npart)]*self.nsubs).permute(2,3,1,0)] #sxa
+        self.Q_rep = [self.counts[-1] / self.counts[-1].sum(dim=1)[:,None,...]]
 
         self.observations = []
         self.rewards = []
@@ -3690,28 +3720,49 @@ class mfmbOrig2Perception(object):
 
     def locs_to_pars(self, locs):
         
-        if self.restrict_alpha:
-            alpha = self.min_alpha + ar.sigmoid(locs[...,1])*(1-self.min_alpha)
-        else:
-            alpha = ar.sigmoid(locs[...,1])
+        count = 0
+        par_dict = {}
 
-        if self.use_p:
-            par_dict = {"discount": ar.sigmoid(locs[...,0]),
-                        "learning rate": alpha,
-                        "dec temp": self.max_dt*ar.sigmoid(locs[...,2]),
-                        "weight": ar.sigmoid(locs[...,3]),
-                        "repetition": ar.sigmoid(locs[...,4])}
-        else:
-            par_dict = {"discount": ar.sigmoid(locs[...,0]),
-                        "learning rate": alpha,
-                        "dec temp": self.max_dt*ar.sigmoid(locs[...,2]),
-                        "weight": ar.sigmoid(locs[...,3])}
+        if self.infer_discount:
+            par_dict["discount"] = ar.sigmoid(locs[...,count])
+            count += 1
+        if self.infer_learning_rate:
+            if self.restrict_alpha:
+                alpha = self.min_alpha + ar.sigmoid(locs[...,count])*(1.-self.min_alpha)
+            else:
+                alpha = ar.sigmoid(locs[...,count])
+            par_dict["learning rate"] = alpha
+            count += 1
+        if self.infer_dec_temp:
+            par_dict["dec temp"] = self.max_dt*ar.sigmoid(locs[...,count])
+            count += 1
+        if self.infer_weight:
+            par_dict["weight"] = ar.sigmoid(locs[...,count])
+            count += 1
+        if self.infer_prior_weight:
+            par_dict["prior weight"] = self.max_dt*ar.sigmoid(locs[...,count])
+            count += 1
+        if self.infer_prior_lr:
+            par_dict["prior lr"] = ar.sigmoid(locs[...,count])
+            count += 1
+        if self.infer_p:
+            par_dict["repetition"] = ar.sigmoid(locs[...,count])
 
         return par_dict
 
-    def set_parameters(self, locs):
+    def set_parameters(self, locs=None):
 
-        par_dict = self.locs_to_pars(locs)
+        if locs is not None:
+            par_dict = self.locs_to_pars(locs)
+
+            if len(locs[...,0].shape) > 1:
+                self.npart = locs[...,0].shape[0]
+                self.nsubs = locs[...,0].shape[1]
+            else:
+                self.nsubs = locs[...,0].shape[0]
+                self.npart = 1
+                for key in par_dict.keys():
+                    par_dict[key] = par_dict[key][None,...]
 
         if 'discount' in par_dict:
             self.lamb = par_dict['discount']
@@ -3725,6 +3776,10 @@ class mfmbOrig2Perception(object):
             self.p = par_dict['repetition']
         else:
             self.p = ar.zeros_like(self.lamb)
+        if 'prior weight' in par_dict:
+            self.beta_prior = par_dict['prior weight']
+        if 'prior lr' in par_dict:
+            self.lr_prior = par_dict['prior lr']
 
     def reset(self):
 
@@ -3746,6 +3801,8 @@ class mfmbOrig2Perception(object):
 
         self.Q_mf = [[ar.stack([ar.stack([self.Q_mf_init[k]]*self.npart)]*self.nsubs).permute(2,3,1,0) for k in range(2)]] #sxa
         self.Q_mb = [[ar.stack([ar.stack([self.Q_mb_init[k]]*self.npart)]*self.nsubs).permute(2,3,1,0) for k in range(2)]] #sxa
+        self.counts = [ar.stack([ar.stack([self.counts_init]*self.npart)]*self.nsubs).permute(2,3,1,0)] #sxa
+        self.Q_rep = [self.counts[-1] / self.counts[-1].sum(dim=1)[:,None,...]]
 
         self.posterior_actions = [ar.zeros(self.na,self.npart,self.nsubs)+1./self.na]
 
@@ -3835,17 +3892,38 @@ class mfmbOrig2Perception(object):
 
         self.Q_mb.append(new_Q_mb)
 
+    def update_repetition_prior_pred_err(self, tau, t):
+
+        Q_rep = self.Q_rep[-1]
+
+        action1 = self.actions[-2]
+        action2 = self.actions[-1]
+
+        state1 = self.observations[-3]
+        state2 = self.observations[-2]
+
+        state_action_pair1 = ar.eye(self.ns)[:,state1][:,None,None,...]*ar.eye(self.na)[:,action1][None,:,None,...]
+
+        state_action_pair2 = ar.eye(self.ns)[:,state2][:,None,None,...]*ar.eye(self.na)[:,action2][None,:,None,...]
+
+        pred_err = (state_action_pair1+state_action_pair2) - Q_rep#
+
+        new_Q_rep = Q_rep + self.lr_prior[None,None,...]*(pred_err)
+
+        self.Q_rep.append(new_Q_rep)
+
     def calc_action_probs(self, tau, t):
 
         Q_mb = ar.stack([self.Q_mb[-1][t][self.observations[-1][i],:,:,i] for i in range(self.nsubs)], dim=-1)
         Q_mf = ar.stack([self.Q_mf[-1][t][self.observations[-1][i],:,:,i] for i in range(self.nsubs)], dim=-1)
+        Q_rep = ar.stack([self.Q_rep[-1][self.observations[-1][i],:,:,i] for i in range(self.nsubs)], dim=-1)
 
         if t==0:
             rep = ar.eye(self.na)[:,self.prev_first_action[-1]][:,None,:]
         else:
             rep = 0
 
-        exponent = self.beta*(self.w*Q_mb + (1-self.w)*Q_mf + self.p*rep)
+        exponent = self.beta*(self.w*Q_mb + (1-self.w)*Q_mf + self.p*rep) + self.beta_prior[None,...]*Q_rep
 
         action_probs = ar.softmax(exponent, dim=0)
 
@@ -3868,6 +3946,8 @@ class mfmbOrig2Perception(object):
             # print(reward)
             self.update_mf(tau, t)
             self.update_mb(tau, t)
+            if self.learn_prior:
+                self.update_repetition_prior_pred_err(tau, t)
         elif tau>0 and t<self.T-1:
             self.calc_action_probs(tau, t)
         elif tau==0 and t<self.T-1:
