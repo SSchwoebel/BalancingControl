@@ -3843,7 +3843,7 @@ class mfmbOrig2Perception(object):
         pred_err2 = (reward2[None,None,None,...] + new_Q_mf3) - Q_mf2*state_action_pair2
         updated_Q_mf2 = Q_mf2*state_action_pair2 + self.alpha[None,None,...]*pred_err2
 
-        new_Q_mf2 = ar.where(state_action_pair2>0, updated_Q_mf2, (1-self.alpha)[None,None,...]*Q_mf2)
+        new_Q_mf2 = ar.where(state_action_pair2>0, updated_Q_mf2, Q_mf2)#(1-self.alpha)[None,None,...]*Q_mf2
         
         # mask the participants who didnt do a choice
         new_Q_mf2 = ar.where(self.mask[tau][None,None,:], new_Q_mf2, Q_mf2)
