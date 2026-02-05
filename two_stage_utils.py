@@ -290,6 +290,7 @@ def set_up_mfmb_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs=1, 
         prior_lr = perception_args["prior lr"]
         prior_weight = perception_args["prior weight"]
         learn_prior = perception_args["learn_prior"]
+        use_w = perception_args["use_w"]
         if learn_prior:
             infer_prior_weight = True
             infer_prior_lr = True
@@ -301,7 +302,7 @@ def set_up_mfmb_agent(agent_par_list, trials, T, ns, na, nr, nb, A, B, nsubs=1, 
         
         mbmf_prc = prc.mfmbOrig2Perception(B, pol, Q_mf_init, Q_mb_init, utility,
                                         lamb, alpha, beta, w,
-                                        p, nsubs=1, use_p=use_p, mask=valid,
+                                        p, nsubs=1, use_p=use_p, use_w=use_w, mask=valid,
                                         restrict_alpha=restrict_alpha, lr_prior = prior_lr, beta_prior = prior_weight,
                                         max_dt=max_dt, min_alpha=min_alpha,
                                         learn_prior=learn_prior, counts_init=counts_init,
@@ -855,7 +856,7 @@ def run_BCC_post_pred_simulations(nsubs, learn_rewards, learn_habit, learn_cache
 
 def run_mfmb_simulations(nsubs, agent_type, n_pars, learn_prior, use_orig, use_p, restrict_alpha, min_alpha, fname_base, base_dir, Rho, trials, T, 
                         nb, ns, no, na, npi, nr, never_reward, A, B, mask, p_invalid,
-                        max_dt=6, remove_old=True):
+                        max_dt=6, remove_old=True, use_w=True):
 
     # if it does exist, empty previous results, if we want that (remove_old==True)
     if remove_old:
@@ -912,8 +913,10 @@ def run_mfmb_simulations(nsubs, agent_type, n_pars, learn_prior, use_orig, use_p
                 lr = min_alpha + norm_lr*(1.-min_alpha)
             else:
                 lr = norm_lr
+            if not use_w:
+                weight = max_dt*weight                      
             perception_args = {"subject": torch.tensor([i]), "discount": discount, "learning rate": lr, "dec temp": dt, "weight": weight, "repetition": perserv, 
-                                "prior lr": prior_lr, "prior weight": dt_prior, "max dt": max_dt, "min learning rate": min_alpha, "learn_prior": learn_prior}
+                                "prior lr": prior_lr, "prior weight": dt_prior, "max dt": max_dt, "min learning rate": min_alpha, "learn_prior": learn_prior, "use_w": use_w}
             
         # make parameters for two beta mb mf: discount lambda, learning rate, mb dec temp, mf dec temp, perserveration
         else:
@@ -1053,7 +1056,7 @@ def run_mfmb_simulations(nsubs, agent_type, n_pars, learn_prior, use_orig, use_p
 
 def run_mfmb_post_pred_simulations(nsubs, agent_type, n_pars, learn_prior, use_orig, use_p, parameter_values, restrict_alpha, min_alpha, fname_base, base_dir, Rho, trials, T, 
                         nb, ns, no, na, npi, nr, never_reward, A, B, mask, p_invalid,
-                        max_dt=6, remove_old=True):
+                        max_dt=6, use_w=True, remove_old=True):
 
     # if it does exist, empty previous results, if we want that (remove_old==True)
     if remove_old:
@@ -1118,7 +1121,7 @@ def run_mfmb_post_pred_simulations(nsubs, agent_type, n_pars, learn_prior, use_o
             discount, lr, dt, weight, prior_lr, dt_prior, perserv = pars
         
             perception_args = {"subject": torch.tensor([i]), "discount": discount, "learning rate": lr, "dec temp": dt, "weight": weight, "repetition": perserv, 
-                                "prior lr": prior_lr, "prior weight": dt_prior, "max dt": max_dt, "min learning rate": min_alpha, "learn_prior": learn_prior}
+                                "prior lr": prior_lr, "prior weight": dt_prior, "max dt": max_dt, "min learning rate": min_alpha, "learn_prior": learn_prior, "use_w": use_w}
             
         # make parameters for two beta mb mf: discount lambda, learning rate, mb dec temp, mf dec temp, perserveration
         else:
@@ -1315,7 +1318,7 @@ def set_up_Bayesian_inference_agent(n_agents, learn_rewards, learn_habit, learn_
 
     return bayes_agent
 
-def set_up_mbmf_inference_agent(n_agents, learn_prior,use_orig, use_p, restrict_alpha, max_dt, min_alpha, base_dir, global_experiment_parameters, valid, remove_old=True):
+def set_up_mbmf_inference_agent(n_agents, learn_prior,use_orig, use_p, restrict_alpha, max_dt, min_alpha, base_dir, global_experiment_parameters, valid, use_w=True, remove_old=True):
 
     # if it does exist, empty previous results, if we want that (remove_old==True)
     if remove_old:
@@ -1352,7 +1355,7 @@ def set_up_mbmf_inference_agent(n_agents, learn_prior,use_orig, use_p, restrict_
 
         perception_args = {"discount": discount, "learning rate": lr, "dec temp": dt, "weight": weight, 
                                 "prior lr": prior_lr, "prior weight": dt_prior, "repetition": perserv,  "learn_prior": learn_prior,
-                                "max dt": max_dt, "min learning rate": min_alpha}
+                                "max dt": max_dt, "min learning rate": min_alpha, "use_w": use_w}
     else:
         discount = torch.tensor([0.99])
         lr = torch.tensor([0.05])

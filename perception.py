@@ -3646,6 +3646,7 @@ class mfmbOrig2Perception(object):
                  T=3,
                  npart=1, nsubs=1,
                  use_p=True,
+                 use_w = True,
                  learn_prior=False,
                  infer_discount=True,
                  infer_learning_rate=True,
@@ -3683,6 +3684,7 @@ class mfmbOrig2Perception(object):
         self.learn_prior = learn_prior
         self.npart = npart
         self.nsubs = nsubs
+        self.use_w = use_w
         
         if mask is None:
             self.mask = ar.ones(trials, nsubs).bool()
@@ -3737,7 +3739,10 @@ class mfmbOrig2Perception(object):
             par_dict["dec temp"] = self.max_dt*ar.sigmoid(locs[...,count])
             count += 1
         if self.infer_weight:
-            par_dict["weight"] = ar.sigmoid(locs[...,count])
+            if self.use_w:
+                par_dict["weight"] = ar.sigmoid(locs[...,count])
+            else:
+                par_dict["weight"] = self.max_dt*ar.sigmoid(locs[...,count])
             count += 1
         if self.infer_prior_weight:
             par_dict["prior weight"] = self.max_dt*ar.sigmoid(locs[...,count])
@@ -3923,7 +3928,10 @@ class mfmbOrig2Perception(object):
         else:
             rep = 0
 
-        exponent = self.beta*(self.w*Q_mb + (1-self.w)*Q_mf + self.p*rep) + self.beta_prior[None,...]*Q_rep
+        if self.use_w:
+            exponent = self.beta*(self.w*Q_mb + (1-self.w)*Q_mf + self.p*rep) + self.beta_prior[None,...]*Q_rep
+        else:
+            exponent = self.beta*Q_mb + self.w*Q_mf + self.p*rep + self.beta_prior[None,...]*Q_rep
 
         action_probs = ar.softmax(exponent, dim=0)
 
