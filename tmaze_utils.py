@@ -115,14 +115,17 @@ def run_single_simulation(agent_pars, env_pars, context=False):
     return w
 
 
-def restructure_behavioral_data(data, true_vals=None):
+def restructure_behavioral_data(data, use_context=False, true_vals=None):
     data_obs = torch.stack([d["observations"] for d in data], dim=-1)
     data_rew = torch.stack([d["rewards"] for d in data], dim=-1)
     data_act = torch.stack([d["actions"] for d in data], dim=-1)
     data_val = torch.cat([torch.tensor(d["valid"]) for d in data], dim=-1)
     data_ind = torch.stack([torch.tensor([d["subject"]]) for d in data], dim=-1)
-
-    structured_data = {"subject": data_ind, "observations": data_obs, "rewards": data_rew, "actions": data_act, "valid": data_val}
+    if use_context:
+        data_con = torch.cat([d["context"] for d in data], dim=-1)
+        structured_data = {"subject": data_ind, "observations": data_obs, "rewards": data_rew, "actions": data_act, "valid": data_val, "context": data_con}
+    else:
+        structured_data = {"subject": data_ind, "observations": data_obs, "rewards": data_rew, "actions": data_act, "valid": data_val}
     
     if true_vals is not None:
         # structure true vals
