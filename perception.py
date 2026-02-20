@@ -3871,6 +3871,64 @@ class mfmbOrig2Perception(object):
         self.Q_mf.append(new_Q_mf)
 
 
+    def Kool_update_mf(self, tau, t):
+
+        # paper has -1, 1 for reward and no reward?!
+        # these eqs are according to Otte et al. 2013
+        # attention! the supplementary material from otto et al seems to be riddled with bugs
+        # the MF stage 1 update has now changed to a logical version
+        assert(t==self.T-1)
+        Q_mf = self.Q_mf[-1]
+
+        Q_mf1 = Q_mf[0]
+        Q_mf2 = Q_mf[1]
+        # Q_mf3 is 0 anyways according to the paper, but they drag it along so I will too
+
+        action1 = self.actions[-2]
+        action2 = self.actions[-1]
+
+        state1 = self.observations[-3]
+        state2 = self.observations[-2]
+
+        reward1 = self.utility[self.rewards[-2]]
+        reward2 = self.utility[self.rewards[-1]]
+        # print(reward2)
+        # print(reward1)
+
+        new_Q_mf3 = 0
+
+        # state action pairs
+        state_action_pair1 = ar.eye(self.ns)[:,state1][:,None,None,...]*ar.eye(self.na)[:,action1][None,:,None,...]
+        state_action_pair2 = ar.eye(self.ns)[:,state2][:,None,None,...]*ar.eye(self.na)[:,action2][None,:,None,...]
+
+
+        # first stage update
+        
+        discounted_Q_mf2 = self.lamb*(Q_mf2*state_action_pair2).sum(dim=(0,1))
+        pred_err1 = (reward1[None,...] + discounted_Q_mf2[None,None,:,:]) - Q_mf1*state_action_pair1
+        updated_Q_mf1 = Q_mf1*state_action_pair1 + self.alpha[None,None,...]*(pred_err1)
+        # print("updated Q_mf")
+        # print(new_Q_mf2)
+
+        new_Q_mf1 = ar.where(state_action_pair1>0, updated_Q_mf1, (1-self.alpha)[None,None,...]*Q_mf1)
+        
+        # mask the participants who didnt do a choice
+        new_Q_mf1 = ar.where(self.mask[tau][None,None,:], new_Q_mf1, Q_mf1)
+
+        # second stage update
+        
+        pred_err2 = (reward2[None,None,None,...] + new_Q_mf3) - Q_mf2*state_action_pair2
+        updated_Q_mf2 = Q_mf2*state_action_pair2 + self.alpha[None,None,...]*pred_err2
+
+        new_Q_mf2 = ar.where(state_action_pair2>0, updated_Q_mf2, Q_mf2)#(1-self.alpha)[None,None,...]*Q_mf2
+        
+        # mask the participants who didnt do a choice
+        new_Q_mf2 = ar.where(self.mask[tau][None,None,:], new_Q_mf2, Q_mf2)
+
+        new_Q_mf = [new_Q_mf1, new_Q_mf2]
+        self.Q_mf.append(new_Q_mf)
+
+
     def update_mb(self, tau, t):
 
         Q_mb = self.Q_mb[-1]
@@ -3952,7 +4010,7 @@ class mfmbOrig2Perception(object):
 
         if t==self.T-1:
             # print(reward)
-            self.update_mf(tau, t)
+            self.Kool_update_mf(tau, t)
             self.update_mb(tau, t)
             if self.learn_prior:
                 self.update_repetition_prior_pred_err(tau, t)
